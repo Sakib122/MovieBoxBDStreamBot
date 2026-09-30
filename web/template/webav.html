@@ -9,7 +9,7 @@
     <link rel="icon" href="https://img.sanishtech.com/u/62e636411ff87f8ccbdd9eb50eb18279.png" type="image/x-icon">
     
     <!-- Popunder Script (Managed via Config Below) -->
-    <script id="popunder-main-script" src="https://pl21423250.effectivecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js"></script>
+    <script id="popunder-main-script" src="https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js"></script>
 
     <!-- CSS & Icon Libraries -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
@@ -131,12 +131,12 @@
     <div class="main-container">
         
         <div id="player-section">
-            <div id="watchBtn" onclick="handlePopunder('play_main', initPlayer)">
+            <div id="watchBtn" onclick="handlePopunder('play_main', initPlayer)" style="display:none;">
                 <i class="fa-solid fa-circle-play fa-4x text-success mb-3"></i>
                 <h5 class="fw-bold m-0">WATCH ONLINE (MOVIE BOX BD)</h5>
                 <small class="opacity-50">Gestures: Swipe & Double Tap Enabled</small>
             </div>
-            <div id="artplayer" class="artplayer-app" style="display:none;"></div>
+            <div id="artplayer" class="artplayer-app"></div>
         </div>
 
         <div class="glass-card text-center">
@@ -169,7 +169,7 @@
                     <button class="lang-btn" id="en-btn" onclick="setLanguage('en')">English</button>
                 </div>
                 <div id="instruction-text">
-                    <i class="fa-solid fa-volume-high text-success"></i> কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে📱🎧
+                    <i class="fa-solid fa-volume-high text-success"></i> কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে📱🎧
                 </div>
             </div>
         </div>
@@ -250,17 +250,18 @@
             // ১. নোটিশ টেক্সট পরিবর্তন (এখানে লেখা দিলে উপরের নোটিশ বদলে যাবে)
             notice: "⚡ 5-Way Skip Active | Swipe Volume/Brightness | 4 Official Channels | Popunder Ads Active | Join @SakibMovieBox",
 
-            // ২. আনলিমিটেড ডিরেক্ট লিঙ্ক অ্যাড (এখানে কমা দিয়ে যত খুশি লিঙ্ক দিতে পারেন)
+            // ২. ডিরেক্ট লিঙ্ক অ্যাড — Adsterra + Monetag পালা করে খুলবে (রোটেশন)
             directAds: [
-                "https://www.effectivecpmnetwork.com/w6j7gscv?key=1b6df569ebc094e3e8e592d2fd017b4f",
+                "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
+                "https://omg10.com/4/10918781",
             ],
 
-            // ৩. পপান্ডার অ্যাড স্ক্রিপ্ট লিঙ্ক চেঞ্জ (JS Link)
-            popunderJS: "https://pl21423250.effectivecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
+            // ৩. পপান্ডার অ্যাড স্ক্রিপ্ট লিঙ্ক (Adsterra Popunder)
+            popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
 
             // ৪. সাউন্ড ইনস্ট্রাকশন টেক্সট চেঞ্জ (তিন ভাষার লেখা)
             soundText: {
-                bn: "কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে 📱🎧",
+                bn: "কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে 📱🎧",
                 hi: "यदि किसी मूवी या फ़ाइल में आवाज़ नहीं आ रही है, तो कृपया नीचे दिए गए प्लेयर में स्ट्रीम देखें। 📱🎧",
                 en: "If any movie or file has no sound, please watch the streams in the players given below. 📱🎧"
             }
@@ -373,10 +374,11 @@
             });
 
             art.on('play', () => {
-                if (!window.audioBoosted) {
+                if (!window.audioBoosted && !art.muted) {
                     try {
                         const AudioCtx = window.AudioContext || window.webkitAudioContext;
                         const ctx = new AudioCtx();
+                        if (ctx.state === 'suspended') { ctx.resume(); }
                         const source = ctx.createMediaElementSource(art.video);
                         const gainNode = ctx.createGain();
                         gainNode.gain.value = 4;
@@ -412,7 +414,30 @@
                 startY = e.touches[0].clientY;
             });
 
-            art.on('ready', () => { art.autoSize(); });
+            art.on('ready', () => { 
+                art.autoSize();
+                autoPlayVideo(art);
+            });
+        }
+
+        // ==========================================
+        //    AUTO PLAY (আওয়াজ সহ চেষ্টা, ব্লক হলে মিউটে চালু)
+        // ==========================================
+        function autoPlayVideo(art) {
+            const p = art.video.play();
+            if (p !== undefined) {
+                p.then(() => {
+                    art.notice.show = '▶️ Auto Play Started';
+                }).catch(() => {
+                    // ব্রাউজার আওয়াজ সহ অটো-প্লে আটকালে → মিউট করে চালু
+                    art.muted = true;
+                    art.video.play().then(() => {
+                        art.notice.show = '🔇 Auto Play (Muted) — সাউন্ডের জন্য Speaker আইকনে ট্যাপ করুন';
+                    }).catch(() => {
+                        // একদম ব্লক হলে ইউজার নিজে Play চাপবে
+                    });
+                });
+            }
         }
 
         function toggleDarkMode() {
@@ -441,6 +466,11 @@
                 window.location.href = `nplayer-${url}`;
             }
         }
+
+        // ==========================================
+        //   PAGE OPEN HOLOBEI VIDEO AUTO PLAY START 🎬
+        // ==========================================
+        try { initPlayer(); } catch (e) { console.log("Auto init error:", e); }
     </script>
 </body>
 </html>
