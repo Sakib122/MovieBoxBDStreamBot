@@ -109,6 +109,12 @@
         /* 2GB+ File Warning Box */
         .big-file-warning { border: 2px solid #ff4d4d; background: rgba(255, 77, 77, 0.08); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 15px; font-weight: 600; font-size: 13px; line-height: 1.6; }
 
+        /* Double Tap Ripple */
+        .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(0,255,136,0.25); display: flex; align-items: center; justify-content: center; color: #00ff88; font-size: 20px; z-index: 50; animation: rippleAnim .5s ease-out forwards; pointer-events: none; }
+        .tap-ripple.left { left: 10%; }
+        .tap-ripple.right { right: 10%; }
+        @keyframes rippleAnim { from { opacity: 1; transform: translateY(-50%) scale(0.6); } to { opacity: 0; transform: translateY(-50%) scale(1.4); } }
+
         /* Full page click capture for ads */
         #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
         #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 165, 0, 0.12); pointer-events: none; z-index: 9999; display: none; }
@@ -120,7 +126,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | 👆 Double-Tap = ±10s | 💬 Subtitle Support | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -251,7 +257,7 @@
         // ==========================================
         const CONFIG = {
             // ১. নোটিশ টেক্সট পরিবর্তন (এখানে লেখা দিলে উপরের নোটিশ বদলে যাবে)
-            notice: "⚡ Auto Play + Resume Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Resume | 👆 Double-Tap = ±10s | 💬 Subtitle Support | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox",
 
             // ২. ডিরেক্ট লিঙ্ক অ্যাড — Adsterra + Monetag পালা করে খুলবে (রোটেশন)
             directAds: [
@@ -348,18 +354,96 @@
             return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
         }
 
+        // ==========================================
+        //  SMART: দেখার প্রোগ্রেস বার (ফাইল কার্ডের নিচে)
+        // ==========================================
+        function ensureProgressBar() {
+            const card = document.querySelector('.main-container .glass-card.text-center');
+            if (!card || document.getElementById('mbx-progress')) { return; }
+            const wrap = document.createElement('div');
+            wrap.id = 'mbx-progress';
+            wrap.style.cssText = 'margin-top:10px;text-align:left;';
+            wrap.innerHTML = '<div style="height:5px;background:rgba(255,255,255,0.15);border-radius:5px;overflow:hidden;"><div id="mbx-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#00ff88,#00b09b);transition:width .5s;"></div></div><div id="mbx-progress-text" class="small" style="opacity:0.6;margin-top:4px;"></div>';
+            card.appendChild(wrap);
+        }
+        function updateProgressUI(video, key) {
+            try {
+                const saved = parseFloat(localStorage.getItem(key));
+                if (!(saved > 0)) { return; }
+                ensureProgressBar();
+                const fill = document.getElementById('mbx-progress-fill');
+                const txt = document.getElementById('mbx-progress-text');
+                if (!fill || !video.duration) { return; }
+                const pct = Math.min(100, (saved / video.duration) * 100);
+                fill.style.width = pct + '%';
+                txt.textContent = '📺 আপনি এই মুভির ' + Math.floor(pct) + '% দেখেছেন (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
+            } catch (e) {}
+        }
+
+        // ==========================================
+        //  SMART: ব্রাউজারে না চললে MX/VLC ফলব্যাক বক্স
+        // ==========================================
+        function showFallbackBox() {
+            if (document.getElementById('mbx-fallback')) { return; }
+            const div = document.createElement('div');
+            div.id = 'mbx-fallback';
+            div.className = 'big-file-warning';
+            div.innerHTML = '❌ <b>ব্রাউজারে প্লে করা যাচ্ছে না!</b><br>নিচের বাটনে চাপ দিয়ে এক্সটার্নাল প্লেয়ারে দেখুন 👇';
+            const b1 = document.createElement('button');
+            b1.textContent = '▶ MX Player';
+            b1.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:8px;border:none;background:#00ff88;color:#000;font-weight:800;cursor:pointer;';
+            b1.onclick = () => play_intent('com.mxtech.videoplayer.ad');
+            const b2 = document.createElement('button');
+            b2.textContent = '▶ VLC';
+            b2.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:8px;border:none;background:#ff8c00;color:#fff;font-weight:800;cursor:pointer;';
+            b2.onclick = () => play_intent('org.videolan.vlc');
+            div.appendChild(b1); div.appendChild(b2);
+            const sec = document.getElementById('player-section');
+            if (sec) { sec.insertAdjacentElement('afterend', div); }
+        }
+
+        // ==========================================
+        //  SMART: সাবটাইটেল লোডার (.srt / .vtt)
+        // ==========================================
+        function pickSubtitle(art) {
+            const inp = document.createElement('input');
+            inp.type = 'file';
+            inp.accept = '.srt,.vtt,text/vtt';
+            inp.onchange = () => {
+                const f = inp.files[0];
+                if (!f) { return; }
+                const url = URL.createObjectURL(f);
+                const type = f.name.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';
+                try {
+                    art.subtitle = {
+                        url: url,
+                        type: type,
+                        style: { color: '#fff', fontSize: '16px', textShadow: '0 0 4px #000', background: 'rgba(0,0,0,0.35)', padding: '2px 6px', borderRadius: '4px' }
+                    };
+                    art.notice.show = '✅ সাবটাইটেল লোড হয়েছে: ' + f.name;
+                } catch (e) {
+                    art.notice.show = '❌ সাবটাইটেল লোড ফেল করেছে';
+                }
+            };
+            inp.click();
+        }
+
         function initPlayer() {
             document.getElementById('watchBtn').style.display = 'none';
             const artDiv = document.getElementById('artplayer');
             artDiv.style.display = 'block';
 
+            const VIDEO_URL = '{{ file_url }}'.replace("http://", "https://");
+            const STORAGE_KEY = 'mbx_pos_' + VIDEO_URL;
+
             const art = new Artplayer({
                 container: '#artplayer',
-                url: '{{ file_url }}'.replace("http://", "https://"),
+                url: VIDEO_URL,
                 title: '{{ file_name }}',
                 autoSize: true, playbackRate: true, aspectRatio: true,
                 setting: true, fullscreen: true, pip: true, theme: '#00ff88',
                 preload: 'auto',
+                hotkey: true,
                 moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
                 layers: [{ html: '<div class="bold-watermark" style="position:absolute;top:10px;right:10px;">MOVIE BOX BD</div>' }],
                 controls: [
@@ -379,19 +463,42 @@
                         },
                     },
                     { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', click: () => art.backward = 10 },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', click: () => art.forward = 10 }
+                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', click: () => art.forward = 10 },
+                    { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt) যোগ করুন', click: () => pickSubtitle(art) }
                 ]
             });
 
             const video = art.video;
-            const STORAGE_KEY = 'mbx_pos_' + '{{ file_url }}'.replace("http://", "https://");
+            const container = document.querySelector('#artplayer');
+
+            // SMART: আগের ভলিউম মনে রাখা
+            try {
+                const savedVol = parseFloat(localStorage.getItem('mbx_vol'));
+                if (!isNaN(savedVol)) { art.volume = savedVol; }
+            } catch (e) {}
+            art.on('video:volumechange', () => { try { localStorage.setItem('mbx_vol', art.volume); } catch (e) {} });
+
+            // ==========================================
+            //  SMART: স্ক্রিন Wake Lock (মুভি চলার সময় স্ক্রিন নিভবে না)
+            // ==========================================
+            let wakeLock = null;
+            async function reqWake() {
+                try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (e) {}
+            }
+            function relWake() {
+                try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) { wakeLock = null; }
+            }
+            art.on('play', reqWake);
+            art.on('pause', relWake);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && !video.paused) { reqWake(); }
+            });
 
             // সাউন্ড বুস্ট (শুধু আনমিউট অবস্থায়)
             art.on('play', () => { tryBoost(art); });
 
             // সোয়াইপ জেসচার (ভলিউম/ব্রাইটনেস)
             let startY = 0;
-            const container = document.querySelector('#artplayer');
             container.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; });
             container.addEventListener('touchmove', (e) => {
                 const deltaY = startY - e.touches[0].clientY;
@@ -415,6 +522,79 @@
             });
 
             // ==========================================
+            //  SMART: ডাবল-ট্যাপ সিক (±১০ সেকেন্ড, রিপলসহ)
+            // ==========================================
+            function showRipple(side) {
+                const r = document.createElement('div');
+                r.className = 'tap-ripple ' + side;
+                r.innerHTML = side === 'left' ? '<i class="fa-solid fa-backward"></i>' : '<i class="fa-solid fa-forward"></i>';
+                container.appendChild(r);
+                setTimeout(() => r.remove(), 500);
+            }
+            let lastTap = 0, lastTapX = 0;
+            container.addEventListener('touchend', (e) => {
+                const now = Date.now();
+                const rect = container.getBoundingClientRect();
+                const x = e.changedTouches[0].clientX - rect.left;
+                if (now - lastTap < 300 && Math.abs(x - lastTapX) < 90) {
+                    if (x < rect.width / 2) {
+                        art.backward = 10;
+                        showRipple('left');
+                        art.notice.show = '⏪ ১০ সেকেন্ড পিছিয়ে';
+                    } else {
+                        art.forward = 10;
+                        showRipple('right');
+                        art.notice.show = '⏩ ১০ সেকেন্ড সামনে';
+                    }
+                    lastTap = 0;
+                } else {
+                    lastTap = now;
+                    lastTapX = x;
+                }
+            });
+
+            // ==========================================
+            //  SMART: চেপে ধরে ৩x স্পিড (ছেড়ে দিলে স্বাভাবিক)
+            // ==========================================
+            let pressTimer = null, pressFired = false, pressStartY = 0, prevRate = 1;
+            container.addEventListener('touchstart', (e) => {
+                pressFired = false;
+                pressStartY = e.touches[0].clientY;
+                pressTimer = setTimeout(() => {
+                    if (!video.paused && !video.ended) {
+                        prevRate = video.playbackRate || 1;
+                        video.playbackRate = 3;
+                        pressFired = true;
+                        art.notice.show = '⏩ ৩x স্পিড (আঙুল ছাড়লেই আগের মতো)';
+                    }
+                }, 600);
+            });
+            container.addEventListener('touchmove', (e) => {
+                if (pressTimer && Math.abs(e.touches[0].clientY - pressStartY) > 15) {
+                    clearTimeout(pressTimer);
+                    pressTimer = null;
+                }
+            });
+            container.addEventListener('touchend', () => {
+                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+                if (pressFired) {
+                    video.playbackRate = prevRate;
+                    pressFired = false;
+                    art.notice.show = '▶️ স্বাভাবিক স্পিড';
+                }
+            });
+
+            // SMART: ফোন ঘোরালে অটো-ফুলস্ক্রিন (ভিডিও চলা অবস্থায়)
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    try {
+                        const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (window.innerWidth > window.innerHeight);
+                        if (land && !video.paused && !art.fullscreen) { art.fullscreen = true; }
+                    } catch (e) {}
+                }, 300);
+            });
+
+            // ==========================================
             //  SMART: পজিশন সেভ + রিজিউম (চালিয়ে দেখা)
             // ==========================================
             let lastSave = 0;
@@ -423,10 +603,17 @@
                 if (now - lastSave > 3000 && video.currentTime > 5) {
                     lastSave = now;
                     try { localStorage.setItem(STORAGE_KEY, video.currentTime); } catch (e) {}
+                    updateProgressUI(video, STORAGE_KEY);
                 }
             });
             video.addEventListener('ended', () => {
                 try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+                try {
+                    const fill = document.getElementById('mbx-progress-fill');
+                    if (fill) { fill.style.width = '100%'; }
+                    const txt = document.getElementById('mbx-progress-text');
+                    if (txt) { txt.textContent = '✅ মুভি শেষ! ধন্যবাদ 🎬'; }
+                } catch (e) {}
             });
 
             // ==========================================
@@ -434,7 +621,7 @@
             // ==========================================
             let lastTime = 0, stuckCount = 0;
             setInterval(() => {
-                if (!art || video.paused || video.ended || video.seeking) return;
+                if (!art || video.paused || video.ended || video.seeking) { return; }
                 const t = video.currentTime;
                 if (Math.abs(t - lastTime) < 0.1) {
                     stuckCount++;
@@ -465,12 +652,13 @@
                 lastTime = t;
             }, 2000);
 
-            // SMART: লোড ফেল করলে অটো-রিট্রাই (৩ বার)
+            // SMART: লোড ফেল করলে অটো-রিট্রাই (৩ বার) → তারপর MX/VLC ফলব্যাক
             let errTries = 0;
             video.addEventListener('playing', () => { errTries = 0; });
             video.addEventListener('error', () => {
                 if (errTries >= 3) {
-                    art.notice.show = '❌ লোড করা যাচ্ছে না — পেজ রিলোড করুন';
+                    art.notice.show = '❌ ব্রাউজারে প্লে করা যাচ্ছে না';
+                    showFallbackBox();
                     return;
                 }
                 errTries++;
@@ -493,7 +681,7 @@
             art.on('ready', () => { 
                 art.autoSize();
                 autoPlayVideo(art);
-                // SMART: আগে দেখা জায়গা থেকে শুরু (রিজিউম)
+                // SMART: আগে দেখা জায়গা থেকে শুরু (রিজিউম) + প্রোগ্রেস বার
                 try {
                     const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
                     if (saved && saved > 15) {
@@ -501,6 +689,7 @@
                             if (video.duration && saved < video.duration - 30) {
                                 video.currentTime = saved;
                                 art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন — সেখান থেকে চালু করলাম';
+                                updateProgressUI(video, STORAGE_KEY);
                             }
                         };
                         if (video.readyState >= 1) { seekTo(); } else { video.addEventListener('loadedmetadata', seekTo, { once: true }); }
