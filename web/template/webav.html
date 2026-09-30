@@ -428,16 +428,31 @@
             if (p !== undefined) {
                 p.then(() => {
                     art.notice.show = '▶️ Auto Play Started';
+                    nudgeIfStuck(art);
                 }).catch(() => {
                     // ব্রাউজার আওয়াজ সহ অটো-প্লে আটকালে → মিউট করে চালু
                     art.muted = true;
                     art.video.play().then(() => {
                         art.notice.show = '🔇 Auto Play (Muted) — সাউন্ডের জন্য Speaker আইকনে ট্যাপ করুন';
-                    }).catch(() => {
-                        // একদম ব্লক হলে ইউজার নিজে Play চাপবে
-                    });
+                        nudgeIfStuck(art);
+                    }).catch(() => {});
                 });
             }
+        }
+
+        // ভিডিও চালু হয়েও 0 এ আটকে থাকলে সামান্য সামনে নেড় দেওয়া
+        function nudgeIfStuck(art) {
+            let tries = 0;
+            const timer = setInterval(() => {
+                tries++;
+                if (art.video.currentTime > 0.5 || tries > 4) {
+                    clearInterval(timer);
+                    return;
+                }
+                if (!art.video.paused) {
+                    art.video.currentTime = 1;
+                }
+            }, 1500);
         }
 
         function toggleDarkMode() {
