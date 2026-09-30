@@ -120,7 +120,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -251,7 +251,7 @@
         // ==========================================
         const CONFIG = {
             // ১. নোটিশ টেক্সট পরিবর্তন (এখানে লেখা দিলে উপরের নোটিশ বদলে যাবে)
-            notice: "⚡ Auto Play Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Resume Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
 
             // ২. ডিরেক্ট লিঙ্ক অ্যাড — Adsterra + Monetag পালা করে খুলবে (রোটেশন)
             directAds: [
@@ -341,6 +341,13 @@
             if (callback) callback();
         }
 
+        function fmtTime(sec) {
+            sec = Math.floor(sec);
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+            const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+            return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+        }
+
         function initPlayer() {
             document.getElementById('watchBtn').style.display = 'none';
             const artDiv = document.getElementById('artplayer');
@@ -376,9 +383,13 @@
                 ]
             });
 
-            // সাউন্ড বুস্ট (শুধু আনমিউট অবস্থায় কাজ করবে)
+            const video = art.video;
+            const STORAGE_KEY = 'mbx_pos_' + '{{ file_url }}'.replace("http://", "https://");
+
+            // সাউন্ড বুস্ট (শুধু আনমিউট অবস্থায়)
             art.on('play', () => { tryBoost(art); });
 
+            // সোয়াইপ জেসচার (ভলিউম/ব্রাইটনেস)
             let startY = 0;
             const container = document.querySelector('#artplayer');
             container.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; });
@@ -388,14 +399,14 @@
                 const x = e.touches[0].clientX - rect.left;
                 
                 if (x < rect.width / 2) { 
-                    const currentFilter = art.video.style.filter || "brightness(1) contrast(1) saturate(1)";
+                    const currentFilter = video.style.filter || "brightness(1) contrast(1) saturate(1)";
                     const bMatch = currentFilter.match(/brightness\(([^)]+)\)/);
                     let b = bMatch ? parseFloat(bMatch[1]) : 1;
                     let newBrightness = Math.min(Math.max(b + (deltaY / 800), 0.4), 2.0);
                     let newContrast = 1 + (newBrightness - 1) * 0.7; 
                     let newSaturate = 1 + (newBrightness - 1) * 1.1; 
                     let newSepia = (newBrightness > 1.2) ? (newBrightness - 1.2) * 0.1 : 0; 
-                    art.video.style.filter = `brightness(${newBrightness}) contrast(${newContrast}) saturate(${newSaturate}) sepia(${newSepia})`;
+                    video.style.filter = `brightness(${newBrightness}) contrast(${newContrast}) saturate(${newSaturate}) sepia(${newSepia})`;
                     art.notice.show = `Brightness: ${Math.round(newBrightness * 100)}%`;
                 } else { 
                     art.volume = Math.min(Math.max(art.volume + (deltaY / 600), 0), 1);
@@ -403,9 +414,98 @@
                 startY = e.touches[0].clientY;
             });
 
+            // ==========================================
+            //  SMART: পজিশন সেভ + রিজিউম (চালিয়ে দেখা)
+            // ==========================================
+            let lastSave = 0;
+            video.addEventListener('timeupdate', () => {
+                const now = Date.now();
+                if (now - lastSave > 3000 && video.currentTime > 5) {
+                    lastSave = now;
+                    try { localStorage.setItem(STORAGE_KEY, video.currentTime); } catch (e) {}
+                }
+            });
+            video.addEventListener('ended', () => {
+                try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+            });
+
+            // ==========================================
+            //  SMART: মাঝপথে আটকে গেলে অটো-রিকভার
+            // ==========================================
+            let lastTime = 0, stuckCount = 0;
+            setInterval(() => {
+                if (!art || video.paused || video.ended || video.seeking) return;
+                const t = video.currentTime;
+                if (Math.abs(t - lastTime) < 0.1) {
+                    stuckCount++;
+                    if (stuckCount === 2) {
+                        art.notice.show = '⏳ লোড হচ্ছে... একটু অপেক্ষা করুন';
+                    } else if (stuckCount === 4) {
+                        // ৮ সেকেন্ড জমে গেলে হালকা নেড়
+                        try { video.currentTime = t + 0.5; } catch (e) {}
+                        art.notice.show = '🔄 নিজে নিজে ঠিক করছি...';
+                    } else if (stuckCount >= 6) {
+                        // ১২ সেকেন্ডেও চলে না → একই জায়গা থেকে রিলোড
+                        stuckCount = 0;
+                        const pos = t;
+                        const src = video.src;
+                        try {
+                            video.src = src;
+                            video.load();
+                            video.addEventListener('loadedmetadata', function onMeta() {
+                                video.removeEventListener('loadedmetadata', onMeta);
+                                try { video.currentTime = pos; } catch (e) {}
+                                video.play().catch(() => {});
+                            });
+                        } catch (e) {}
+                    }
+                } else {
+                    stuckCount = 0;
+                }
+                lastTime = t;
+            }, 2000);
+
+            // SMART: লোড ফেল করলে অটো-রিট্রাই (৩ বার)
+            let errTries = 0;
+            video.addEventListener('playing', () => { errTries = 0; });
+            video.addEventListener('error', () => {
+                if (errTries >= 3) {
+                    art.notice.show = '❌ লোড করা যাচ্ছে না — পেজ রিলোড করুন';
+                    return;
+                }
+                errTries++;
+                art.notice.show = '🔁 আবার চেষ্টা করছি (' + errTries + '/3)...';
+                setTimeout(() => {
+                    try {
+                        const src = video.src;
+                        video.src = src;
+                        video.load();
+                        video.play().catch(() => {});
+                    } catch (e) {}
+                }, 1500);
+            });
+
+            // SMART: বাফারিংয়ে সুন্দর মেসেজ
+            video.addEventListener('waiting', () => {
+                if (!video.paused) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
+            });
+
             art.on('ready', () => { 
                 art.autoSize();
                 autoPlayVideo(art);
+                // SMART: আগে দেখা জায়গা থেকে শুরু (রিজিউম)
+                try {
+                    const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+                    if (saved && saved > 15) {
+                        const seekTo = () => {
+                            if (video.duration && saved < video.duration - 30) {
+                                video.currentTime = saved;
+                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন — সেখান থেকে চালু করলাম';
+                            }
+                        };
+                        if (video.readyState >= 1) { seekTo(); } else { video.addEventListener('loadedmetadata', seekTo, { once: true }); }
+                    }
+                } catch (e) {}
             });
         }
 
@@ -452,7 +552,7 @@
             window.addEventListener('touchstart', unmute);
         }
 
-        // ভিডিও চালু হয়েও 0 এ আটকে থাকলে সামান্য সামনে নেড় দেওয়া
+        // শুরুতে ভিডিও 0 এ আটকে থাকলে সামান্য সামনে নেড় দেওয়া
         function nudgeIfStuck(art) {
             let tries = 0;
             const timer = setInterval(() => {
