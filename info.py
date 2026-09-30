@@ -19,7 +19,7 @@ def is_enabled(value, default):
 # =========================================================
 # 🤖 BOT INFO & CREDENTIALS
 # =========================================================
-SESSION = environ.get('SESSION', 'Webavbot')
+SESSION = environ.get('SESSION1', 'Webavbot')
 API_ID = int(environ.get('API_ID', '29904834'))
 API_HASH = environ.get('API_HASH', '8b4fd9ef578af114502feeafa2d31938')
 BOT_TOKEN = environ.get('BOT_TOKEN', '8714836567:AAEUM36b-_Nri1HFjmAa0Yv1r_A_TPxI0eU')
