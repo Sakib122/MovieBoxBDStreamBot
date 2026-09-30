@@ -106,6 +106,9 @@
         .lang-btn.active { background: var(--accent); color: #000; }
         #instruction-text { font-size: 13px; line-height: 1.5; font-weight: 600; color: #fff; }
 
+        /* 2GB+ File Warning Box */
+        .big-file-warning { border: 2px solid #ff4d4d; background: rgba(255, 77, 77, 0.08); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 15px; font-weight: 600; font-size: 13px; line-height: 1.6; }
+
         /* Full page click capture for ads */
         #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
         #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 165, 0, 0.12); pointer-events: none; z-index: 9999; display: none; }
@@ -117,7 +120,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ 5-Way Skip Active | Swipe Volume/Brightness | 4 Official Channels | Popunder Ads Active | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -248,7 +251,7 @@
         // ==========================================
         const CONFIG = {
             // ১. নোটিশ টেক্সট পরিবর্তন (এখানে লেখা দিলে উপরের নোটিশ বদলে যাবে)
-            notice: "⚡ 5-Way Skip Active | Swipe Volume/Brightness | 4 Official Channels | Popunder Ads Active | Join @SakibMovieBox",
+            notice: "⚡ Auto Play Active | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
 
             // ২. ডিরেক্ট লিঙ্ক অ্যাড — Adsterra + Monetag পালা করে খুলবে (রোটেশন)
             directAds: [
@@ -373,22 +376,8 @@
                 ]
             });
 
-            art.on('play', () => {
-                if (!window.audioBoosted && !art.muted) {
-                    try {
-                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                        const ctx = new AudioCtx();
-                        if (ctx.state === 'suspended') { ctx.resume(); }
-                        const source = ctx.createMediaElementSource(art.video);
-                        const gainNode = ctx.createGain();
-                        gainNode.gain.value = 4;
-                        source.connect(gainNode);
-                        gainNode.connect(ctx.destination);
-                        window.audioBoosted = true;
-                        art.notice.show = 'Sound Boosted to 400%';
-                    } catch (e) { console.log("Boost Error"); }
-                }
-            });
+            // সাউন্ড বুস্ট (শুধু আনমিউট অবস্থায় কাজ করবে)
+            art.on('play', () => { tryBoost(art); });
 
             let startY = 0;
             const container = document.querySelector('#artplayer');
@@ -421,23 +410,46 @@
         }
 
         // ==========================================
-        //    AUTO PLAY (আওয়াজ সহ চেষ্টা, ব্লক হলে মিউটে চালু)
+        //    AUTO PLAY (আগে আওয়াজ সহ চেষ্টা → ব্লক হলে মিউটে চালু → ইউজারের প্রথম ট্যাপে সাউন্ড অন)
         // ==========================================
         function autoPlayVideo(art) {
             const p = art.video.play();
             if (p !== undefined) {
                 p.then(() => {
-                    art.notice.show = '▶️ Auto Play Started';
+                    art.notice.show = '▶️ Auto Play (Sound ON)';
                     nudgeIfStuck(art);
                 }).catch(() => {
                     // ব্রাউজার আওয়াজ সহ অটো-প্লে আটকালে → মিউট করে চালু
                     art.muted = true;
                     art.video.play().then(() => {
-                        art.notice.show = '🔇 Auto Play (Muted) — সাউন্ডের জন্য Speaker আইকনে ট্যাপ করুন';
+                        art.notice.show = '🔊 স্ক্রিনে একবার ট্যাপ করলেই সাউন্ড চালু হবে';
                         nudgeIfStuck(art);
-                    }).catch(() => {});
+                        soundOnFirstTouch(art);
+                    }).catch(() => {
+                        // একদম ব্লক হলেও প্রথম ট্যাপে প্লে+সাউন্ড
+                        soundOnFirstTouch(art);
+                    });
                 });
+            } else {
+                nudgeIfStuck(art);
             }
+        }
+
+        // ইউজার স্ক্রিনে যেকোনো জায়গায় প্রথম ট্যাপ/ক্লিক করলেই সাউন্ড অন হয়ে যাবে
+        function soundOnFirstTouch(art) {
+            const unmute = () => {
+                window.removeEventListener('click', unmute);
+                window.removeEventListener('touchstart', unmute);
+                try {
+                    if (art.muted) { art.muted = false; }
+                    const pp = art.video.play();
+                    if (pp && pp.catch) { pp.catch(() => {}); }
+                    art.notice.show = '🔊 Sound ON';
+                    tryBoost(art);
+                } catch (e) {}
+            };
+            window.addEventListener('click', unmute);
+            window.addEventListener('touchstart', unmute);
         }
 
         // ভিডিও চালু হয়েও 0 এ আটকে থাকলে সামান্য সামনে নেড় দেওয়া
@@ -454,6 +466,45 @@
                 }
             }, 1500);
         }
+
+        // সাউন্ড বুস্ট ৪০০% (একবারই চলবে)
+        function tryBoost(art) {
+            if (window.audioBoosted || art.muted) { return; }
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioCtx();
+                if (ctx.state === 'suspended') { ctx.resume(); }
+                const source = ctx.createMediaElementSource(art.video);
+                const gainNode = ctx.createGain();
+                gainNode.gain.value = 4;
+                source.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                window.audioBoosted = true;
+                art.notice.show = 'Sound Boosted to 400%';
+            } catch (e) { console.log("Boost Error"); }
+        }
+
+        // ==========================================
+        //   2GB+ ফাইল হলে লাল সতর্কবার্তা দেখাও ⚠️
+        // ==========================================
+        function checkFileSizeWarning() {
+            try {
+                const sizeText = "{{ file_size }}";
+                const m = sizeText.match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
+                if (!m) { return; }
+                const val = parseFloat(m[1]);
+                const unit = m[2].toUpperCase();
+                const isBig = (unit === 'GB' && val >= 2) || (unit === 'TB');
+                if (isBig) {
+                    const warn = document.createElement('div');
+                    warn.className = 'big-file-warning';
+                    warn.innerHTML = '⚠️ <b>এই ফাইলটি 2GB-এর বেশি!</b><br>টেলিগ্রামের নিয়মে 2GB+ ফাইল বট দিয়ে স্ট্রিম করা যায় না — শুধু লোডিং দেখাবে।<br>নিচের <b>⚡ HIGH SPEED DOWNLOAD</b> বাটন থেকে ডাউনলোড করে দেখুন। 🎬';
+                    const infoCard = document.querySelector('.main-container .glass-card.text-center');
+                    if (infoCard) { infoCard.insertAdjacentElement('afterend', warn); }
+                }
+            } catch (e) {}
+        }
+        checkFileSizeWarning();
 
         function toggleDarkMode() {
             document.body.classList.toggle('light-mode');
