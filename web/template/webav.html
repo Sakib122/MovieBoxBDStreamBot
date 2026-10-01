@@ -58,7 +58,6 @@
             border: 1px solid rgba(255,255,255,0.06);
         }
 
-        /* SMART: রেফারেন্স স্টাইল হেডার */
         .player-head { padding: 14px 15px 12px 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
         .player-head .ph-label { font-size: 11px; letter-spacing: 2px; font-weight: 800; color: var(--accent); }
         .player-head .ph-title { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -71,9 +70,9 @@
             aspect-ratio: 16/9; 
             overflow: hidden;
             position: relative;
+            touch-action: none;
         }
 
-        /* SMART: ব্যাজ রো + সেন্টার বাটনের ওভারলে */
         #mbx-overlay { position: absolute; inset: 0; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .25s; }
         #mbx-overlay.show { opacity: 1; }
         .v-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 90%; }
@@ -82,7 +81,6 @@
         #mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s; }
         #mbx-center:active { transform: translate(-50%,-50%) scale(0.9); }
 
-        /* SMART: রেফারেন্স স্টাইল Movie মেটা কার্ড */
         .movie-meta { padding: 13px 15px 15px 15px; background: var(--card-dark); }
         .movie-meta .mm-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; }
         .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -145,7 +143,6 @@
     <div class="main-container">
         
         <div id="player-section">
-            <!-- SMART: রেফারেন্স স্টাইল হেডার -->
             <div class="player-head">
                 <div style="min-width:0;">
                     <div class="ph-label">WATCH ONLINE</div>
@@ -155,14 +152,12 @@
             </div>
 
             <div id="artplayer" class="artplayer-app">
-                <!-- SMART: ব্যাজ + সেন্টার প্লে/পজ ওভারলে -->
                 <div id="mbx-overlay">
                     <div class="v-badges" id="mbx-badges"></div>
                     <div id="mbx-center"><i class="fa-solid fa-pause"></i></div>
                 </div>
             </div>
 
-            <!-- SMART: রেফারেন্স স্টাইল Movie মেটা (QUALITY + AUDIO পিলস) -->
             <div class="movie-meta" id="mbx-meta"></div>
         </div>
 
@@ -355,9 +350,7 @@
             return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
         }
 
-        // ==========================================
-        //  SMART: ফাইলের নাম পড়ে তথ্য বের করা (কোয়ালিটি/অডিও/সাব)
-        // ==========================================
+        // SMART: ফাইলের নাম পড়ে তথ্য বের করা (কোয়ালিটি/অডিও/সাব)
         function parseFileInfo() {
             const raw = "{{ file_name }}";
             const lower = raw.toLowerCase();
@@ -374,11 +367,10 @@
             for (const [k, v] of map) { if (lower.includes(k)) { langs.push(v); } }
             if (/\benglish\b|\beng\b/.test(lower)) { langs.push('English'); }
             const uniq = [...new Set(langs)];
-            const hasSub = /\besub\b|\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower);
+            const hasSub = /\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower);
             return { quality, isHEVC, langs: uniq, hasSub, dual: uniq.length > 1 };
         }
 
-        // SMART: ব্যাজ রো + Movie মেটা কার্ড বানানো
         function buildFileInfoUI() {
             const info = parseFileInfo();
             const badges = document.getElementById('mbx-badges');
@@ -387,7 +379,6 @@
             let qPills = '';
             let aPills = '';
 
-            // কোয়ালিটি ব্যাজ ও পিল
             if (info.quality) {
                 const qLabel = info.quality + (info.isHEVC ? ' HEVC' : '');
                 bHtml += '<span class="v-badge"><i class="fa-solid fa-film"></i>' + qLabel + '</span>';
@@ -396,7 +387,6 @@
                 qPills = '<span class="pill active">✓ Original</span>';
             }
 
-            // অডিও ব্যাজ ও পিল
             if (info.langs.length > 0) {
                 info.langs.forEach((lg, i) => {
                     bHtml += '<span class="v-badge"><i class="fa-solid fa-headphones"></i>' + lg + '</span>';
@@ -406,19 +396,16 @@
                 aPills = '<span class="pill active">✓ Original</span>';
             }
 
-            // সাবটাইটেল ব্যাজ
             if (info.hasSub) {
                 bHtml += '<span class="v-badge"><i class="fa-solid fa-closed-captioning"></i>Sub</span>';
             }
 
             badges.innerHTML = bHtml;
 
-            // হেডার টাইটেল ছোট করা (এক্সটেনশন বাদ)
             try {
                 document.getElementById('mbx-head-title').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i, '');
             } catch (e) {}
 
-            // অডিও পিলে চাপ দিলে — ব্রাউজারে অডিও বদলানো যায় না, তাই গাইড
             meta.innerHTML = '<div class="mm-title">🎬 Movie</div>' +
                 '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qPills + '</div>' +
                 '<div class="mm-row"><span class="mm-label">🎧 AUDIO</span>' + aPills + '</div>' +
@@ -432,7 +419,6 @@
         }
         buildFileInfoUI();
 
-        // SMART: প্রোগ্রেস বার
         function ensureProgressBar() {
             const card = document.querySelector('.main-container .glass-card.text-center');
             if (!card || document.getElementById('mbx-progress')) { return; }
@@ -499,8 +485,6 @@
         }
 
         function initPlayer() {
-            const artDiv = document.getElementById('artplayer');
-
             const VIDEO_URL = '{{ file_url }}'.replace("http://", "https://");
             const STORAGE_KEY = 'mbx_pos_' + VIDEO_URL;
 
@@ -541,7 +525,6 @@
             const centerBtn = document.getElementById('mbx-center');
             const statusBadge = document.getElementById('mbx-status');
 
-            // SMART: সেন্টার বাটন + ব্যাজ দেখানো/লুকানো (৩ সেকেন্ড অটো-হাইড)
             let hideTimer = null;
             function setCenterIcon(playing) {
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
@@ -570,7 +553,6 @@
             art.on('play', () => { setCenterIcon(true); setStatus(true); showOverlay(true); tryBoost(art); });
             art.on('pause', () => { setCenterIcon(false); setStatus(false); showOverlay(false); });
 
-            // আগের ভলিউম মনে রাখা
             try {
                 const savedVol = parseFloat(localStorage.getItem('mbx_vol'));
                 if (!isNaN(savedVol)) { art.volume = savedVol; }
@@ -592,8 +574,9 @@
             });
 
             // ==========================================
-            //  SMART জেসচার: UI বাদে ভিডিওর ওপর —
-            //  উপর-নিচ = ব্রাইটনেস/ভলিউম, বাঁয়ে-ডানে = সিক
+            //  SMART জেসচার (touch-action:none ফিরিয়ে আনায় এখন কাজ করবে):
+            //  উপর-নিচ সোয়াইপ = ব্রাইটনেস (বাঁয়ে) / ভলিউম (ডানে)
+            //  বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
             // ==========================================
             const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-layer') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('#mbx-center')));
             function getBrightness() {
@@ -665,7 +648,6 @@
                 }
                 gMode = null;
 
-                // ডাবল-ট্যাপ: বাঁয়ে=−10s, ডানে=+10s, মাঝখানে=পজ/প্লে
                 if (dragMoved) { dragMoved = false; return; }
                 if (isUI(e.target)) { return; }
                 const now = Date.now();
@@ -685,7 +667,6 @@
                         if (video.paused) { art.play(); } else { art.pause(); }
                     }
                 } else {
-                    // সিঙ্গেল ট্যাপ: ওভারলে টগল (রেফারেন্সের মতো)
                     lastTap = now;
                     lastTapX = x;
                     if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
@@ -693,14 +674,12 @@
             }, { passive: true });
             let lastTap = 0, lastTapX = 0;
 
-            // PC-তেও ক্লিকে ওভারলে টগল
             container.addEventListener('click', (e) => {
                 if (e.pointerType === 'touch') { return; }
                 if (isUI(e.target)) { return; }
                 if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
             });
 
-            // SMART: ঘোরালে অটো-ফুলস্ক্রিন
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => {
                     try {
@@ -737,17 +716,33 @@
                 } catch (e) {}
             });
 
-            // SMART: অটো-রিকভার (বাফারিং আর জমে-থাকা আলাদা করে চেনে)
+            // ==========================================
+            //  SMART ওয়াচডগ (নতুন): বাফার আছে কিন্তু ফ্রেম জমে থাকলে
+            //  (শুরুতে 00:00 বা রিজিউম পয়েন্টে) নিজে নেড় দেয় → তারপর রিলোড
+            // ==========================================
+            function hasBufferAhead(t) {
+                try {
+                    const b = video.buffered;
+                    for (let i = 0; i < b.length; i++) {
+                        if (t >= b.start(i) - 0.5 && t < b.end(i) - 0.5) { return true; }
+                    }
+                } catch (e) {}
+                return false;
+            }
             let lastTime = 0, stuckCount = 0, hasPlayed = false, lastReload = 0;
             video.addEventListener('playing', () => { hasPlayed = true; stuckCount = 0; });
             setInterval(() => {
                 if (!art || video.paused || video.ended || video.seeking) { return; }
-                if (video.readyState < 3) { return; }
                 const t = video.currentTime;
-                if (Math.abs(t - lastTime) < 0.1) {
+                const frozen = Math.abs(t - lastTime) < 0.1;
+                lastTime = t;
+                if (!frozen) { stuckCount = 0; return; }
+                if (!hasPlayed) { return; }
+                if (hasBufferAhead(t)) {
+                    // ডেটা আছে কিন্তু ফ্রেম জমে — এটাই ওই ফ্রিজ-বাগ
                     stuckCount++;
-                    if (!hasPlayed) { return; }
-                    if (stuckCount === 3) {
+                    if (stuckCount === 2) {
+                        try { video.currentTime = t + 0.3; } catch (e) {}
                         art.notice.show = '🔄 নিজে নিজে ঠিক করছি...';
                     } else if (stuckCount >= 5) {
                         stuckCount = 0;
@@ -766,9 +761,9 @@
                         }
                     }
                 } else {
-                    stuckCount = 0;
+                    // আসল বাফারিং — হাত দিও না, লোড হোক
+                    if (stuckCount === 0) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
                 }
-                lastTime = t;
             }, 2000);
 
             // SMART: লোড ফেল → ৩ বার রিট্রাই → MX/VLC ফলব্যাক
@@ -789,10 +784,6 @@
                         video.play().catch(() => {});
                     } catch (e) {}
                 }, 1500);
-            });
-
-            video.addEventListener('waiting', () => {
-                if (!video.paused) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
             });
 
             art.on('ready', () => { 
@@ -860,17 +851,17 @@
             window.addEventListener('touchstart', unmute);
         }
 
+        // শুরুতে 00:00-তে জমে থাকলে বারবার নেড় (৩০ সেকেন্ড পর্যন্ত চেষ্টা করে)
         function nudgeIfStuck(art) {
             let tries = 0;
             const timer = setInterval(() => {
                 tries++;
-                if (art.video.currentTime > 0.5 || tries > 4) {
+                const v = art.video;
+                if (v.currentTime > 0.5 || v.paused || tries > 20) {
                     clearInterval(timer);
                     return;
                 }
-                if (!art.video.paused) {
-                    art.video.currentTime = 1;
-                }
+                try { v.currentTime = 0.5; } catch (e) {}
             }, 1500);
         }
 
