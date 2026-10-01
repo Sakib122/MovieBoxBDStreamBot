@@ -49,6 +49,7 @@
 
         .main-container { max-width: 600px; margin: 0 auto; padding: 0px 15px 20px 15px; }
 
+        /* SMART: প্লেয়ার অ্যাড-ট্রিগার লেয়ারের উপরে — টাচ সবসময় প্লেয়ারই পাবে */
         #player-section {
             width: 100%;
             background: var(--card-dark);
@@ -56,6 +57,8 @@
             overflow: hidden;
             margin-bottom: 20px;
             border: 1px solid rgba(255,255,255,0.06);
+            position: relative;
+            z-index: 2100;
         }
 
         .player-head { padding: 14px 15px 12px 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -70,15 +73,18 @@
             aspect-ratio: 16/9; 
             overflow: hidden;
             position: relative;
-            touch-action: none;
+            touch-action: none !important;
+            background: #000;
         }
+        .artplayer-app video { touch-action: none !important; }
 
         #mbx-overlay { position: absolute; inset: 0; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .25s; }
         #mbx-overlay.show { opacity: 1; }
         .v-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 90%; }
         .v-badge { background: rgba(20,20,20,0.75); backdrop-filter: blur(4px); color: #fff; padding: 5px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; gap: 5px; border: 1px solid rgba(255,255,255,0.12); }
         .v-badge i { color: var(--accent); font-size: 11px; }
-        #mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s; }
+        #mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: none; transition: transform .15s; }
+        #mbx-overlay.show #mbx-center { pointer-events: auto; }
         #mbx-center:active { transform: translate(-50%,-50%) scale(0.9); }
 
         .movie-meta { padding: 13px 15px 15px 15px; background: var(--card-dark); }
@@ -105,6 +111,18 @@
         .tg-btn { background: var(--tg-blue); color: #fff !important; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 13px; text-align: center; text-decoration: none !important; }
 
         .control-btn { border: none; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+        /* SMART: মোবাইলে কম্প্যাক্ট কন্ট্রোল বার — সব আইকন এক লাইনে ফিট হবে */
+        @media (max-width: 640px) {
+            .art-bottom { padding: 0 2px !important; }
+            .art-control { padding: 0 3px !important; }
+            .art-control .art-icon { width: 26px !important; height: 26px !important; }
+            .art-control svg, .art-control i { font-size: 15px !important; width: 15px !important; height: 15px !important; }
+            .art-control-time { font-size: 11px !important; padding: 0 2px !important; }
+            .art-volume-slider, .art-volume-panel { display: none !important; }
+            .art-control-volume { width: 28px !important; }
+            .art-control-pip { display: none !important; }
+        }
 
         .sound-fix-box { border: 2px solid var(--accent); padding: 12px; text-align: center; margin-top: 15px; border-radius: 12px; background: rgba(0, 255, 136, 0.03); display: block; }
         .lang-switch { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
@@ -492,7 +510,7 @@
                 container: '#artplayer',
                 url: VIDEO_URL,
                 playbackRate: true, aspectRatio: true,
-                setting: true, fullscreen: true, pip: true, theme: '#00ff88',
+                setting: true, fullscreen: true, pip: false, theme: '#00ff88',
                 preload: 'auto',
                 hotkey: true,
                 moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
@@ -512,8 +530,8 @@
                             }
                         },
                     },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', click: () => art.backward = 10 },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', click: () => art.forward = 10 },
+                    { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', tooltip: '-10s', click: () => art.backward = 10 },
+                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', tooltip: '+10s', click: () => art.forward = 10 },
                     { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt) যোগ করুন', click: () => pickSubtitle(art) }
                 ]
             });
@@ -525,6 +543,7 @@
             const centerBtn = document.getElementById('mbx-center');
             const statusBadge = document.getElementById('mbx-status');
 
+            // ===== সেন্টার বাটন + স্ট্যাটাস + অটো-হাইড (রেফারেন্স স্টাইল) =====
             let hideTimer = null;
             function setCenterIcon(playing) {
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
@@ -537,7 +556,7 @@
                 overlay.classList.add('show');
                 clearTimeout(hideTimer);
                 if (autoHide) {
-                    hideTimer = setTimeout(() => overlay.classList.remove('show'), 3000);
+                    hideTimer = setTimeout(() => overlay.classList.remove('show'), 2500);
                 }
             }
             function hideOverlay() {
@@ -574,11 +593,13 @@
             });
 
             // ==========================================
-            //  SMART জেসচার (touch-action:none ফিরিয়ে আনায় এখন কাজ করবে):
-            //  উপর-নিচ সোয়াইপ = ব্রাইটনেস (বাঁয়ে) / ভলিউম (ডানে)
-            //  বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
+            //  SMART জেসচার v2 (capture phase + preventDefault):
+            //  - উপর-নিচ সোয়াইপ: বাঁয়ে = ব্রাইটনেস, ডানে = ভলিউম
+            //  - বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
+            //  - ডাবল-ট্যাপ: বাঁয়ে ১/৩ = −10s, ডানে ১/৩ = +10s, মাঝ = পজ/প্লে
+            //  - সিঙ্গেল ট্যাপ = কন্ট্রোল+ব্যাজ দেখাও/লুকাও (২.৫ সেকেন্ডে অটো-হাইড)
             // ==========================================
-            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-layer') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('#mbx-center')));
+            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('.art-progress') || t.closest('.art-layers') || t.closest('#mbx-center')));
             function getBrightness() {
                 const m = (video.style.filter || '').match(/brightness\(([^)]+)\)/);
                 return m ? parseFloat(m[1]) : 1;
@@ -591,7 +612,7 @@
                 setTimeout(() => r.remove(), 500);
             }
 
-            let gStartX = 0, gStartY = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 0.7, gMode = null, dragMoved = false, gRect = null;
+            let gStartX = 0, gStartY = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 0.7, gMode = null, dragMoved = false, gRect = null, lastTap = 0, lastTapX = 0;
 
             container.addEventListener('touchstart', (e) => {
                 if (isUI(e.target)) { gMode = null; return; }
@@ -603,10 +624,11 @@
                 gStartVol = video.volume;
                 gMode = 'pending';
                 dragMoved = false;
-            }, { passive: true });
+            }, { passive: true, capture: true });
 
             container.addEventListener('touchmove', (e) => {
                 if (!gMode) { return; }
+                if (gMode !== 'pending') { e.preventDefault(); } // সোয়াইপ চলাকালীন স্ক্রল ব্লক — touchcancel হবে না
                 const dx = e.touches[0].clientX - gStartX;
                 const dy = gStartY - e.touches[0].clientY;
 
@@ -633,7 +655,7 @@
                     art.volume = nv;
                     art.notice.show = `Volume: ${Math.round(nv * 100)}%`;
                 }
-            }, { passive: true });
+            }, { passive: false, capture: true });
 
             container.addEventListener('touchend', (e) => {
                 if (gMode === 'h') {
@@ -671,9 +693,11 @@
                     lastTapX = x;
                     if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
                 }
-            }, { passive: true });
-            let lastTap = 0, lastTapX = 0;
+            }, { passive: true, capture: true });
 
+            container.addEventListener('touchcancel', () => { gMode = null; }, { capture: true });
+
+            // PC-তে ক্লিকে ওভারলে টগল
             container.addEventListener('click', (e) => {
                 if (e.pointerType === 'touch') { return; }
                 if (isUI(e.target)) { return; }
@@ -716,10 +740,7 @@
                 } catch (e) {}
             });
 
-            // ==========================================
-            //  SMART ওয়াচডগ (নতুন): বাফার আছে কিন্তু ফ্রেম জমে থাকলে
-            //  (শুরুতে 00:00 বা রিজিউম পয়েন্টে) নিজে নেড় দেয় → তারপর রিলোড
-            // ==========================================
+            // SMART ওয়াচডগ: বাফার আছে কিন্তু ফ্রেম জমে → নেড় → রিলোড
             function hasBufferAhead(t) {
                 try {
                     const b = video.buffered;
@@ -739,7 +760,6 @@
                 if (!frozen) { stuckCount = 0; return; }
                 if (!hasPlayed) { return; }
                 if (hasBufferAhead(t)) {
-                    // ডেটা আছে কিন্তু ফ্রেম জমে — এটাই ওই ফ্রিজ-বাগ
                     stuckCount++;
                     if (stuckCount === 2) {
                         try { video.currentTime = t + 0.3; } catch (e) {}
@@ -761,7 +781,6 @@
                         }
                     }
                 } else {
-                    // আসল বাফারিং — হাত দিও না, লোড হোক
                     if (stuckCount === 0) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
                 }
             }, 2000);
@@ -788,7 +807,6 @@
 
             art.on('ready', () => { 
                 autoPlayVideo(art);
-                // SMART: রিজিউম
                 let resumed = false;
                 try {
                     const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
@@ -851,7 +869,7 @@
             window.addEventListener('touchstart', unmute);
         }
 
-        // শুরুতে 00:00-তে জমে থাকলে বারবার নেড় (৩০ সেকেন্ড পর্যন্ত চেষ্টা করে)
+        // শুরুতে জমে থাকলে বারবার নেড় (৩০ সেকেন্ড পর্যন্ত)
         function nudgeIfStuck(art) {
             let tries = 0;
             const timer = setInterval(() => {
