@@ -49,7 +49,6 @@
 
         .main-container { max-width: 600px; margin: 0 auto; padding: 0px 15px 20px 15px; }
 
-        /* SMART: প্লেয়ার অ্যাড-ট্রিগার লেয়ারের উপরে — টাচ সবসময় প্লেয়ারই পাবে */
         #player-section {
             width: 100%;
             background: var(--card-dark);
@@ -57,8 +56,6 @@
             overflow: hidden;
             margin-bottom: 20px;
             border: 1px solid rgba(255,255,255,0.06);
-            position: relative;
-            z-index: 2100;
         }
 
         .player-head { padding: 14px 15px 12px 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
@@ -73,10 +70,9 @@
             aspect-ratio: 16/9; 
             overflow: hidden;
             position: relative;
-            touch-action: none !important;
+            touch-action: none;
             background: #000;
         }
-        .artplayer-app video { touch-action: none !important; }
 
         #mbx-overlay { position: absolute; inset: 0; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .25s; }
         #mbx-overlay.show { opacity: 1; }
@@ -112,15 +108,14 @@
 
         .control-btn { border: none; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; }
 
-        /* SMART: মোবাইলে কম্প্যাক্ট কন্ট্রোল বার — সব আইকন এক লাইনে ফিট হবে */
+        /* মোবাইলে কম্প্যাক্ট কন্ট্রোল — সব আইকন এক লাইনে */
         @media (max-width: 640px) {
             .art-bottom { padding: 0 2px !important; }
-            .art-control { padding: 0 3px !important; }
-            .art-control .art-icon { width: 26px !important; height: 26px !important; }
-            .art-control svg, .art-control i { font-size: 15px !important; width: 15px !important; height: 15px !important; }
+            .art-control { padding: 0 2px !important; }
+            .art-icon { width: 26px !important; height: 26px !important; }
+            .art-icon svg, .art-icon i { width: 15px !important; height: 15px !important; font-size: 15px !important; }
             .art-control-time { font-size: 11px !important; padding: 0 2px !important; }
-            .art-volume-slider, .art-volume-panel { display: none !important; }
-            .art-control-volume { width: 28px !important; }
+            .art-volume-slider { display: none !important; }
             .art-control-pip { display: none !important; }
         }
 
@@ -137,13 +132,11 @@
         .tap-ripple.right { right: 10%; }
         @keyframes rippleAnim { from { opacity: 1; transform: translateY(-50%) scale(0.6); } to { opacity: 0; transform: translateY(-50%) scale(1.4); } }
 
-        #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
         #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 165, 0, 0.12); pointer-events: none; z-index: 9999; display: none; }
     </style>
 </head>
 <body>
 
-    <div id="popunder-trigger" onclick="handlePopunder('global_trigger')"></div>
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
@@ -315,6 +308,15 @@
         if(CONFIG.notice === "") { deleteNotice(); } else { document.getElementById('marquee-element').innerText = CONFIG.notice; }
         document.getElementById('popunder-main-script').src = CONFIG.popunderJS;
 
+        // ==========================================
+        //  অ্যাড ট্রিগার (নতুন): অদৃশ্য লেয়ার বাদ!
+        //  আগে পুরো স্ক্রিন ঢেকে থাকা লেয়ার প্লেয়ারের টাচ খেয়ে ফেলত।
+        //  এখন প্রথম ক্লিকেই অ্যাড — কিন্তু কোনো লেয়ার কিছু ব্লক করবে না।
+        // ==========================================
+        document.addEventListener('click', function firstClickAd() {
+            handlePopunder('global_trigger');
+        }, { once: true, capture: true });
+
         function setLanguage(lang) {
             const textDisplay = document.getElementById('instruction-text');
             const btns = document.querySelectorAll('.lang-btn');
@@ -353,10 +355,6 @@
                 window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank');
                 linkIndex++;
                 cooldowns[btnId] = now;
-                
-                if(btnId === 'global_trigger') {
-                    document.getElementById('popunder-trigger').style.display = 'none';
-                }
             }
             if (callback) callback();
         }
@@ -368,7 +366,7 @@
             return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
         }
 
-        // SMART: ফাইলের নাম পড়ে তথ্য বের করা (কোয়ালিটি/অডিও/সাব)
+        // SMART: ফাইলের নাম পড়ে তথ্য বের করা
         function parseFileInfo() {
             const raw = "{{ file_name }}";
             const lower = raw.toLowerCase();
@@ -378,7 +376,7 @@
             const isHEVC = /hevc|x265|h\.265/.test(lower);
             const langs = [];
             const map = [
-                ['bangla', 'বাংলা'], ['bengali', 'বাংলা'], ['bangali', 'বাংলা'],
+                ['bangla', 'বাংলা'], ['bengali', 'বাংলা'],
                 ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['telugu', 'Telugu'],
                 ['malayalam', 'Malayalam'], ['kannada', 'Kannada'], ['punjabi', 'Punjabi'], ['urdu', 'Urdu']
             ];
@@ -427,7 +425,7 @@
             meta.innerHTML = '<div class="mm-title">🎬 Movie</div>' +
                 '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qPills + '</div>' +
                 '<div class="mm-row"><span class="mm-label">🎧 AUDIO</span>' + aPills + '</div>' +
-                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না। নিচের <b>MX Player / VLC</b> বাটনে চেপে ওপেন করলে প্লেয়ারের ভিতরে অডিও (Hindi/বাংলা/English) বদলাতে পারবেন। 🎬</div>' : '');
+                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না। নিচের <b>MX Player / VLC</b> বাটনে চেপে ওপেন করলে প্লেয়ারের ভিতরে অডিও বদলাতে পারবেন। 🎬</div>' : '');
 
             meta.querySelectorAll('.pill.clickable').forEach(p => {
                 p.addEventListener('click', () => {
@@ -509,16 +507,17 @@
             const art = new Artplayer({
                 container: '#artplayer',
                 url: VIDEO_URL,
-                playbackRate: true, aspectRatio: true,
+                playbackRate: true,
                 setting: true, fullscreen: true, pip: false, theme: '#00ff88',
                 preload: 'auto',
                 hotkey: true,
+                playAndPause: false,
                 moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
                 controls: [
                     {
                         position: 'right',
                         html: '<i class="fa-solid fa-arrows-rotate"></i>',
-                        tooltip: 'Fullscreen Rotation',
+                        tooltip: 'Rotate',
                         click: function () {
                             if (!art.fullscreen) { art.fullscreen = true; }
                             if (screen.orientation && screen.orientation.lock) {
@@ -530,9 +529,9 @@
                             }
                         },
                     },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', tooltip: '-10s', click: () => art.backward = 10 },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', tooltip: '+10s', click: () => art.forward = 10 },
-                    { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt) যোগ করুন', click: () => pickSubtitle(art) }
+                    { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', tooltip: '-10s', click: () => { art.backward = 10; } },
+                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', tooltip: '+10s', click: () => { art.forward = 10; } },
+                    { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt)', click: () => pickSubtitle(art) }
                 ]
             });
             window.MBX_NOTICE = (msg) => { art.notice.show = msg; };
@@ -543,7 +542,7 @@
             const centerBtn = document.getElementById('mbx-center');
             const statusBadge = document.getElementById('mbx-status');
 
-            // ===== সেন্টার বাটন + স্ট্যাটাস + অটো-হাইড (রেফারেন্স স্টাইল) =====
+            // ===== সেন্টার বাটন + স্ট্যাটাস + অটো-হাইড =====
             let hideTimer = null;
             function setCenterIcon(playing) {
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
@@ -555,9 +554,7 @@
             function showOverlay(autoHide) {
                 overlay.classList.add('show');
                 clearTimeout(hideTimer);
-                if (autoHide) {
-                    hideTimer = setTimeout(() => overlay.classList.remove('show'), 2500);
-                }
+                if (autoHide) { hideTimer = setTimeout(() => overlay.classList.remove('show'), 2500); }
             }
             function hideOverlay() {
                 clearTimeout(hideTimer);
@@ -593,16 +590,21 @@
             });
 
             // ==========================================
-            //  SMART জেসচার v2 (capture phase + preventDefault):
-            //  - উপর-নিচ সোয়াইপ: বাঁয়ে = ব্রাইটনেস, ডানে = ভলিউম
-            //  - বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
-            //  - ডাবল-ট্যাপ: বাঁয়ে ১/৩ = −10s, ডানে ১/৩ = +10s, মাঝ = পজ/প্লে
-            //  - সিঙ্গেল ট্যাপ = কন্ট্রোল+ব্যাজ দেখাও/লুকাও (২.৫ সেকেন্ডে অটো-হাইড)
+            //  জেসচার (নতুন সহজ-সরল ভার্সন):
+            //  উপর-নিচ সোয়াইপ: বাঁয়ে=ব্রাইটনেস, ডানে=ভলিউম
+            //  বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
+            //  ডাবল-ট্যাপ: বাঁয়ে ১/৩=-10s, ডানে ১/৩=+10s, মাঝ=পজ/প্লে
+            //  সিঙ্গেল ট্যাপ = কন্ট্রোল/ব্যাজ দেখাও-লুকাও
             // ==========================================
-            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('.art-progress') || t.closest('.art-layers') || t.closest('#mbx-center')));
+            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('.art-progress') || t.closest('#mbx-center')));
             function getBrightness() {
                 const m = (video.style.filter || '').match(/brightness\(([^)]+)\)/);
                 return m ? parseFloat(m[1]) : 1;
+            }
+            function doSeek(delta, label) {
+                const target = Math.min(Math.max(video.currentTime + delta, 0), (video.duration || 0) - 1);
+                try { video.currentTime = target; } catch (e) {}
+                art.notice.show = label + ' → ' + fmtTime(target);
             }
             function showRipple(side) {
                 const r = document.createElement('div');
@@ -612,92 +614,98 @@
                 setTimeout(() => r.remove(), 500);
             }
 
-            let gStartX = 0, gStartY = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 0.7, gMode = null, dragMoved = false, gRect = null, lastTap = 0, lastTapX = 0;
+            let gStartX = 0, gStartY = 0, gStartTime = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 1;
+            let gMode = null, gMoved = false, gRect = null;
+            let lastTapTime = 0, lastTapX = 0;
 
             container.addEventListener('touchstart', (e) => {
                 if (isUI(e.target)) { gMode = null; return; }
                 gRect = container.getBoundingClientRect();
                 gStartX = e.touches[0].clientX;
                 gStartY = e.touches[0].clientY;
+                gStartTime = Date.now();
                 gBaseTime = video.currentTime;
                 gStartBright = getBrightness();
                 gStartVol = video.volume;
                 gMode = 'pending';
-                dragMoved = false;
-            }, { passive: true, capture: true });
+                gMoved = false;
+            }, { passive: true });
 
             container.addEventListener('touchmove', (e) => {
                 if (!gMode) { return; }
-                if (gMode !== 'pending') { e.preventDefault(); } // সোয়াইপ চলাকালীন স্ক্রল ব্লক — touchcancel হবে না
                 const dx = e.touches[0].clientX - gStartX;
                 const dy = gStartY - e.touches[0].clientY;
 
                 if (gMode === 'pending') {
-                    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
-                        gMode = 'h'; dragMoved = true;
-                    } else if (Math.abs(dy) > 12) {
-                        dragMoved = true;
+                    if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
+                        gMode = 'h'; gMoved = true;
+                    } else if (Math.abs(dy) > 14) {
+                        gMoved = true;
                         const xIn = e.touches[0].clientX - gRect.left;
                         gMode = (xIn < gRect.width / 2) ? 'bright' : 'vol';
                     }
                 }
 
                 if (gMode === 'h') {
+                    e.preventDefault();
                     const secs = Math.round(dx / 10);
                     const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
                     art.notice.show = (secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(target);
                 } else if (gMode === 'bright') {
+                    e.preventDefault();
                     const nb = Math.min(Math.max(gStartBright + dy / 800, 0.4), 2.0);
-                    video.style.filter = `brightness(${nb}) contrast(1) saturate(1) sepia(0)`;
-                    art.notice.show = `Brightness: ${Math.round(nb * 100)}%`;
+                    video.style.filter = 'brightness(' + nb + ')';
+                    art.notice.show = 'Brightness: ' + Math.round(nb * 100) + '%';
                 } else if (gMode === 'vol') {
+                    e.preventDefault();
                     const nv = Math.min(Math.max(gStartVol + dy / 600, 0), 1);
                     art.volume = nv;
-                    art.notice.show = `Volume: ${Math.round(nv * 100)}%`;
+                    art.notice.show = 'Volume: ' + Math.round(nv * 100) + '%';
                 }
-            }, { passive: false, capture: true });
+            }, { passive: false });
 
             container.addEventListener('touchend', (e) => {
-                if (gMode === 'h') {
-                    const dx = e.changedTouches[0].clientX - gStartX;
-                    const secs = Math.round(dx / 10);
-                    const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
-                    try { video.currentTime = target; } catch (err) {}
-                    art.notice.show = '⏭️ ' + fmtTime(target);
-                    gMode = null;
-                    setTimeout(() => { dragMoved = false; }, 100);
-                    return;
-                }
+                const wasMode = gMode;
                 gMode = null;
 
-                if (dragMoved) { dragMoved = false; return; }
+                if (wasMode === 'h') {
+                    const dx = e.changedTouches[0].clientX - gStartX;
+                    const secs = Math.round(dx / 10);
+                    doSeek(secs, '⏭️');
+                    setTimeout(() => { gMoved = false; }, 100);
+                    return;
+                }
+                if (gMoved) { setTimeout(() => { gMoved = false; }, 100); return; }
                 if (isUI(e.target)) { return; }
-                const now = Date.now();
+
+                const dt = Date.now() - gStartTime;
+                if (dt > 400) { return; }
+
                 const rect = container.getBoundingClientRect();
                 const x = e.changedTouches[0].clientX - rect.left;
-                if (now - lastTap < 320 && Math.abs(x - lastTapX) < 90) {
-                    lastTap = 0;
+                const now = Date.now();
+
+                if (now - lastTapTime < 320 && Math.abs(x - lastTapX) < 80) {
+                    lastTapTime = 0;
                     if (x < rect.width * 0.33) {
-                        art.backward = 10;
+                        doSeek(-10, '⏪');
                         showRipple('left');
-                        art.notice.show = '⏪ ১০ সেকেন্ড পিছিয়ে';
-                    } else if (x > rect.width * 0.66) {
-                        art.forward = 10;
+                    } else if (x > rect.width * 0.67) {
+                        doSeek(10, '⏩');
                         showRipple('right');
-                        art.notice.show = '⏩ ১০ সেকেন্ড সামনে';
                     } else {
                         if (video.paused) { art.play(); } else { art.pause(); }
                     }
+                    hideOverlay();
                 } else {
-                    lastTap = now;
+                    lastTapTime = now;
                     lastTapX = x;
                     if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
                 }
-            }, { passive: true, capture: true });
+            }, { passive: true });
 
-            container.addEventListener('touchcancel', () => { gMode = null; }, { capture: true });
+            container.addEventListener('touchcancel', () => { gMode = null; });
 
-            // PC-তে ক্লিকে ওভারলে টগল
             container.addEventListener('click', (e) => {
                 if (e.pointerType === 'touch') { return; }
                 if (isUI(e.target)) { return; }
@@ -815,7 +823,7 @@
                             if (video.duration && saved < video.duration - 30) {
                                 try { video.currentTime = saved; } catch (e) {}
                                 resumed = true;
-                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন — লোড হওয়া মাত্র চলবে';
+                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন';
                                 updateProgressUI(video, STORAGE_KEY);
                             }
                         };
@@ -831,7 +839,7 @@
             });
         }
 
-        // AUTO PLAY (আওয়াজ সহ চেষ্টা → ব্লক হলে মিউটে → প্রথম ট্যাপে সাউন্ড)
+        // AUTO PLAY
         function autoPlayVideo(art) {
             const p = art.video.play();
             if (p !== undefined) {
@@ -869,7 +877,6 @@
             window.addEventListener('touchstart', unmute);
         }
 
-        // শুরুতে জমে থাকলে বারবার নেড় (৩০ সেকেন্ড পর্যন্ত)
         function nudgeIfStuck(art) {
             let tries = 0;
             const timer = setInterval(() => {
