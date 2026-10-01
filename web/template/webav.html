@@ -54,32 +54,39 @@
             top: 0px;
             z-index: 1100; 
             background: var(--bg-dark); 
-            padding: 10px 0;
-            margin-bottom: 20px;
+            padding: 8px 0;
+            margin: 0 -15px 20px -15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             touch-action: none; 
         }
         
         body.light-mode #player-section { background: #f0f2f5; }
 
+        /* SMART: মোবাইলে বড় স্কয়ার ডিসপ্লে, ল্যান্ডস্কেপ/PC-তে 16:9 */
         .artplayer-app { 
             width: 100%; 
             height: auto; 
-            aspect-ratio: 16/9; 
-            border-radius: 12px; 
+            aspect-ratio: 1/1; 
+            border-radius: 0; 
             overflow: hidden; 
         }
+        @media (orientation: landscape) {
+            .artplayer-app { aspect-ratio: 16/9; }
+        }
+        @media (min-width: 768px) {
+            .artplayer-app { aspect-ratio: 16/9; border-radius: 12px; }
+        }
 
-        /* Small Red Watermark Logic */
+        /* SMART: ছোট ও হালকা ওয়াটারমার্ক */
         .bold-watermark {
-            font-weight: 900 !important;
-            font-size: 11px !important;
-            color: #ff0000 !important;
-            text-shadow: 2px 2px 4px #000;
-            background: rgba(0,0,0,0.4);
-            padding: 2px 8px;
-            border-radius: 4px;
-            letter-spacing: 0.5px;
+            font-weight: 700 !important;
+            font-size: 8px !important;
+            color: rgba(255, 60, 60, 0.85) !important;
+            text-shadow: 1px 1px 2px #000;
+            background: rgba(0,0,0,0.30);
+            padding: 1px 5px;
+            border-radius: 3px;
+            letter-spacing: 0.3px;
             border: none !important;
         }
 
@@ -99,23 +106,19 @@
 
         .control-btn { border: none; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; }
 
-        /* Sound Instruction Styling (Relocated Position) */
         .sound-fix-box { border: 2px solid var(--accent); padding: 12px; text-align: center; margin-top: 15px; border-radius: 12px; background: rgba(0, 255, 136, 0.03); display: block; }
         .lang-switch { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
         .lang-btn { background: rgba(255,255,255,0.1); border: 1px solid var(--accent); color: var(--accent); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.3s; }
         .lang-btn.active { background: var(--accent); color: #000; }
         #instruction-text { font-size: 13px; line-height: 1.5; font-weight: 600; color: #fff; }
 
-        /* 2GB+ File Warning Box */
         .big-file-warning { border: 2px solid #ff4d4d; background: rgba(255, 77, 77, 0.08); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 15px; font-weight: 600; font-size: 13px; line-height: 1.6; }
 
-        /* Double Tap Ripple */
         .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(0,255,136,0.25); display: flex; align-items: center; justify-content: center; color: #00ff88; font-size: 20px; z-index: 50; animation: rippleAnim .5s ease-out forwards; pointer-events: none; }
         .tap-ripple.left { left: 10%; }
         .tap-ripple.right { right: 10%; }
         @keyframes rippleAnim { from { opacity: 1; transform: translateY(-50%) scale(0.6); } to { opacity: 0; transform: translateY(-50%) scale(1.4); } }
 
-        /* Full page click capture for ads */
         #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
         #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 165, 0, 0.12); pointer-events: none; z-index: 9999; display: none; }
     </style>
@@ -126,7 +129,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | 👆 Double-Tap = ±10s | 💬 Subtitle Support | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | 👆 Double-Tap: Side=±10s, Middle=Pause | 💬 Subtitle | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -143,7 +146,7 @@
             <div id="watchBtn" onclick="handlePopunder('play_main', initPlayer)" style="display:none;">
                 <i class="fa-solid fa-circle-play fa-4x text-success mb-3"></i>
                 <h5 class="fw-bold m-0">WATCH ONLINE (MOVIE BOX BD)</h5>
-                <small class="opacity-50">Gestures: Swipe & Double Tap Enabled</small>
+                <small class="opacity-50">Tap: Controls | Double-Tap: Seek/Pause | Swipe: Volume/Brightness/Seek</small>
             </div>
             <div id="artplayer" class="artplayer-app"></div>
         </div>
@@ -170,7 +173,6 @@
                 </div>
             </div>
 
-            <!-- RELOCATED SOUND FIX INSTRUCTION BOX (GREEN BOX POSITION) -->
             <div class="sound-fix-box" id="sound-fix-main">
                 <div class="lang-switch">
                     <button class="lang-btn active" id="bn-btn" onclick="setLanguage('bn')">বাংলা</button>
@@ -183,7 +185,6 @@
             </div>
         </div>
 
-        <!-- EXTERNAL PLAYERS WITH ICONS -->
         <div class="glass-card">
             <div class="small fw-bold mb-2 opacity-75 text-center">EXTERNAL PLAYERS</div>
             <div class="row g-2">
@@ -256,19 +257,15 @@
         //         ৪ টি প্রধান এড/চেঞ্জ কমান্ড
         // ==========================================
         const CONFIG = {
-            // ১. নোটিশ টেক্সট পরিবর্তন (এখানে লেখা দিলে উপরের নোটিশ বদলে যাবে)
-            notice: "⚡ Auto Play + Resume | 👆 Double-Tap = ±10s | 💬 Subtitle Support | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Resume | 👆 Double-Tap: Side=±10s, Middle=Pause | 💬 Subtitle | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox",
 
-            // ২. ডিরেক্ট লিঙ্ক অ্যাড — Adsterra + Monetag পালা করে খুলবে (রোটেশন)
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
                 "https://omg10.com/4/10918781",
             ],
 
-            // ৩. পপান্ডার অ্যাড স্ক্রিপ্ট লিঙ্ক (Adsterra Popunder)
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
 
-            // ৪. সাউন্ড ইনস্ট্রাকশন টেক্সট চেঞ্জ (তিন ভাষার লেখা)
             soundText: {
                 bn: "কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে 📱🎧",
                 hi: "यदि किसी मूवी या फ़ाइल में आवाज़ नहीं आ रही है, तो कृपया नीचे दिए गए प्लेयर में स्ट्रीम देखें। 📱🎧",
@@ -276,13 +273,6 @@
             }
         };
 
-        // ==========================================
-        //         ডিলেট/রিমুভ করার কমান্ডসমূহ
-        // ==========================================
-        // নোটিশ রিমুভ করতে চাইলে: CONFIG.notice = "";
-        // অ্যাড রিমুভ করতে চাইলে: CONFIG.directAds = [];
-        // সাউন্ড বক্স পুরোটা রিমুভ করতে চাইলে নিচে ফাংশন কল করুন: deleteSoundBox();
-        
         function deleteNotice() {
             document.getElementById('notice-container').style.display = 'none';
         }
@@ -294,20 +284,16 @@
             if(s) s.remove();
         }
 
-        // Initialize Dynamic Configs
         if(CONFIG.notice === "") { deleteNotice(); } else { document.getElementById('marquee-element').innerText = CONFIG.notice; }
         document.getElementById('popunder-main-script').src = CONFIG.popunderJS;
 
-        // Language Switcher Logic
         function setLanguage(lang) {
             const textDisplay = document.getElementById('instruction-text');
             const btns = document.querySelectorAll('.lang-btn');
             btns.forEach(b => b.classList.remove('active'));
             document.getElementById(lang + '-btn').classList.add('active');
-
             textDisplay.innerHTML = `<i class="fa-solid fa-volume-high text-success"></i> ${CONFIG.soundText[lang]}`;
         }
-        // Run Default Language
         setLanguage('bn');
 
         function forceDownload(url) {
@@ -354,9 +340,7 @@
             return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
         }
 
-        // ==========================================
-        //  SMART: দেখার প্রোগ্রেস বার (ফাইল কার্ডের নিচে)
-        // ==========================================
+        // SMART: প্রোগ্রেস বার (ফাইল কার্ডের ভিতরে, সবসময় সঠিক)
         function ensureProgressBar() {
             const card = document.querySelector('.main-container .glass-card.text-center');
             if (!card || document.getElementById('mbx-progress')) { return; }
@@ -369,20 +353,17 @@
         function updateProgressUI(video, key) {
             try {
                 const saved = parseFloat(localStorage.getItem(key));
-                if (!(saved > 0)) { return; }
+                if (!(saved > 0) || !video.duration) { return; }
                 ensureProgressBar();
                 const fill = document.getElementById('mbx-progress-fill');
                 const txt = document.getElementById('mbx-progress-text');
-                if (!fill || !video.duration) { return; }
+                if (!fill) { return; }
                 const pct = Math.min(100, (saved / video.duration) * 100);
                 fill.style.width = pct + '%';
-                txt.textContent = '📺 আপনি এই মুভির ' + Math.floor(pct) + '% দেখেছেন (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
+                txt.textContent = '📺 দেখা হয়েছে ' + Math.floor(pct) + '% (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
             } catch (e) {}
         }
 
-        // ==========================================
-        //  SMART: ব্রাউজারে না চললে MX/VLC ফলব্যাক বক্স
-        // ==========================================
         function showFallbackBox() {
             if (document.getElementById('mbx-fallback')) { return; }
             const div = document.createElement('div');
@@ -402,9 +383,6 @@
             if (sec) { sec.insertAdjacentElement('afterend', div); }
         }
 
-        // ==========================================
-        //  SMART: সাবটাইটেল লোডার (.srt / .vtt)
-        // ==========================================
         function pickSubtitle(art) {
             const inp = document.createElement('input');
             inp.type = 'file';
@@ -440,12 +418,12 @@
                 container: '#artplayer',
                 url: VIDEO_URL,
                 title: '{{ file_name }}',
-                autoSize: true, playbackRate: true, aspectRatio: true,
+                playbackRate: true, aspectRatio: true,
                 setting: true, fullscreen: true, pip: true, theme: '#00ff88',
                 preload: 'auto',
                 hotkey: true,
                 moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
-                layers: [{ html: '<div class="bold-watermark" style="position:absolute;top:10px;right:10px;">MOVIE BOX BD</div>' }],
+                layers: [{ html: '<div class="bold-watermark" style="position:absolute;top:8px;right:8px;">MOVIE BOX BD</div>' }],
                 controls: [
                     {
                         position: 'right',
@@ -471,16 +449,14 @@
             const video = art.video;
             const container = document.querySelector('#artplayer');
 
-            // SMART: আগের ভলিউম মনে রাখা
+            // আগের ভলিউম মনে রাখা
             try {
                 const savedVol = parseFloat(localStorage.getItem('mbx_vol'));
                 if (!isNaN(savedVol)) { art.volume = savedVol; }
             } catch (e) {}
             art.on('video:volumechange', () => { try { localStorage.setItem('mbx_vol', art.volume); } catch (e) {} });
 
-            // ==========================================
-            //  SMART: স্ক্রিন Wake Lock (মুভি চলার সময় স্ক্রিন নিভবে না)
-            // ==========================================
+            // SMART: Wake Lock (চলার সময় স্ক্রিন নিভবে না)
             let wakeLock = null;
             async function reqWake() {
                 try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (e) {}
@@ -494,36 +470,17 @@
                 if (document.visibilityState === 'visible' && !video.paused) { reqWake(); }
             });
 
-            // সাউন্ড বুস্ট (শুধু আনমিউট অবস্থায়)
             art.on('play', () => { tryBoost(art); });
 
-            // সোয়াইপ জেসচার (ভলিউম/ব্রাইটনেস)
-            let startY = 0;
-            container.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; });
-            container.addEventListener('touchmove', (e) => {
-                const deltaY = startY - e.touches[0].clientY;
-                const rect = container.getBoundingClientRect();
-                const x = e.touches[0].clientX - rect.left;
-                
-                if (x < rect.width / 2) { 
-                    const currentFilter = video.style.filter || "brightness(1) contrast(1) saturate(1)";
-                    const bMatch = currentFilter.match(/brightness\(([^)]+)\)/);
-                    let b = bMatch ? parseFloat(bMatch[1]) : 1;
-                    let newBrightness = Math.min(Math.max(b + (deltaY / 800), 0.4), 2.0);
-                    let newContrast = 1 + (newBrightness - 1) * 0.7; 
-                    let newSaturate = 1 + (newBrightness - 1) * 1.1; 
-                    let newSepia = (newBrightness > 1.2) ? (newBrightness - 1.2) * 0.1 : 0; 
-                    video.style.filter = `brightness(${newBrightness}) contrast(${newContrast}) saturate(${newSaturate}) sepia(${newSepia})`;
-                    art.notice.show = `Brightness: ${Math.round(newBrightness * 100)}%`;
-                } else { 
-                    art.volume = Math.min(Math.max(art.volume + (deltaY / 600), 0), 1);
-                }
-                startY = e.touches[0].clientY;
-            });
-
             // ==========================================
-            //  SMART: ডাবল-ট্যাপ সিক (±১০ সেকেন্ড, রিপলসহ)
+            //  SMART জেসচার (নতুন): UI-তে হাত দিলে কিছু হয় না,
+            //  ভিডিওর ওপর: উপর-নিচ = ব্রাইটনেস/ভলিউম, বাঁয়ে-ডানে = সিক
             // ==========================================
+            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-layer') || t.closest('.art-control') || t.closest('.art-notice')));
+            function getBrightness() {
+                const m = (video.style.filter || '').match(/brightness\(([^)]+)\)/);
+                return m ? parseFloat(m[1]) : 1;
+            }
             function showRipple(side) {
                 const r = document.createElement('div');
                 r.className = 'tap-ripple ' + side;
@@ -531,60 +488,96 @@
                 container.appendChild(r);
                 setTimeout(() => r.remove(), 500);
             }
-            let lastTap = 0, lastTapX = 0;
+
+            let gStartX = 0, gStartY = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 0.7, gMode = null, dragMoved = false, gRect = null;
+
+            container.addEventListener('touchstart', (e) => {
+                if (isUI(e.target)) { gMode = null; return; }
+                gRect = container.getBoundingClientRect();
+                gStartX = e.touches[0].clientX;
+                gStartY = e.touches[0].clientY;
+                gBaseTime = video.currentTime;
+                gStartBright = getBrightness();
+                gStartVol = video.volume;
+                gMode = 'pending';
+                dragMoved = false;
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!gMode) { return; }
+                const dx = e.touches[0].clientX - gStartX;
+                const dy = gStartY - e.touches[0].clientY;
+
+                if (gMode === 'pending') {
+                    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+                        gMode = 'h'; dragMoved = true;
+                    } else if (Math.abs(dy) > 12) {
+                        dragMoved = true;
+                        const xIn = e.touches[0].clientX - gRect.left;
+                        gMode = (xIn < gRect.width / 2) ? 'bright' : 'vol';
+                    }
+                }
+
+                if (gMode === 'h') {
+                    // বাঁয়ে-ডানে টান = সিক প্রিভিউ
+                    const secs = Math.round(dx / 10);
+                    const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
+                    art.notice.show = (secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(target);
+                } else if (gMode === 'bright') {
+                    // শুধু উপর-নিচ = ব্রাইটনেস (স্টার্ট ভ্যালু থেকে)
+                    const nb = Math.min(Math.max(gStartBright + dy / 800, 0.4), 2.0);
+                    video.style.filter = `brightness(${nb}) contrast(1) saturate(1) sepia(0)`;
+                    art.notice.show = `Brightness: ${Math.round(nb * 100)}%`;
+                } else if (gMode === 'vol') {
+                    // শুধু উপর-নিচ = ভলিউম
+                    const nv = Math.min(Math.max(gStartVol + dy / 600, 0), 1);
+                    art.volume = nv;
+                    art.notice.show = `Volume: ${Math.round(nv * 100)}%`;
+                }
+            }, { passive: true });
+
             container.addEventListener('touchend', (e) => {
+                if (gMode === 'h') {
+                    // সিক প্রয়োগ
+                    const dx = e.changedTouches[0].clientX - gStartX;
+                    const secs = Math.round(dx / 10);
+                    const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
+                    try { video.currentTime = target; } catch (err) {}
+                    art.notice.show = '⏭️ ' + fmtTime(target);
+                    gMode = null;
+                    setTimeout(() => { dragMoved = false; }, 100);
+                    return;
+                }
+                gMode = null;
+
+                // ডাবল-ট্যাপ: বাঁয়ে=−10s, ডানে=+10s, মাঝখানে=পজ/প্লে
+                if (dragMoved) { dragMoved = false; return; }
+                if (isUI(e.target)) { return; }
                 const now = Date.now();
                 const rect = container.getBoundingClientRect();
                 const x = e.changedTouches[0].clientX - rect.left;
-                if (now - lastTap < 300 && Math.abs(x - lastTapX) < 90) {
-                    if (x < rect.width / 2) {
+                if (now - lastTap < 320 && Math.abs(x - lastTapX) < 90) {
+                    lastTap = 0;
+                    if (x < rect.width * 0.33) {
                         art.backward = 10;
                         showRipple('left');
                         art.notice.show = '⏪ ১০ সেকেন্ড পিছিয়ে';
-                    } else {
+                    } else if (x > rect.width * 0.66) {
                         art.forward = 10;
                         showRipple('right');
                         art.notice.show = '⏩ ১০ সেকেন্ড সামনে';
+                    } else {
+                        if (video.paused) { art.play(); art.notice.show = '▶️ Play'; }
+                        else { art.pause(); art.notice.show = '⏸️ Pause'; }
                     }
-                    lastTap = 0;
                 } else {
                     lastTap = now;
                     lastTapX = x;
                 }
-            });
+            }, { passive: true });
+            let lastTap = 0, lastTapX = 0;
 
-            // ==========================================
-            //  SMART: চেপে ধরে ৩x স্পিড (ছেড়ে দিলে স্বাভাবিক)
-            // ==========================================
-            let pressTimer = null, pressFired = false, pressStartY = 0, prevRate = 1;
-            container.addEventListener('touchstart', (e) => {
-                pressFired = false;
-                pressStartY = e.touches[0].clientY;
-                pressTimer = setTimeout(() => {
-                    if (!video.paused && !video.ended) {
-                        prevRate = video.playbackRate || 1;
-                        video.playbackRate = 3;
-                        pressFired = true;
-                        art.notice.show = '⏩ ৩x স্পিড (আঙুল ছাড়লেই আগের মতো)';
-                    }
-                }, 600);
-            });
-            container.addEventListener('touchmove', (e) => {
-                if (pressTimer && Math.abs(e.touches[0].clientY - pressStartY) > 15) {
-                    clearTimeout(pressTimer);
-                    pressTimer = null;
-                }
-            });
-            container.addEventListener('touchend', () => {
-                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-                if (pressFired) {
-                    video.playbackRate = prevRate;
-                    pressFired = false;
-                    art.notice.show = '▶️ স্বাভাবিক স্পিড';
-                }
-            });
-
-            // SMART: ফোন ঘোরালে অটো-ফুলস্ক্রিন (ভিডিও চলা অবস্থায়)
+            // SMART: ঘোরালে অটো-ফুলস্ক্রিন
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => {
                     try {
@@ -595,7 +588,7 @@
             });
 
             // ==========================================
-            //  SMART: পজিশন সেভ + রিজিউম (চালিয়ে দেখা)
+            //  SMART: পজিশন সেভ + রিজিউম + প্রোগ্রেস বার
             // ==========================================
             let lastSave = 0;
             video.addEventListener('timeupdate', () => {
@@ -606,9 +599,16 @@
                     updateProgressUI(video, STORAGE_KEY);
                 }
             });
+            video.addEventListener('seeked', () => {
+                if (video.currentTime > 5) {
+                    try { localStorage.setItem(STORAGE_KEY, video.currentTime); } catch (e) {}
+                    updateProgressUI(video, STORAGE_KEY);
+                }
+            });
             video.addEventListener('ended', () => {
                 try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
                 try {
+                    ensureProgressBar();
                     const fill = document.getElementById('mbx-progress-fill');
                     if (fill) { fill.style.width = '100%'; }
                     const txt = document.getElementById('mbx-progress-text');
@@ -617,34 +617,34 @@
             });
 
             // ==========================================
-            //  SMART: মাঝপথে আটকে গেলে অটো-রিকভার
+            //  SMART: অটো-রিকভার (বাফারিং আর জমে-থাকা আলাদা করে চেনে)
             // ==========================================
-            let lastTime = 0, stuckCount = 0;
+            let lastTime = 0, stuckCount = 0, hasPlayed = false, lastReload = 0;
+            video.addEventListener('playing', () => { hasPlayed = true; stuckCount = 0; });
             setInterval(() => {
                 if (!art || video.paused || video.ended || video.seeking) { return; }
+                if (video.readyState < 3) { return; } // বাফার হচ্ছে — হাত দিও না, লোড হোক
                 const t = video.currentTime;
                 if (Math.abs(t - lastTime) < 0.1) {
                     stuckCount++;
-                    if (stuckCount === 2) {
-                        art.notice.show = '⏳ লোড হচ্ছে... একটু অপেক্ষা করুন';
-                    } else if (stuckCount === 4) {
-                        // ৮ সেকেন্ড জমে গেলে হালকা নেড়
-                        try { video.currentTime = t + 0.5; } catch (e) {}
+                    if (!hasPlayed) { return; } // প্রথম লোডে হাত দিও না
+                    if (stuckCount === 3) {
                         art.notice.show = '🔄 নিজে নিজে ঠিক করছি...';
-                    } else if (stuckCount >= 6) {
-                        // ১২ সেকেন্ডেও চলে না → একই জায়গা থেকে রিলোড
+                    } else if (stuckCount >= 5) {
                         stuckCount = 0;
-                        const pos = t;
-                        const src = video.src;
-                        try {
-                            video.src = src;
-                            video.load();
-                            video.addEventListener('loadedmetadata', function onMeta() {
-                                video.removeEventListener('loadedmetadata', onMeta);
-                                try { video.currentTime = pos; } catch (e) {}
-                                video.play().catch(() => {});
-                            });
-                        } catch (e) {}
+                        if (Date.now() - lastReload > 30000) {
+                            lastReload = Date.now();
+                            const pos = t;
+                            try {
+                                video.src = video.src;
+                                video.load();
+                                video.addEventListener('loadedmetadata', function onMeta() {
+                                    video.removeEventListener('loadedmetadata', onMeta);
+                                    try { video.currentTime = pos; } catch (e) {}
+                                    video.play().catch(() => {});
+                                });
+                            } catch (e) {}
+                        }
                     }
                 } else {
                     stuckCount = 0;
@@ -652,7 +652,7 @@
                 lastTime = t;
             }, 2000);
 
-            // SMART: লোড ফেল করলে অটো-রিট্রাই (৩ বার) → তারপর MX/VLC ফলব্যাক
+            // SMART: লোড ফেল → ৩ বার রিট্রাই → তারপর MX/VLC ফলব্যাক
             let errTries = 0;
             video.addEventListener('playing', () => { errTries = 0; });
             video.addEventListener('error', () => {
@@ -665,42 +665,45 @@
                 art.notice.show = '🔁 আবার চেষ্টা করছি (' + errTries + '/3)...';
                 setTimeout(() => {
                     try {
-                        const src = video.src;
-                        video.src = src;
+                        video.src = video.src;
                         video.load();
                         video.play().catch(() => {});
                     } catch (e) {}
                 }, 1500);
             });
 
-            // SMART: বাফারিংয়ে সুন্দর মেসেজ
             video.addEventListener('waiting', () => {
                 if (!video.paused) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
             });
 
             art.on('ready', () => { 
-                art.autoSize();
                 autoPlayVideo(art);
-                // SMART: আগে দেখা জায়গা থেকে শুরু (রিজিউম) + প্রোগ্রেস বার
+                // SMART: রিজিউম (সেখান থেকে চালু, বাফার হওয়া পর্যন্ত অপেক্ষা)
+                let resumed = false;
                 try {
                     const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
                     if (saved && saved > 15) {
                         const seekTo = () => {
                             if (video.duration && saved < video.duration - 30) {
-                                video.currentTime = saved;
-                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন — সেখান থেকে চালু করলাম';
+                                try { video.currentTime = saved; } catch (e) {}
+                                resumed = true;
+                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন — লোড হওয়া মাত্র চলবে';
                                 updateProgressUI(video, STORAGE_KEY);
                             }
                         };
                         if (video.readyState >= 1) { seekTo(); } else { video.addEventListener('loadedmetadata', seekTo, { once: true }); }
                     }
                 } catch (e) {}
+                video.addEventListener('seeked', function onRes() {
+                    if (resumed) {
+                        video.removeEventListener('seeked', onRes);
+                        setTimeout(() => { video.play().catch(() => {}); }, 300);
+                    }
+                });
             });
         }
 
-        // ==========================================
-        //    AUTO PLAY (আগে আওয়াজ সহ চেষ্টা → ব্লক হলে মিউটে চালু → ইউজারের প্রথম ট্যাপে সাউন্ড অন)
-        // ==========================================
+        // AUTO PLAY (আওয়াজ সহ চেষ্টা → ব্লক হলে মিউটে → প্রথম ট্যাপে সাউন্ড)
         function autoPlayVideo(art) {
             const p = art.video.play();
             if (p !== undefined) {
@@ -708,14 +711,12 @@
                     art.notice.show = '▶️ Auto Play (Sound ON)';
                     nudgeIfStuck(art);
                 }).catch(() => {
-                    // ব্রাউজার আওয়াজ সহ অটো-প্লে আটকালে → মিউট করে চালু
                     art.muted = true;
                     art.video.play().then(() => {
                         art.notice.show = '🔊 স্ক্রিনে একবার ট্যাপ করলেই সাউন্ড চালু হবে';
                         nudgeIfStuck(art);
                         soundOnFirstTouch(art);
                     }).catch(() => {
-                        // একদম ব্লক হলেও প্রথম ট্যাপে প্লে+সাউন্ড
                         soundOnFirstTouch(art);
                     });
                 });
@@ -724,7 +725,6 @@
             }
         }
 
-        // ইউজার স্ক্রিনে যেকোনো জায়গায় প্রথম ট্যাপ/ক্লিক করলেই সাউন্ড অন হয়ে যাবে
         function soundOnFirstTouch(art) {
             const unmute = () => {
                 window.removeEventListener('click', unmute);
@@ -741,7 +741,6 @@
             window.addEventListener('touchstart', unmute);
         }
 
-        // শুরুতে ভিডিও 0 এ আটকে থাকলে সামান্য সামনে নেড় দেওয়া
         function nudgeIfStuck(art) {
             let tries = 0;
             const timer = setInterval(() => {
@@ -756,7 +755,6 @@
             }, 1500);
         }
 
-        // সাউন্ড বুস্ট ৪০০% (একবারই চলবে)
         function tryBoost(art) {
             if (window.audioBoosted || art.muted) { return; }
             try {
@@ -773,9 +771,7 @@
             } catch (e) { console.log("Boost Error"); }
         }
 
-        // ==========================================
-        //   2GB+ ফাইল হলে লাল সতর্কবার্তা দেখাও ⚠️
-        // ==========================================
+        // 2GB+ ফাইলের লাল সতর্কবার্তা
         function checkFileSizeWarning() {
             try {
                 const sizeText = "{{ file_size }}";
@@ -822,9 +818,7 @@
             }
         }
 
-        // ==========================================
-        //   PAGE OPEN HOLOBEI VIDEO AUTO PLAY START 🎬
-        // ==========================================
+        // PAGE OPEN HOLOBEI VIDEO AUTO PLAY START 🎬
         try { initPlayer(); } catch (e) { console.log("Auto init error:", e); }
     </script>
 </body>
