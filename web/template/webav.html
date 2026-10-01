@@ -41,6 +41,7 @@
         body.light-mode .glass-card { background: #fff !important; border: 1px solid #ddd !important; color: #1a1a1a !important; }
         body.light-mode .btn-glass { background: #fff !important; border: 1px solid #ccc !important; color: #000 !important; }
         body.light-mode .control-btn { background: #eee; color: #000; }
+        body.light-mode .player-head, body.light-mode .movie-meta { background: #fff; color: #1a1a1a; }
 
         .notice-bar { background: linear-gradient(90deg, #00ff88, #00b09b); color: #000; padding: 10px; font-weight: 800; text-align: center; font-size: 13px; z-index: 1001; position: relative; }
 
@@ -49,46 +50,47 @@
         .main-container { max-width: 600px; margin: 0 auto; padding: 0px 15px 20px 15px; }
 
         #player-section {
-            width: 100%; 
-            position: sticky; 
-            top: 0px;
-            z-index: 1100; 
-            background: var(--bg-dark); 
-            padding: 8px 0;
-            margin: 0 -15px 20px -15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            touch-action: none; 
+            width: 100%;
+            background: var(--card-dark);
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.06);
         }
-        
-        body.light-mode #player-section { background: #f0f2f5; }
 
-        /* SMART: মোবাইলে বড় স্কয়ার ডিসপ্লে, ল্যান্ডস্কেপ/PC-তে 16:9 */
+        /* SMART: রেফারেন্স স্টাইল হেডার */
+        .player-head { padding: 14px 15px 12px 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .player-head .ph-label { font-size: 11px; letter-spacing: 2px; font-weight: 800; color: var(--accent); }
+        .player-head .ph-title { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .status-badge { background: rgba(0, 200, 255, 0.12); color: #33c6ff; border: 1px solid rgba(0,200,255,0.3); padding: 6px 12px; border-radius: 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+        .status-badge.paused { background: rgba(255,255,255,0.08); color: #aaa; border-color: rgba(255,255,255,0.15); }
+
         .artplayer-app { 
             width: 100%; 
             height: auto; 
-            aspect-ratio: 1/1; 
-            border-radius: 0; 
-            overflow: hidden; 
-        }
-        @media (orientation: landscape) {
-            .artplayer-app { aspect-ratio: 16/9; }
-        }
-        @media (min-width: 768px) {
-            .artplayer-app { aspect-ratio: 16/9; border-radius: 12px; }
+            aspect-ratio: 16/9; 
+            overflow: hidden;
+            position: relative;
         }
 
-        /* SMART: ছোট ও হালকা ওয়াটারমার্ক */
-        .bold-watermark {
-            font-weight: 700 !important;
-            font-size: 8px !important;
-            color: rgba(255, 60, 60, 0.85) !important;
-            text-shadow: 1px 1px 2px #000;
-            background: rgba(0,0,0,0.30);
-            padding: 1px 5px;
-            border-radius: 3px;
-            letter-spacing: 0.3px;
-            border: none !important;
-        }
+        /* SMART: ব্যাজ রো + সেন্টার বাটনের ওভারলে */
+        #mbx-overlay { position: absolute; inset: 0; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .25s; }
+        #mbx-overlay.show { opacity: 1; }
+        .v-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 90%; }
+        .v-badge { background: rgba(20,20,20,0.75); backdrop-filter: blur(4px); color: #fff; padding: 5px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; gap: 5px; border: 1px solid rgba(255,255,255,0.12); }
+        .v-badge i { color: var(--accent); font-size: 11px; }
+        #mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s; }
+        #mbx-center:active { transform: translate(-50%,-50%) scale(0.9); }
+
+        /* SMART: রেফারেন্স স্টাইল Movie মেটা কার্ড */
+        .movie-meta { padding: 13px 15px 15px 15px; background: var(--card-dark); }
+        .movie-meta .mm-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; }
+        .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+        .mm-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; opacity: 0.65; padding-top: 7px; min-width: 62px; }
+        .pill { padding: 7px 15px; border-radius: 20px; border: 1.5px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); color: #fff; font-weight: 700; font-size: 13px; cursor: default; }
+        .pill.active { border-color: #33c6ff; color: #33c6ff; background: rgba(51,198,255,0.08); }
+        .pill.clickable { cursor: pointer; }
+        .mm-hint { background: rgba(51,198,255,0.08); border: 1px solid rgba(51,198,255,0.25); color: #9fdcff; border-radius: 10px; padding: 9px 12px; font-size: 12px; line-height: 1.5; margin-top: 6px; }
 
         #watchBtn {
             width: 100%; padding: 60px 20px; border: 2px dashed var(--accent);
@@ -143,12 +145,25 @@
     <div class="main-container">
         
         <div id="player-section">
-            <div id="watchBtn" onclick="handlePopunder('play_main', initPlayer)" style="display:none;">
-                <i class="fa-solid fa-circle-play fa-4x text-success mb-3"></i>
-                <h5 class="fw-bold m-0">WATCH ONLINE (MOVIE BOX BD)</h5>
-                <small class="opacity-50">Tap: Controls | Double-Tap: Seek/Pause | Swipe: Volume/Brightness/Seek</small>
+            <!-- SMART: রেফারেন্স স্টাইল হেডার -->
+            <div class="player-head">
+                <div style="min-width:0;">
+                    <div class="ph-label">WATCH ONLINE</div>
+                    <div class="ph-title" id="mbx-head-title">{{ file_name }}</div>
+                </div>
+                <span class="status-badge" id="mbx-status"><i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing</span>
             </div>
-            <div id="artplayer" class="artplayer-app"></div>
+
+            <div id="artplayer" class="artplayer-app">
+                <!-- SMART: ব্যাজ + সেন্টার প্লে/পজ ওভারলে -->
+                <div id="mbx-overlay">
+                    <div class="v-badges" id="mbx-badges"></div>
+                    <div id="mbx-center"><i class="fa-solid fa-pause"></i></div>
+                </div>
+            </div>
+
+            <!-- SMART: রেফারেন্স স্টাইল Movie মেটা (QUALITY + AUDIO পিলস) -->
+            <div class="movie-meta" id="mbx-meta"></div>
         </div>
 
         <div class="glass-card text-center">
@@ -176,7 +191,7 @@
             <div class="sound-fix-box" id="sound-fix-main">
                 <div class="lang-switch">
                     <button class="lang-btn active" id="bn-btn" onclick="setLanguage('bn')">বাংলা</button>
-                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">हिन्दी</button>
+                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">হিন্দি</button>
                     <button class="lang-btn" id="en-btn" onclick="setLanguage('en')">English</button>
                 </div>
                 <div id="instruction-text">
@@ -186,7 +201,7 @@
         </div>
 
         <div class="glass-card">
-            <div class="small fw-bold mb-2 opacity-75 text-center">EXTERNAL PLAYERS</div>
+            <div class="small fw-bold mb-2 opacity-75 text-center">EXTERNAL PLAYERS (ডুয়াল অডিও বদলাতে এখানে ওপেন করুন)</div>
             <div class="row g-2">
                 <div class="col-4">
                     <div onclick="handlePopunder('mx', () => play_intent('com.mxtech.videoplayer.ad'))" class="btn-glass small px-1">
@@ -340,7 +355,84 @@
             return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
         }
 
-        // SMART: প্রোগ্রেস বার (ফাইল কার্ডের ভিতরে, সবসময় সঠিক)
+        // ==========================================
+        //  SMART: ফাইলের নাম পড়ে তথ্য বের করা (কোয়ালিটি/অডিও/সাব)
+        // ==========================================
+        function parseFileInfo() {
+            const raw = "{{ file_name }}";
+            const lower = raw.toLowerCase();
+            let quality = null;
+            const qm = lower.match(/(2160p|1440p|1080p|720p|480p|360p)/);
+            if (qm) { quality = qm[1].toUpperCase(); }
+            const isHEVC = /hevc|x265|h\.265/.test(lower);
+            const langs = [];
+            const map = [
+                ['bangla', 'বাংলা'], ['bengali', 'বাংলা'], ['bangali', 'বাংলা'],
+                ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['telugu', 'Telugu'],
+                ['malayalam', 'Malayalam'], ['kannada', 'Kannada'], ['punjabi', 'Punjabi'], ['urdu', 'Urdu']
+            ];
+            for (const [k, v] of map) { if (lower.includes(k)) { langs.push(v); } }
+            if (/\benglish\b|\beng\b/.test(lower)) { langs.push('English'); }
+            const uniq = [...new Set(langs)];
+            const hasSub = /\besub\b|\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower);
+            return { quality, isHEVC, langs: uniq, hasSub, dual: uniq.length > 1 };
+        }
+
+        // SMART: ব্যাজ রো + Movie মেটা কার্ড বানানো
+        function buildFileInfoUI() {
+            const info = parseFileInfo();
+            const badges = document.getElementById('mbx-badges');
+            const meta = document.getElementById('mbx-meta');
+            let bHtml = '';
+            let qPills = '';
+            let aPills = '';
+
+            // কোয়ালিটি ব্যাজ ও পিল
+            if (info.quality) {
+                const qLabel = info.quality + (info.isHEVC ? ' HEVC' : '');
+                bHtml += '<span class="v-badge"><i class="fa-solid fa-film"></i>' + qLabel + '</span>';
+                qPills = '<span class="pill active">✓ ' + info.quality + '</span>';
+            } else {
+                qPills = '<span class="pill active">✓ Original</span>';
+            }
+
+            // অডিও ব্যাজ ও পিল
+            if (info.langs.length > 0) {
+                info.langs.forEach((lg, i) => {
+                    bHtml += '<span class="v-badge"><i class="fa-solid fa-headphones"></i>' + lg + '</span>';
+                    aPills += '<span class="pill clickable' + (i === 0 ? ' active">✓ ' : '">') + lg + '</span>';
+                });
+            } else {
+                aPills = '<span class="pill active">✓ Original</span>';
+            }
+
+            // সাবটাইটেল ব্যাজ
+            if (info.hasSub) {
+                bHtml += '<span class="v-badge"><i class="fa-solid fa-closed-captioning"></i>Sub</span>';
+            }
+
+            badges.innerHTML = bHtml;
+
+            // হেডার টাইটেল ছোট করা (এক্সটেনশন বাদ)
+            try {
+                document.getElementById('mbx-head-title').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i, '');
+            } catch (e) {}
+
+            // অডিও পিলে চাপ দিলে — ব্রাউজারে অডিও বদলানো যায় না, তাই গাইড
+            meta.innerHTML = '<div class="mm-title">🎬 Movie</div>' +
+                '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qPills + '</div>' +
+                '<div class="mm-row"><span class="mm-label">🎧 AUDIO</span>' + aPills + '</div>' +
+                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না। নিচের <b>MX Player / VLC</b> বাটনে চেপে ওপেন করলে প্লেয়ারের ভিতরে অডিও (Hindi/বাংলা/English) বদলাতে পারবেন। 🎬</div>' : '');
+
+            meta.querySelectorAll('.pill.clickable').forEach(p => {
+                p.addEventListener('click', () => {
+                    if (window.MBX_NOTICE) { window.MBX_NOTICE('🎧 অডিও বদলাতে নিচের MX Player / VLC বাটনে চাপ দিয়ে ওপেন করুন'); }
+                });
+            });
+        }
+        buildFileInfoUI();
+
+        // SMART: প্রোগ্রেস বার
         function ensureProgressBar() {
             const card = document.querySelector('.main-container .glass-card.text-center');
             if (!card || document.getElementById('mbx-progress')) { return; }
@@ -407,9 +499,7 @@
         }
 
         function initPlayer() {
-            document.getElementById('watchBtn').style.display = 'none';
             const artDiv = document.getElementById('artplayer');
-            artDiv.style.display = 'block';
 
             const VIDEO_URL = '{{ file_url }}'.replace("http://", "https://");
             const STORAGE_KEY = 'mbx_pos_' + VIDEO_URL;
@@ -417,13 +507,11 @@
             const art = new Artplayer({
                 container: '#artplayer',
                 url: VIDEO_URL,
-                title: '{{ file_name }}',
                 playbackRate: true, aspectRatio: true,
                 setting: true, fullscreen: true, pip: true, theme: '#00ff88',
                 preload: 'auto',
                 hotkey: true,
                 moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
-                layers: [{ html: '<div class="bold-watermark" style="position:absolute;top:8px;right:8px;">MOVIE BOX BD</div>' }],
                 controls: [
                     {
                         position: 'right',
@@ -445,9 +533,42 @@
                     { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt) যোগ করুন', click: () => pickSubtitle(art) }
                 ]
             });
+            window.MBX_NOTICE = (msg) => { art.notice.show = msg; };
 
             const video = art.video;
             const container = document.querySelector('#artplayer');
+            const overlay = document.getElementById('mbx-overlay');
+            const centerBtn = document.getElementById('mbx-center');
+            const statusBadge = document.getElementById('mbx-status');
+
+            // SMART: সেন্টার বাটন + ব্যাজ দেখানো/লুকানো (৩ সেকেন্ড অটো-হাইড)
+            let hideTimer = null;
+            function setCenterIcon(playing) {
+                centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+            }
+            function setStatus(playing) {
+                if (playing) { statusBadge.classList.remove('paused'); statusBadge.innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'; }
+                else { statusBadge.classList.add('paused'); statusBadge.innerHTML = '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused'; }
+            }
+            function showOverlay(autoHide) {
+                overlay.classList.add('show');
+                clearTimeout(hideTimer);
+                if (autoHide) {
+                    hideTimer = setTimeout(() => overlay.classList.remove('show'), 3000);
+                }
+            }
+            function hideOverlay() {
+                clearTimeout(hideTimer);
+                overlay.classList.remove('show');
+            }
+
+            centerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.paused) { art.play(); } else { art.pause(); }
+            });
+
+            art.on('play', () => { setCenterIcon(true); setStatus(true); showOverlay(true); tryBoost(art); });
+            art.on('pause', () => { setCenterIcon(false); setStatus(false); showOverlay(false); });
 
             // আগের ভলিউম মনে রাখা
             try {
@@ -456,7 +577,7 @@
             } catch (e) {}
             art.on('video:volumechange', () => { try { localStorage.setItem('mbx_vol', art.volume); } catch (e) {} });
 
-            // SMART: Wake Lock (চলার সময় স্ক্রিন নিভবে না)
+            // SMART: Wake Lock
             let wakeLock = null;
             async function reqWake() {
                 try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (e) {}
@@ -470,13 +591,11 @@
                 if (document.visibilityState === 'visible' && !video.paused) { reqWake(); }
             });
 
-            art.on('play', () => { tryBoost(art); });
-
             // ==========================================
-            //  SMART জেসচার (নতুন): UI-তে হাত দিলে কিছু হয় না,
-            //  ভিডিওর ওপর: উপর-নিচ = ব্রাইটনেস/ভলিউম, বাঁয়ে-ডানে = সিক
+            //  SMART জেসচার: UI বাদে ভিডিওর ওপর —
+            //  উপর-নিচ = ব্রাইটনেস/ভলিউম, বাঁয়ে-ডানে = সিক
             // ==========================================
-            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-layer') || t.closest('.art-control') || t.closest('.art-notice')));
+            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-layer') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('#mbx-center')));
             function getBrightness() {
                 const m = (video.style.filter || '').match(/brightness\(([^)]+)\)/);
                 return m ? parseFloat(m[1]) : 1;
@@ -519,17 +638,14 @@
                 }
 
                 if (gMode === 'h') {
-                    // বাঁয়ে-ডানে টান = সিক প্রিভিউ
                     const secs = Math.round(dx / 10);
                     const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
                     art.notice.show = (secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(target);
                 } else if (gMode === 'bright') {
-                    // শুধু উপর-নিচ = ব্রাইটনেস (স্টার্ট ভ্যালু থেকে)
                     const nb = Math.min(Math.max(gStartBright + dy / 800, 0.4), 2.0);
                     video.style.filter = `brightness(${nb}) contrast(1) saturate(1) sepia(0)`;
                     art.notice.show = `Brightness: ${Math.round(nb * 100)}%`;
                 } else if (gMode === 'vol') {
-                    // শুধু উপর-নিচ = ভলিউম
                     const nv = Math.min(Math.max(gStartVol + dy / 600, 0), 1);
                     art.volume = nv;
                     art.notice.show = `Volume: ${Math.round(nv * 100)}%`;
@@ -538,7 +654,6 @@
 
             container.addEventListener('touchend', (e) => {
                 if (gMode === 'h') {
-                    // সিক প্রয়োগ
                     const dx = e.changedTouches[0].clientX - gStartX;
                     const secs = Math.round(dx / 10);
                     const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
@@ -567,15 +682,23 @@
                         showRipple('right');
                         art.notice.show = '⏩ ১০ সেকেন্ড সামনে';
                     } else {
-                        if (video.paused) { art.play(); art.notice.show = '▶️ Play'; }
-                        else { art.pause(); art.notice.show = '⏸️ Pause'; }
+                        if (video.paused) { art.play(); } else { art.pause(); }
                     }
                 } else {
+                    // সিঙ্গেল ট্যাপ: ওভারলে টগল (রেফারেন্সের মতো)
                     lastTap = now;
                     lastTapX = x;
+                    if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
                 }
             }, { passive: true });
             let lastTap = 0, lastTapX = 0;
+
+            // PC-তেও ক্লিকে ওভারলে টগল
+            container.addEventListener('click', (e) => {
+                if (e.pointerType === 'touch') { return; }
+                if (isUI(e.target)) { return; }
+                if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
+            });
 
             // SMART: ঘোরালে অটো-ফুলস্ক্রিন
             window.addEventListener('orientationchange', () => {
@@ -587,9 +710,7 @@
                 }, 300);
             });
 
-            // ==========================================
-            //  SMART: পজিশন সেভ + রিজিউম + প্রোগ্রেস বার
-            // ==========================================
+            // SMART: পজিশন সেভ + রিজিউম + প্রোগ্রেস বার
             let lastSave = 0;
             video.addEventListener('timeupdate', () => {
                 const now = Date.now();
@@ -616,18 +737,16 @@
                 } catch (e) {}
             });
 
-            // ==========================================
-            //  SMART: অটো-রিকভার (বাফারিং আর জমে-থাকা আলাদা করে চেনে)
-            // ==========================================
+            // SMART: অটো-রিকভার (বাফারিং আর জমে-থাকা আলাদা করে চেনে)
             let lastTime = 0, stuckCount = 0, hasPlayed = false, lastReload = 0;
             video.addEventListener('playing', () => { hasPlayed = true; stuckCount = 0; });
             setInterval(() => {
                 if (!art || video.paused || video.ended || video.seeking) { return; }
-                if (video.readyState < 3) { return; } // বাফার হচ্ছে — হাত দিও না, লোড হোক
+                if (video.readyState < 3) { return; }
                 const t = video.currentTime;
                 if (Math.abs(t - lastTime) < 0.1) {
                     stuckCount++;
-                    if (!hasPlayed) { return; } // প্রথম লোডে হাত দিও না
+                    if (!hasPlayed) { return; }
                     if (stuckCount === 3) {
                         art.notice.show = '🔄 নিজে নিজে ঠিক করছি...';
                     } else if (stuckCount >= 5) {
@@ -652,7 +771,7 @@
                 lastTime = t;
             }, 2000);
 
-            // SMART: লোড ফেল → ৩ বার রিট্রাই → তারপর MX/VLC ফলব্যাক
+            // SMART: লোড ফেল → ৩ বার রিট্রাই → MX/VLC ফলব্যাক
             let errTries = 0;
             video.addEventListener('playing', () => { errTries = 0; });
             video.addEventListener('error', () => {
@@ -678,7 +797,7 @@
 
             art.on('ready', () => { 
                 autoPlayVideo(art);
-                // SMART: রিজিউম (সেখান থেকে চালু, বাফার হওয়া পর্যন্ত অপেক্ষা)
+                // SMART: রিজিউম
                 let resumed = false;
                 try {
                     const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
