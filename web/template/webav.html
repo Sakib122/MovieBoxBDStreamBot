@@ -299,10 +299,8 @@
                 "https://omg10.com/4/10918781",
             ],
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
-            // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে
+            // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
             streamAdCooldown: 60,
-            // 🎬 SILENT AD MODE: ফুলস্ক্রিন ভাঙা ছাড়া ব্যাকগ্রাউন্ডে অ্যাড (true = চালু)
-            silentAdMode: true,
             // 🎯 স্মার্ট নোটিস (সাইজ অনুযায়ী GET FILE / HIGH SPEED গাইড): বন্ধ করতে false
             smartNotice: true,
             soundText: {
@@ -348,29 +346,56 @@
         }
 
         /* ============================================================
-           💰 STREAM AD ENGINE — পালা করে Adsterra/Monetag +
-           ফুলস্ক্রিনে সাইলেন্ট মোড (ফুলস্ক্রিন ভাঙে না)
+           💰 STREAM AD ENGINE v3 — লাভ-প্রথম + অটো-ফুলস্ক্রিন রিকভারি
+           - সব সিক/প্লেতে অ্যাড সাথে সাথে (লাভ নিশ্চিত, কিউ নাই)
+           - ফুলস্ক্রিনে কুলডাউন ৯০s, বাইরে ৬০s (বিরক্তি নিয়ন্ত্রণ)
+           - ফুলস্ক্রিন ভাঙলে: ইউজার ফেরত এলেই অটোমেটিক আবার ফুলস্ক্রিন + প্লে!
+           - পালা করে Adsterra/Monetag (রোটেশন)
         ============================================================ */
         let lastStreamAd = 0;
+
         function fireStreamAd(){
             if (!CONFIG.directAds.length) return;
             const now = Date.now();
-            const cd = (CONFIG.streamAdCooldown || 60) * 1000;
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            const cd = (isFs ? 90 : 60) * 1000;
             if (now - lastStreamAd < cd) return;
             lastStreamAd = now;
 
             const adUrl = CONFIG.directAds[linkIndex % CONFIG.directAds.length];
             linkIndex++; // পালা করে Adsterra → Monetag → Adsterra...
 
-            try {
-                if (CONFIG.silentAdMode && (document.fullscreenElement || document.webkitFullscreenElement)) {
-                    // 🎬 ফুলস্ক্রিনে: নতুন ট্যাব পেছনে খুলে ফোকাস ফেরত — ফুলস্ক্রিন অটুট
-                    const w = window.open(adUrl, '_blank');
-                    try { if (w) { w.blur(); window.focus(); } } catch(e){}
-                } else {
-                    window.open(adUrl, '_blank');
-                }
-            } catch(e){ try { window.open(adUrl, '_blank'); } catch(e2){} }
+            try { window.open(adUrl, '_blank'); } catch(e){}
+
+            if (isFs) {
+                // 🔄 ফুলস্ক্রিনে অ্যাড খুলল: ইউজার অ্যাড থেকে ফিরে এলে অটোমেটিক
+                // আবার ফুলস্ক্রিনে ঢুকিয়ে মুভি চালু করে দিবো — হাত লাগবে না
+                let recovering = false;
+                const recover = () => {
+                    if (recovering) return;
+                    if (document.visibilityState !== 'visible') return;
+                    recovering = true;
+                    window.removeEventListener('focus', recover);
+                    document.removeEventListener('visibilitychange', visCheck);
+                    const p = document.getElementById('mbxPlayer');
+                    const v = MBX.video;
+                    if (p && v && !v.ended) {
+                        const req = p.requestFullscreen || p.webkitRequestFullscreen;
+                        if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+                            try { req.call(p); } catch(e){}
+                            try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); } catch(e){}
+                        }
+                        setTimeout(() => { try { if (v.paused) v.play().catch(()=>{}); } catch(e){} }, 400);
+                    }
+                };
+                const visCheck = () => { if (document.visibilityState === 'visible') recover(); };
+                window.addEventListener('focus', recover);
+                document.addEventListener('visibilitychange', visCheck);
+                setTimeout(() => {
+                    window.removeEventListener('focus', recover);
+                    document.removeEventListener('visibilitychange', visCheck);
+                }, 8000);
+            }
         }
 
         function fmtTime(sec){
@@ -909,6 +934,8 @@
 
         /* ============================================================
            🎯 স্মার্ট নোটিস — সাইজ দেখে ইউজারকে সঠিক পথ দেখাও
+           বড় ফাইল (2GB+) → GET FILE গাইড
+           ছোট ফাইল → স্মুথ স্ট্রিম + HIGH SPEED DOWNLOAD গাইড
         ============================================================ */
         (function(){
             if (CONFIG.smartNotice === false) return;
