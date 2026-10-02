@@ -144,7 +144,7 @@ class_cache = {}
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
-    # ⚡ STEP 1: ডিফল্ট ক্লায়েন্ট দিয়ে আগে ফাইলের তথ্য নেয়া (সাইজ জানার জন্য)
+    # ⚡ STEP 1: ডিফল্ট ক্লায়েন্ট দিয়ে আগে ফাইলের তথ্য (সাইজ জানার জন্য)
     base_client = multi_clients.get(0) or next(iter(multi_clients.values()))
     if base_client in class_cache:
         base_streamer = class_cache[base_client]
@@ -156,32 +156,42 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     file_size = file_id.file_size
 
     # ⚡ STEP 2: স্মার্ট ক্লায়েন্ট নির্বাচন
-    # 2GB+ ফাইল → প্রিমিয়াম সেশন ক্লায়েন্ট (সর্বোচ্চ ইনডেক্স = সবার শেষে লোড হয়)
-    # ছোট ফাইল → সবচেয়ে কম লোডের ক্লায়েন্ট (আগের মতো)
     if file_size > PREMIUM_SIZE_LIMIT and len(multi_clients) > 1:
         premium_idx = max(multi_clients.keys())
         if premium_idx != 0:
             index = premium_idx
             logging.info(f"Big file ({file_size / 1024 / 1024 / 1024:.2f} GB) -> Premium Client {index}")
+
+            faster_client = multi_clients[index]
+
+            # ⚡⚡ আসল ফিক্স: কাগজটাও প্রিমিয়াম শ্রমিকের কাছ থেকেই নাও!
+            # তাহলে সে নিজের নামে FRESH file reference পাবে
+            if faster_client in class_cache:
+                tg_connect = class_cache[faster_client]
+            else:
+                tg_connect = ByteStreamer(faster_client)
+                class_cache[faster_client] = tg_connect
+
+            file_id = await tg_connect.get_file_properties(id)  # fresh reference!
+            file_size = file_id.file_size
         else:
             index = min(work_loads, key=work_loads.get)
+            faster_client = multi_clients[index]
+            tg_connect = base_streamer
     else:
         index = min(work_loads, key=work_loads.get)
+        faster_client = multi_clients[index]
 
-    faster_client = multi_clients[index]
+        if faster_client in class_cache:
+            tg_connect = class_cache[faster_client]
+        else:
+            tg_connect = ByteStreamer(faster_client)
+            class_cache[faster_client] = tg_connect
 
     if MULTI_CLIENT:
         logging.info(f"Client {index} is now serving {request.remote}")
 
-    if faster_client in class_cache:
-        tg_connect = class_cache[faster_client]
-        logging.debug(f"Using cached ByteStreamer object for client {index}")
-    else:
-        logging.debug(f"Creating new ByteStreamer object for client {index}")
-        tg_connect = ByteStreamer(faster_client)
-        class_cache[faster_client] = tg_connect
-
-    # ⚡ হ্যাশ চেক (উপরেই করা হলো)
+    # ⚡ হ্যাশ চেক
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
