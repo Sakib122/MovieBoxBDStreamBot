@@ -221,13 +221,19 @@ async def start(client, message):
                     except Exception:
                         pass
                 await status_msg.delete()
-                warn_msg = await message.reply_text(
-                    f"✅ 𝖠𝗅𝗅 𝖥𝗂𝗅𝖾𝗌 𝖢𝗈𝗆𝗉𝗅𝖾𝗍𝖾 😁!\n\n"
-                    f"⚠️ 𝖨𝖬𝖯𝖮𝖱𝖳𝖠𝖭𝖳: 𝖥𝗂𝗅𝖾𝗌 𝗐𝗂𝗅𝗅 𝖻𝖾 𝖣𝖤𝖫𝖤𝖳𝖤𝖣 𝗂𝗇 {int(AUTO_DELETE_TIME)//60} 𝖬𝗂𝗇𝗎𝗍𝖾𝗌.\n"
-                    f"📥 𝖥𝗈𝗋ᴡᴀʀᴅ 𝗍𝗈 𝖲𝖺𝗏𝖾𝖽 𝖬𝖾𝗌𝗌𝖺𝗀𝖾𝗌 𝖭𝖮𝖶!"
-                )
                 if AUTO_DELETE:
+                    warn_msg = await message.reply_text(
+                        f"✅ 𝖠𝗅𝗅 𝖥𝗂𝗅𝖾𝗌 𝖢𝗈𝗆𝗉𝗅𝖾𝗍𝖾 😁!\n\n"
+                        f"⚠️ 𝖨𝖬𝖯𝖮𝖱𝖳𝖠𝖭𝖳: 𝖥𝗂𝗅𝖾𝗌 𝗐𝗂𝗅𝗅 𝖻𝖾 𝖣𝖤𝖫𝖤𝖳𝖤𝖣 𝗂𝗇 {int(AUTO_DELETE_TIME)//60} 𝖬𝗂𝗇𝗎𝗍𝖾𝗌.\n"
+                        f"📥 𝖥𝗈𝗋ᴡᴀ𝗋𝖽 𝗍𝗈 𝖲𝖺𝗏𝖾𝖽 𝖬𝖾𝗌𝗌𝖺𝗀𝖾𝗌 𝖭𝖮𝖶!"
+                    )
                     asyncio.create_task(local_auto_delete_handler(warn_msg, int(AUTO_DELETE_TIME)))
+                else:
+                    await message.reply_text(
+                        "✅ **All Files Complete! 😁**\n\n"
+                        "✅ **লিঙ্কগুলো চিরস্থায়ী — যখন খুশি দেখুন!**\n"
+                        "📢 নতুন মুভি পেতে জয়েন করো: **https://t.me/addlist/MwbWNafSFK4yZjhl**"
+                    )
                 return
             except Exception as e:
                 await message.reply_text(f"❌ Error: {e}")
@@ -265,14 +271,19 @@ async def start(client, message):
                 caption=caption,
                 reply_markup=btn_markup
             )
-            # ২. ওয়ার্নিং মেসেজ পাঠানো হচ্ছে
-            warn_msg = await message.reply_text(
-                f"⚠️ **IMPORTANT:** File will be DELETED in {int(AUTO_DELETE_TIME)//60} Minutes.\n📥 Forward to Saved Messages!",
-                quote=True
-            )
-            # ৩. ১০০% গ্যারান্টিড অটো ডিলিট কল (ফাইল ও মেসেজ দুটোই ডিলিট হবে)
+            # ২. ওয়ার্নিং/গাইড মেসেজ — AUTO_DELETE চালু থাকলে সতর্কতা, নাহলে চ্যানেল গাইড
             if AUTO_DELETE:
+                warn_msg = await message.reply_text(
+                    f"⚠️ **IMPORTANT:** File will be DELETED in {int(AUTO_DELETE_TIME)//60} Minutes.\n📥 Forward to Saved Messages!",
+                    quote=True
+                )
                 asyncio.create_task(local_auto_delete_handler([sent_msg, warn_msg], int(AUTO_DELETE_TIME)))
+            else:
+                info_msg = await message.reply_text(
+                    "✅ **এই লিঙ্কটি চিরস্থায়ী — যখন খুশি দেখুন!**\n"
+                    "📢 নতুন মুভি পেতে জয়েন করো: **https://t.me/addlist/MwbWNafSFK4yZjhl**",
+                    quote=True
+                )
             return
 
 @Client.on_message(filters.command("add_point") & filters.user(ADMINS))
