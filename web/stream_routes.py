@@ -19,6 +19,9 @@ from database.users_db import db # Apni DB import
 
 routes = web.RouteTableDef()
 
+# ⚡ প্রিমিয়াম লিমিট: এর চেয়ে বড় ফাইল প্রিমিয়াম ক্লায়েন্টে যাবে
+PREMIUM_SIZE_LIMIT = 2 * 1024 * 1024 * 1024  # 2GB
+
 @routes.get("/", allow_head=True)
 async def root_route_handler(_):
     return web.json_response({
@@ -36,10 +39,9 @@ async def root_route_handler(_):
     })
 
 # ---------------------------------------------------------------
-#  PASSWORD PROTECTED REDIRECT ROUTES (Add this at the bottom)
+#  PASSWORD PROTECTED REDIRECT ROUTES
 # ---------------------------------------------------------------
 
-# Routes Update
 @routes.get(r"/p/{token}", allow_head=True)
 async def protected_view(request: web.Request):
     token = request.match_info["token"]
@@ -55,8 +57,8 @@ async def protected_view(request: web.Request):
     return web.Response(
         text=template.render(
             token=token,
-            title=data.get("title", "Protected Link"),           # Feature 5
-            channel_link=data.get("channel_link")                # Feature 1
+            title=data.get("title", "Protected Link"),
+            channel_link=data.get("channel_link")
         ),
         content_type="text/html"
     )
@@ -75,7 +77,6 @@ async def protected_verify(request: web.Request):
     if user_pass == link_data["password"]:
         return web.HTTPFound(link_data["url"])
     else:
-        # Error hone par bhi title/link wapas bhejna padega
         async with aiofiles.open("web/template/password_redirect.html", mode='r') as f:
             template_content = await f.read()
             template = jinja2.Template(template_content)
@@ -83,7 +84,7 @@ async def protected_verify(request: web.Request):
         return web.Response(
             text=template.render(
                 token=token,
-                error="âŒ Wrong Password!",
+                error="âŒ Wrong Password!",
                 title=link_data.get("title", "Protected Link"),
                 channel_link=link_data.get("channel_link")
             ),
@@ -91,7 +92,7 @@ async def protected_verify(request: web.Request):
         )
         
 @routes.get(r"/watch/{path:\S+}", allow_head=True)
-async def watch_handler(request: web.Request): # Renamed to avoid name conflict
+async def watch_handler(request: web.Request):
     try:
         path = request.match_info["path"]
         match = re.search(r"^([a-zA-Z0-9_-]{6})(\d+)$", path)
@@ -109,7 +110,6 @@ async def watch_handler(request: web.Request): # Renamed to avoid name conflict
     except FileNotFound as e:
         raise web.HTTPNotFound(text=e.message)
     except (AttributeError, BadStatusLine, ConnectionResetError):
-        # FIX: Return a response instead of passing
         return web.Response(status=400, text="Connection Error")
     except Exception as e:
         logging.critical(e.with_traceback(None))
@@ -133,7 +133,6 @@ async def stream_handler(request: web.Request):
     except FileNotFound as e:
         raise web.HTTPNotFound(text=e.message)
     except (AttributeError, BadStatusLine, ConnectionResetError):
-        # FIX: Return a response instead of passing
         return web.Response(status=400, text="Connection Error")
     except Exception as e:
         logging.critical(e.with_traceback(None))
@@ -145,7 +144,30 @@ class_cache = {}
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
-    index = min(work_loads, key=work_loads.get)
+    # ⚡ STEP 1: ডিফল্ট ক্লায়েন্ট দিয়ে আগে ফাইলের তথ্য নেয়া (সাইজ জানার জন্য)
+    base_client = multi_clients.get(0) or next(iter(multi_clients.values()))
+    if base_client in class_cache:
+        base_streamer = class_cache[base_client]
+    else:
+        base_streamer = ByteStreamer(base_client)
+        class_cache[base_client] = base_streamer
+
+    file_id = await base_streamer.get_file_properties(id)
+    file_size = file_id.file_size
+
+    # ⚡ STEP 2: স্মার্ট ক্লায়েন্ট নির্বাচন
+    # 2GB+ ফাইল → প্রিমিয়াম সেশন ক্লায়েন্ট (সর্বোচ্চ ইনডেক্স = সবার শেষে লোড হয়)
+    # ছোট ফাইল → সবচেয়ে কম লোডের ক্লায়েন্ট (আগের মতো)
+    if file_size > PREMIUM_SIZE_LIMIT and len(multi_clients) > 1:
+        premium_idx = max(multi_clients.keys())
+        if premium_idx != 0:
+            index = premium_idx
+            logging.info(f"Big file ({file_size / 1024 / 1024 / 1024:.2f} GB) -> Premium Client {index}")
+        else:
+            index = min(work_loads, key=work_loads.get)
+    else:
+        index = min(work_loads, key=work_loads.get)
+
     faster_client = multi_clients[index]
 
     if MULTI_CLIENT:
@@ -158,15 +180,11 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         logging.debug(f"Creating new ByteStreamer object for client {index}")
         tg_connect = ByteStreamer(faster_client)
         class_cache[faster_client] = tg_connect
-    logging.debug("before calling get_file_properties")
-    file_id = await tg_connect.get_file_properties(id)
-    logging.debug("after calling get_file_properties")
 
+    # ⚡ হ্যাশ চেক (উপরেই করা হলো)
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
-
-    file_size = file_id.file_size
 
     if range_header:
         from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
