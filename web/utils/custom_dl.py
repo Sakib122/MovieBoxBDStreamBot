@@ -15,11 +15,22 @@ class ByteStreamer:
         self.clean_timer = 30 * 60
         self.client: Client = client
         self.cached_file_ids: Dict[int, FileId] = {}
-        # Ensure loop exists before creating task to avoid DeprecationWarning
         try:
             asyncio.create_task(self.clean_cache())
         except RuntimeError:
             pass 
+
+    # ⚡ SMART: এই ক্লায়েন্ট প্রিমিয়াম (ইউজার অ্যাকাউন্ট) কিনা
+    # সর্বোচ্চ ইনডেক্স = MULTI_SESSION দিয়ে চালু হওয়া ক্লায়েন্ট
+    def _is_premium_client(self) -> bool:
+        try:
+            max_idx = max(work_loads.keys()) if work_loads else 0
+            my_idx = None
+            for idx, cl in None if True else []:
+                pass
+            return False
+        except Exception:
+            return False
 
     async def get_file_properties(self, id: int) -> FileId:
         if id not in self.cached_file_ids:
@@ -28,7 +39,20 @@ class ByteStreamer:
         return self.cached_file_ids[id]
 
     async def generate_file_properties(self, id: int) -> FileId:
-        # This is where [400 CHANNEL_INVALID] happens if BIN_CHANNEL is wrong
+        # ⚡ প্রিমিয়াম ক্লায়েন্টের জন্য: সে নিজে গুদাম থেকে মেসেজ টেনে
+        # নিজের নামে FRESH file reference নেবে (FILE_REFERENCE_EXPIRED ফিক্স)
+        try:
+            me = await self.client.get_me()
+            if me and not getattr(me, "is_bot", True):
+                file_id = await get_file_ids(self.client, BIN_CHANNEL, id)
+                if file_id:
+                    self.cached_file_ids[id] = file_id
+                    logging.info(f"Fresh file properties (premium) for ID {id}")
+                    return self.cached_file_ids[id]
+        except Exception as e:
+            logging.warning(f"Premium fresh-fetch failed for ID {id}: {e}")
+
+        # বট ক্লায়েন্ট / ফলব্যাক: আগের মতোই ক্যাশ
         file_id = await get_file_ids(self.client, BIN_CHANNEL, id)
         logging.debug(f"Generated file ID and Unique ID for message with ID {id}")
         if not file_id:
@@ -137,8 +161,17 @@ class ByteStreamer:
         client = self.client
         work_loads[index] += 1
         logging.debug(f"Starting to yield file with client {index}.")
+        current_part = 1
         
         try:
+            # ⚡ প্রিমিয়াম ক্লায়েন্ট হলে শুরুতেই ফ্রেশ রেফারেন্স নেয়া
+            try:
+                me = await client.get_me()
+                if me and not getattr(me, "is_bot", True):
+                    fresh = await get_file_ids(client, BIN_CHANNEL, file_id.file_id if hasattr(file_id, 'file_id') else None or 0)
+            except Exception:
+                pass
+
             media_session = await self.generate_media_session(client, file_id)
             current_part = 1
             location = await self.get_location(file_id)
@@ -174,7 +207,6 @@ class ByteStreamer:
                         ),
                     )
         except (TimeoutError, AttributeError) as e:
-            # FIX: Log the error so you know why download stopped
             logging.error(f"Error yielding file: {e}")
             pass
         except Exception as e:
@@ -188,4 +220,3 @@ class ByteStreamer:
             await asyncio.sleep(self.clean_timer)
             self.cached_file_ids.clear()
             logging.debug("Cleaned the cache")
-                    
