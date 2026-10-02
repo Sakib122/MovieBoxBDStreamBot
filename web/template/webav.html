@@ -3,178 +3,223 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-    
     <title>MOVIE BOX BD STREAM | {{ file_name }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="icon" href="https://img.sanishtech.com/u/62e636411ff87f8ccbdd9eb50eb18279.png" type="image/x-icon">
-    
-    <!-- Popunder Script (Managed via Config Below) -->
+
     <script id="popunder-main-script" src="https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js"></script>
 
-    <!-- CSS & Icon Libraries -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-    
-    <!-- Video Player Library -->
-    <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
 
     <style>
         :root {
-            --accent: #00ff88;
-            --bg-dark: #0b0b0b;
-            --card-dark: #161616;
-            --tg-blue: #0088cc;
+            --accent: #22d3ee;
+            --accent2: #2dd4bf;
+            --bg: #0b0d10;
+            --card: #14171c;
+            --card2: #181c22;
+            --border: rgba(255,255,255,0.08);
+            --txt: #e8eaed;
+            --dim: #9aa0a6;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg); color: var(--txt); font-family: 'Outfit', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
+
+        .notice-bar { background: linear-gradient(90deg, #22d3ee, #2dd4bf); color: #04141a; padding: 9px; font-weight: 800; text-align: center; font-size: 12.5px; position: relative; z-index: 1001; }
+        .navbar { padding: 13px 18px; background: rgba(15,17,21,.7); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1000; }
+        .control-btn { border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 11px; background: var(--card); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+        .main-container { max-width: 620px; margin: 0 auto; padding: 14px 14px 24px 14px; }
+
+        /* ============ PLAYER CARD ============ */
+        #player-section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; z-index: 2100; }
+
+        .player-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px 11px; }
+        .ph-label { font-size: 10.5px; letter-spacing: 2.5px; font-weight: 800; color: var(--accent); }
+        .ph-title { font-size: 16.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: #fff; }
+        .status-badge { background: rgba(34,211,238,.1); color: var(--accent); border: 1px solid rgba(34,211,238,.3); padding: 5px 11px; border-radius: 9px; font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+        .status-badge.paused { background: rgba(255,255,255,.06); color: var(--dim); border-color: var(--border); }
+        .status-badge.loading { background: rgba(255,209,102,.08); color: #ffd166; border-color: rgba(255,209,102,.3); }
+
+        /* ============ CUSTOM PLAYER ============ */
+        .mbx-player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; touch-action: none; user-select: none; }
+        .mbx-player:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
+        .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
+        .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+
+        .mbx-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .25s; }
+        .mbx-player.ui-on .mbx-overlay { opacity: 1; }
+
+        .v-badges { position: absolute; top: 9px; left: 9px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 92%; }
+        .v-badge { background: rgba(12,14,18,.72); backdrop-filter: blur(6px); border: 1px solid var(--border); color: #fff; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+        .v-badge i { color: var(--accent); font-size: 10px; }
+
+        .mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 68px; height: 68px; border-radius: 50%; background: rgba(10,12,16,.55); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: 23px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s, background .2s; }
+        .mbx-center:active { transform: translate(-50%,-50%) scale(.9); background: rgba(34,211,238,.25); }
+        .mbx-center .fa-play { margin-left: 4px; }
+
+        .mbx-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 24px 8px 6px; background: linear-gradient(transparent, rgba(0,0,0,.82)); opacity: 0; pointer-events: none; transition: opacity .25s; }
+        .mbx-player.ui-on .mbx-controls { opacity: 1; pointer-events: auto; }
+
+        .mbx-seek { position: relative; height: 18px; display: flex; align-items: center; cursor: pointer; margin: 0 6px 2px; touch-action: none; }
+        .mbx-track { position: relative; width: 100%; height: 4px; border-radius: 4px; background: rgba(255,255,255,.16); }
+        .mbx-buffered { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,255,255,.28); border-radius: 4px; }
+        .mbx-played { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
+        .mbx-thumb { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(34,211,238,.35); }
+        .mbx-seek-tip { position: absolute; bottom: 16px; transform: translateX(-50%); background: rgba(10,12,16,.92); border: 1px solid var(--border); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 7px; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity .15s; }
+        .mbx-seek.dragging .mbx-seek-tip { opacity: 1; }
+
+        .mbx-bar { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+        .mbx-left, .mbx-right { display: flex; align-items: center; gap: 1px; }
+        .mbx-btn { position: relative; background: none; border: none; color: #fff; width: 33px; height: 33px; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; font-size: 14.5px; }
+        .mbx-btn:active { background: rgba(255,255,255,.14); }
+        .mbx-btn small { font-size: 7.5px; font-weight: 800; line-height: 1; margin-top: 1px; opacity: .85; }
+        .mbx-time { font-size: 11.5px; color: var(--dim); padding: 0 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .mbx-time b { color: #fff; font-weight: 600; }
+        .mbx-vol { display: flex; align-items: center; }
+        #volRange { width: 54px; accent-color: var(--accent); cursor: pointer; height: 3px; }
+
+        /* SMART: মোবাইলে কম্প্যাক্ট — স্লাইডার লুকিয়ে সব বাটন (ফুলস্ক্রিনসহ) ফিট */
+        @media (max-width: 520px) {
+            #volRange { display: none; }
+            .mbx-btn { width: 30px; height: 30px; font-size: 13px; }
+            .mbx-btn small { font-size: 7px; }
+            .mbx-time { font-size: 10.5px; padding: 0 3px; }
+            .mbx-left, .mbx-right { gap: 0; }
+            .mbx-controls { padding: 20px 4px 5px; }
+            .mbx-center { width: 60px; height: 60px; font-size: 20px; }
         }
 
-        body {
-            background: var(--bg-dark);
-            color: #fff;
-            font-family: 'Outfit', sans-serif;
-            margin: 0; padding: 0;
-            transition: 0.3s;
-            overflow-x: hidden;
-        }
-
-        body.light-mode { background: #f0f2f5; color: #1a1a1a; }
-        body.light-mode .navbar { background: #fff; border-bottom: 1px solid #ddd; }
-        body.light-mode .glass-card { background: #fff !important; border: 1px solid #ddd !important; color: #1a1a1a !important; }
-        body.light-mode .btn-glass { background: #fff !important; border: 1px solid #ccc !important; color: #000 !important; }
-        body.light-mode .control-btn { background: #eee; color: #000; }
-        body.light-mode .player-head, body.light-mode .movie-meta { background: #fff; color: #1a1a1a; }
-
-        .notice-bar { background: linear-gradient(90deg, #00ff88, #00b09b); color: #000; padding: 10px; font-weight: 800; text-align: center; font-size: 13px; z-index: 1001; position: relative; }
-
-        .navbar { padding: 15px 20px; background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 1000; }
-
-        .main-container { max-width: 600px; margin: 0 auto; padding: 0px 15px 20px 15px; }
-
-        #player-section {
-            width: 100%;
-            background: var(--card-dark);
-            border-radius: 14px;
-            overflow: hidden;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .player-head { padding: 14px 15px 12px 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-        .player-head .ph-label { font-size: 11px; letter-spacing: 2px; font-weight: 800; color: var(--accent); }
-        .player-head .ph-title { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-        .status-badge { background: rgba(0, 200, 255, 0.12); color: #33c6ff; border: 1px solid rgba(0,200,255,0.3); padding: 6px 12px; border-radius: 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
-        .status-badge.paused { background: rgba(255,255,255,0.08); color: #aaa; border-color: rgba(255,255,255,0.15); }
-
-        .artplayer-app { 
-            width: 100%; 
-            height: auto; 
-            aspect-ratio: 16/9; 
-            overflow: hidden;
-            position: relative;
-            touch-action: none;
-            background: #000;
-        }
-
-        #mbx-overlay { position: absolute; inset: 0; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .25s; }
-        #mbx-overlay.show { opacity: 1; }
-        .v-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 90%; }
-        .v-badge { background: rgba(20,20,20,0.75); backdrop-filter: blur(4px); color: #fff; padding: 5px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; gap: 5px; border: 1px solid rgba(255,255,255,0.12); }
-        .v-badge i { color: var(--accent); font-size: 11px; }
-        #mbx-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.25); color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: none; transition: transform .15s; }
-        #mbx-overlay.show #mbx-center { pointer-events: auto; }
-        #mbx-center:active { transform: translate(-50%,-50%) scale(0.9); }
-
-        .movie-meta { padding: 13px 15px 15px 15px; background: var(--card-dark); }
-        .movie-meta .mm-title { font-weight: 800; font-size: 15px; margin-bottom: 10px; }
-        .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-        .mm-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; opacity: 0.65; padding-top: 7px; min-width: 62px; }
-        .pill { padding: 7px 15px; border-radius: 20px; border: 1.5px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); color: #fff; font-weight: 700; font-size: 13px; cursor: default; }
-        .pill.active { border-color: #33c6ff; color: #33c6ff; background: rgba(51,198,255,0.08); }
+        /* Settings menu */
+        .mbx-menu { position: absolute; right: 8px; bottom: 52px; z-index: 8; background: rgba(13,15,19,.97); border: 1px solid var(--border); border-radius: 13px; padding: 10px 12px; min-width: 235px; display: none; backdrop-filter: blur(12px); box-shadow: 0 12px 34px rgba(0,0,0,.55); }
+        .mbx-menu.open { display: block; }
+        .mm-head { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--dim); margin: 8px 0 6px; }
+        .mm-head:first-child { margin-top: 0; }
+        .mm-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pill { padding: 5px 13px; border-radius: 16px; border: 1.5px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); color: #fff; font-size: 12px; font-weight: 700; cursor: default; }
+        .pill.active { border-color: var(--accent); color: var(--accent); background: rgba(34,211,238,.08); }
         .pill.clickable { cursor: pointer; }
-        .mm-hint { background: rgba(51,198,255,0.08); border: 1px solid rgba(51,198,255,0.25); color: #9fdcff; border-radius: 10px; padding: 9px 12px; font-size: 12px; line-height: 1.5; margin-top: 6px; }
 
-        #watchBtn {
-            width: 100%; padding: 60px 20px; border: 2px dashed var(--accent);
-            border-radius: 15px; text-align: center; cursor: pointer;
-            background: rgba(0, 255, 136, 0.05);
-        }
+        /* Toast */
+        .mbx-toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; background: rgba(10,12,16,.88); border: 1px solid var(--border); color: #fff; padding: 7px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+        .mbx-toast.show { opacity: 1; }
 
-        .glass-card { background: var(--card-dark); padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05); }
-        .btn-glass { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 10px; font-weight: 700; margin-bottom: 8px; transition: 0.2s; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); color: #fff; text-decoration: none !important; background: rgba(255,255,255,0.05); }
-        .btn-main { background: linear-gradient(45deg, #00ff88, #00b09b) !important; color: #000 !important; border: none; font-size: 1.1rem; }
-        .btn-tg { background: var(--tg-blue) !important; color: #fff !important; border: none; }
+        /* Ripple */
+        .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 68px; height: 68px; border-radius: 50%; background: rgba(34,211,238,.22); border: 1px solid rgba(34,211,238,.4); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 18px; z-index: 4; animation: rip .5s ease-out forwards; pointer-events: none; }
+        .tap-ripple.left { left: 8%; } .tap-ripple.right { right: 8%; }
+        @keyframes rip { from { opacity: 1; transform: translateY(-50%) scale(.6); } to { opacity: 0; transform: translateY(-50%) scale(1.35); } }
 
-        .tg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .tg-btn { background: var(--tg-blue); color: #fff !important; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 13px; text-align: center; text-decoration: none !important; }
+        /* Movie meta */
+        .movie-meta { padding: 12px 15px 14px; background: var(--card2); border-top: 1px solid var(--border); }
+        .mm-title { font-weight: 800; font-size: 14.5px; margin-bottom: 9px; color: #fff; }
+        .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+        .mm-label { font-size: 10.5px; font-weight: 800; letter-spacing: 1.5px; color: var(--dim); padding-top: 7px; min-width: 58px; }
+        .mm-hint { background: rgba(34,211,238,.07); border: 1px solid rgba(34,211,238,.25); color: #a5e8f5; border-radius: 10px; padding: 8px 11px; font-size: 11.5px; line-height: 1.55; margin-top: 7px; }
 
-        .control-btn { border: none; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; }
+        #watchBtn { width: 100%; padding: 60px 20px; border: 2px dashed var(--accent); border-radius: 15px; text-align: center; cursor: pointer; background: rgba(34,211,238,.04); }
 
-        /* মোবাইলে কম্প্যাক্ট কন্ট্রোল — সব আইকন এক লাইনে */
-        @media (max-width: 640px) {
-            .art-bottom { padding: 0 2px !important; }
-            .art-control { padding: 0 2px !important; }
-            .art-icon { width: 26px !important; height: 26px !important; }
-            .art-icon svg, .art-icon i { width: 15px !important; height: 15px !important; font-size: 15px !important; }
-            .art-control-time { font-size: 11px !important; padding: 0 2px !important; }
-            .art-volume-slider { display: none !important; }
-            .art-control-pip { display: none !important; }
-        }
+        .glass-card { background: var(--card); padding: 15px; border-radius: 13px; margin-bottom: 14px; border: 1px solid var(--border); }
+        .btn-glass { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 11px; font-weight: 700; margin-bottom: 8px; transition: .2s; cursor: pointer; border: 1px solid var(--border); color: #fff; text-decoration: none !important; background: rgba(255,255,255,.04); }
+        .btn-main { background: linear-gradient(45deg, var(--accent), var(--accent2)) !important; color: #04141a !important; border: none; font-size: 1.05rem; }
+        .btn-tg { background: #0088cc !important; color: #fff !important; border: none; }
+        .tg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+        .tg-btn { background: #0088cc; color: #fff !important; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 12.5px; text-align: center; text-decoration: none !important; }
+        .sound-fix-box { border: 1.5px solid rgba(34,211,238,.4); padding: 11px; text-align: center; margin-top: 14px; border-radius: 12px; background: rgba(34,211,238,.04); }
+        .lang-switch { display: flex; justify-content: center; gap: 7px; margin-bottom: 9px; }
+        .lang-btn { background: rgba(255,255,255,.06); border: 1px solid rgba(34,211,238,.4); color: var(--accent); padding: 4px 12px; border-radius: 18px; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+        .lang-btn.active { background: var(--accent); color: #04141a; }
+        #instruction-text { font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--txt); }
+        .big-file-warning { border: 1.5px solid rgba(255,77,77,.5); background: rgba(255,77,77,.07); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.6; }
 
-        .sound-fix-box { border: 2px solid var(--accent); padding: 12px; text-align: center; margin-top: 15px; border-radius: 12px; background: rgba(0, 255, 136, 0.03); display: block; }
-        .lang-switch { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
-        .lang-btn { background: rgba(255,255,255,0.1); border: 1px solid var(--accent); color: var(--accent); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.3s; }
-        .lang-btn.active { background: var(--accent); color: #000; }
-        #instruction-text { font-size: 13px; line-height: 1.5; font-weight: 600; color: #fff; }
-
-        .big-file-warning { border: 2px solid #ff4d4d; background: rgba(255, 77, 77, 0.08); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 15px; font-weight: 600; font-size: 13px; line-height: 1.6; }
-
-        .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(0,255,136,0.25); display: flex; align-items: center; justify-content: center; color: #00ff88; font-size: 20px; z-index: 50; animation: rippleAnim .5s ease-out forwards; pointer-events: none; }
-        .tap-ripple.left { left: 10%; }
-        .tap-ripple.right { right: 10%; }
-        @keyframes rippleAnim { from { opacity: 1; transform: translateY(-50%) scale(0.6); } to { opacity: 0; transform: translateY(-50%) scale(1.4); } }
-
-        #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 165, 0, 0.12); pointer-events: none; z-index: 9999; display: none; }
+        #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
+        #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,165,0,.12); pointer-events: none; z-index: 9999; display: none; }
     </style>
 </head>
 <body>
 
+    <div id="popunder-trigger" onclick="handlePopunder('global_trigger')"></div>
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | 👆 Double-Tap: Side=±10s, Middle=Pause | 💬 Subtitle | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
-        <div class="fw-bold fs-4"><i class="fa-solid fa-robot text-success"></i> MOVIE BOX BD STREAM</div>
-        <div class="d-flex gap-2">
-            <button class="control-btn" onclick="toggleDarkMode()" id="themeToggle"><i class="fa-solid fa-sun"></i></button>
-            <button class="control-btn" onclick="toggleEyeCare()"><i class="fa-solid fa-eye"></i></button>
-        </div>
+        <div class="fw-bold fs-5"><i class="fa-solid fa-robot" style="color:var(--accent)"></i> MOVIE BOX BD STREAM</div>
+        <button class="control-btn" onclick="toggleEyeCare()"><i class="fa-solid fa-eye"></i></button>
     </nav>
 
     <div class="main-container">
-        
+
         <div id="player-section">
             <div class="player-head">
                 <div style="min-width:0;">
                     <div class="ph-label">WATCH ONLINE</div>
-                    <div class="ph-title" id="mbx-head-title">{{ file_name }}</div>
+                    <div class="ph-title" id="phTitle">{{ file_name }}</div>
                 </div>
-                <span class="status-badge" id="mbx-status"><i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing</span>
+                <span class="status-badge paused" id="mbxStatus"><i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused</span>
             </div>
 
-            <div id="artplayer" class="artplayer-app">
-                <div id="mbx-overlay">
-                    <div class="v-badges" id="mbx-badges"></div>
-                    <div id="mbx-center"><i class="fa-solid fa-pause"></i></div>
+            <div class="mbx-player" id="mbxPlayer">
+                <video id="mbxVideo" playsinline webkit-playsinline preload="auto" crossorigin="anonymous"></video>
+
+                <div class="mbx-overlay">
+                    <div class="v-badges" id="mbxBadges"></div>
+                    <div class="mbx-center" id="mbxCenter"><i class="fa-solid fa-play"></i></div>
+                </div>
+
+                <div class="mbx-toast" id="mbxToast"></div>
+
+                <div class="mbx-controls" id="mbxControls">
+                    <div class="mbx-seek" id="mbxSeek">
+                        <div class="mbx-track">
+                            <div class="mbx-buffered" id="mbxBuffered"></div>
+                            <div class="mbx-played" id="mbxPlayed"><div class="mbx-thumb"></div></div>
+                        </div>
+                        <div class="mbx-seek-tip" id="mbxSeekTip">00:00</div>
+                    </div>
+                    <div class="mbx-bar">
+                        <div class="mbx-left">
+                            <button class="mbx-btn" id="btnPlay"><i class="fa-solid fa-play"></i></button>
+                            <button class="mbx-btn" id="btnBack"><i class="fa-solid fa-rotate-left"></i><small>10</small></button>
+                            <button class="mbx-btn" id="btnFwd"><i class="fa-solid fa-rotate-right"></i><small>10</small></button>
+                            <div class="mbx-vol">
+                                <button class="mbx-btn" id="btnMute"><i class="fa-solid fa-volume-high"></i></button>
+                                <input type="range" id="volRange" min="0" max="1" step="0.05" value="1">
+                            </div>
+                            <div class="mbx-time"><b id="tCur">00:00</b> / <span id="tDur">00:00</span></div>
+                        </div>
+                        <div class="mbx-right">
+                            <button class="mbx-btn" id="btnCC"><i class="fa-solid fa-closed-captioning"></i></button>
+                            <button class="mbx-btn" id="btnSettings"><i class="fa-solid fa-gear"></i></button>
+                            <button class="mbx-btn" id="btnFull"><i class="fa-solid fa-expand"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mbx-menu" id="mbxMenu">
+                    <div class="mm-head">QUALITY</div>
+                    <div class="mm-pills" id="menuQuality"></div>
+                    <div class="mm-head">AUDIO</div>
+                    <div class="mm-pills" id="menuAudio"></div>
+                    <div class="mm-head">SPEED</div>
+                    <div class="mm-pills" id="menuSpeed"></div>
+                    <div class="mm-head">SUBTITLE</div>
+                    <div class="mm-pills">
+                        <span class="pill active" id="subOff">✓ Off</span>
+                        <span class="pill clickable" id="subLoad"><i class="fa-solid fa-upload"></i> Load .srt/.vtt</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="movie-meta" id="mbx-meta"></div>
+            <div class="movie-meta" id="mbxMeta"></div>
         </div>
 
         <div class="glass-card text-center">
             <div class="fw-bold text-truncate">{{ file_name }}</div>
-            <div class="small opacity-50 mt-1">Size: {{ file_size }}</div>
+            <div class="small mt-1" style="color:var(--dim)">Size: {{ file_size }}</div>
         </div>
 
         <div class="glass-card">
@@ -194,65 +239,34 @@
                 </div>
             </div>
 
-            <div class="sound-fix-box" id="sound-fix-main">
+            <div class="sound-fix-box">
                 <div class="lang-switch">
                     <button class="lang-btn active" id="bn-btn" onclick="setLanguage('bn')">বাংলা</button>
-                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">হিন্দি</button>
+                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">हिन्दी</button>
                     <button class="lang-btn" id="en-btn" onclick="setLanguage('en')">English</button>
                 </div>
                 <div id="instruction-text">
-                    <i class="fa-solid fa-volume-high text-success"></i> কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে📱🎧
+                    <i class="fa-solid fa-volume-high" style="color:var(--accent)"></i> সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧
                 </div>
             </div>
         </div>
 
         <div class="glass-card">
-            <div class="small fw-bold mb-2 opacity-75 text-center">EXTERNAL PLAYERS (ডুয়াল অডিও বদলাতে এখানে ওপেন করুন)</div>
+            <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">EXTERNAL PLAYERS (ডুয়াল অডিও বদলাতে এখানে ওপেন করুন)</div>
             <div class="row g-2">
-                <div class="col-4">
-                    <div onclick="handlePopunder('mx', () => play_intent('com.mxtech.videoplayer.ad'))" class="btn-glass small px-1">
-                        <i class="fas fa-play text-blue-400"></i> MX Player
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div onclick="handlePopunder('vlc', () => play_intent('org.videolan.vlc'))" class="btn-glass small px-1">
-                        <i class="fas fa-video text-orange-500"></i> VLC Player
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div onclick="handlePopunder('playit', () => play_intent('com.playit.videoplayer'))" class="btn-glass small px-1">
-                        <i class="fas fa-play-circle text-green-400"></i> PlayIt
-                    </div>
-                </div>
+                <div class="col-4"><div onclick="handlePopunder('mx', () => play_intent('com.mxtech.videoplayer.ad'))" class="btn-glass small px-1"><i class="fas fa-play"></i> MX Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('vlc', () => play_intent('org.videolan.vlc'))" class="btn-glass small px-1"><i class="fas fa-video"></i> VLC Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('playit', () => play_intent('com.playit.videoplayer'))" class="btn-glass small px-1"><i class="fas fa-play-circle"></i> PlayIt</div></div>
             </div>
             <div class="row g-2 mt-1">
-                <div class="col-4">
-                    <div onclick="handlePopunder('system_p', () => play_system())" class="btn-glass small px-1">
-                        <i class="fas fa-desktop text-yellow-400"></i> System
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div onclick="handlePopunder('kmp', () => play_intent('com.kmplayer'))" class="btn-glass small px-1">
-                        <i class="fas fa-film text-purple-400"></i> KM Player
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div onclick="handlePopunder('kodi', () => play_intent('org.xbmc.kodi'))" class="btn-glass small px-1">
-                        <i class="fas fa-border-all text-blue-300"></i> Kodi
-                    </div>
-                </div>
-            </div>
-            <div class="row g-2 mt-1">
-                <div class="col-12">
-                    <div onclick="handlePopunder('nplayer_btn', () => play_nplayer())" class="btn-glass small px-1">
-                        <i class="fas fa-mobile-screen text-cyan-400"></i> nPlayer (PRO/iOS)
-                    </div>
-                </div>
+                <div class="col-4"><div onclick="handlePopunder('system_p', () => play_system())" class="btn-glass small px-1"><i class="fas fa-desktop"></i> System</div></div>
+                <div class="col-4"><div onclick="handlePopunder('kmp', () => play_intent('com.kmplayer'))" class="btn-glass small px-1"><i class="fas fa-film"></i> KM Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('kodi', () => play_intent('org.xbmc.kodi'))" class="btn-glass small px-1"><i class="fas fa-border-all"></i> Kodi</div></div>
             </div>
         </div>
 
         <div class="glass-card">
-            <div class="small fw-bold mb-2 opacity-75 text-center">SHARE LINKS</div>
+            <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">SHARE LINKS</div>
             <div class="row g-2">
                 <div class="col-4"><div onclick="handlePopunder('sh_vid', () => shareAPI('Video Link', window.location.href))" class="btn-glass small px-1"><i class="fa-solid fa-share-nodes"></i> Video</div></div>
                 <div class="col-4"><div onclick="handlePopunder('sh_file', () => shareAPI('Download Link', '{{ file_url }}'))" class="btn-glass small px-1"><i class="fa-solid fa-link"></i> File</div></div>
@@ -264,697 +278,644 @@
             <div class="fw-bold mb-2"><i class="fa-brands fa-telegram text-info"></i> Join Our Channels</div>
             <div class="tg-grid">
                 <a href="https://t.me/SakibMovieBox" target="_blank" onclick="handlePopunder('tg_c1')" class="tg-btn"><i class="fa-solid fa-bullhorn"></i> MOVIE BOX BD</a>
-                <a href="https://t.me/requestmoviebox" target="_blank" onclick="handlePopunder('tg_c2')" class="tg-btn"><i class="fa-solid fa-film"></i> MOVIE BOX BD CHAT</a>
+                <a href="https://t.me/requestmoviebox" target="_blank" onclick="handlePopunder('tg_c2')" class="tg-btn"><i class="fa-solid fa-film"></i> MOVIE BOX CHAT</a>
                 <a href="https://t.me/addlist/MwbWNafSFK4yZjhl" target="_blank" onclick="handlePopunder('tg_c3')" class="tg-btn"><i class="fa-solid fa-headset"></i> All Channel</a>
-                <a href="https://www.movieboxbd.xyz" target="_blank" onclick="handlePopunder('tg_c4')" class="tg-btn"><i class="fa-solid fa-database"></i> Movieboxbd Website</a>
+                <a href="https://www.movieboxbd.xyz" target="_blank" onclick="handlePopunder('tg_c4')" class="tg-btn"><i class="fa-solid fa-database"></i> Website</a>
             </div>
         </div>
 
-        <footer class="text-center opacity-50 small py-2">MOVIE BOX BD &copy; 2026</footer>
+        <footer class="text-center small py-2" style="color:var(--dim)">MOVIE BOX BD © 2026</footer>
     </div>
 
     <script>
-        // ==========================================
-        //         ৪ টি প্রধান এড/চেঞ্জ কমান্ড
-        // ==========================================
         const CONFIG = {
-            notice: "⚡ Auto Play + Resume | 👆 Double-Tap: Side=±10s, Middle=Pause | 💬 Subtitle | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না | Join @SakibMovieBox",
-
+            notice: "⚡ Auto Play + Resume | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
                 "https://omg10.com/4/10918781",
             ],
-
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
-
             soundText: {
-                bn: "কোন মুভির বা কোন ফাইল এর যদি সাউন্ড না আসে তা হলে VLC Player কিংবা নিচের দেওয়া প্লেয়ারে স্ট্রিম গুলা দেখতে পারেন সাউন্ড সমস্যা ঠিক হয়ে যাবে 📱🎧",
-                hi: "यदि किसी मूवी या फ़ाइल में आवाज़ नहीं आ रही है, तो कृपया नीचे दिए गए प्लेयर में स्ट्रीम देखें। 📱🎧",
-                en: "If any movie or file has no sound, please watch the streams in the players given below. 📱🎧"
+                bn: "সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧",
+                hi: "यदि आवाज़ नहीं आ रही है, तो नीचे दिए गए VLC/MX Player में स्ट्रीम देखें। 📱🎧",
+                en: "If there is no sound, open the stream in VLC/MX Player below. 📱🎧"
             }
         };
 
-        function deleteNotice() {
-            document.getElementById('notice-container').style.display = 'none';
-        }
-        function deleteSoundBox() {
-            document.getElementById('sound-fix-main').style.display = 'none';
-        }
-        function deletePopunderScript() {
-            let s = document.getElementById('popunder-main-script');
-            if(s) s.remove();
-        }
-
-        if(CONFIG.notice === "") { deleteNotice(); } else { document.getElementById('marquee-element').innerText = CONFIG.notice; }
+        function deleteNotice(){ document.getElementById('notice-container').style.display='none'; }
+        function deleteSoundBox(){ document.querySelector('.sound-fix-box').style.display='none'; }
+        if(CONFIG.notice === ""){ deleteNotice(); } else { document.getElementById('marquee-element').innerText = CONFIG.notice; }
         document.getElementById('popunder-main-script').src = CONFIG.popunderJS;
 
-        // ==========================================
-        //  অ্যাড ট্রিগার (নতুন): অদৃশ্য লেয়ার বাদ!
-        //  আগে পুরো স্ক্রিন ঢেকে থাকা লেয়ার প্লেয়ারের টাচ খেয়ে ফেলত।
-        //  এখন প্রথম ক্লিকেই অ্যাড — কিন্তু কোনো লেয়ার কিছু ব্লক করবে না।
-        // ==========================================
-        document.addEventListener('click', function firstClickAd() {
-            handlePopunder('global_trigger');
-        }, { once: true, capture: true });
-
-        function setLanguage(lang) {
-            const textDisplay = document.getElementById('instruction-text');
-            const btns = document.querySelectorAll('.lang-btn');
-            btns.forEach(b => b.classList.remove('active'));
-            document.getElementById(lang + '-btn').classList.add('active');
-            textDisplay.innerHTML = `<i class="fa-solid fa-volume-high text-success"></i> ${CONFIG.soundText[lang]}`;
+        function setLanguage(lang){
+            const t = document.getElementById('instruction-text');
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(lang+'-btn').classList.add('active');
+            t.innerHTML = '<i class="fa-solid fa-volume-high" style="color:var(--accent)"></i> ' + CONFIG.soundText[lang];
         }
         setLanguage('bn');
 
-        function forceDownload(url) {
-            let secureUrl = url.replace("http://", "https://");
+        function forceDownload(url){
             const link = document.createElement('a');
-            link.href = secureUrl;
-            link.setAttribute('download', '');
-            link.setAttribute('target', '_blank');
-            link.setAttribute('rel', 'noopener noreferrer');
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => { alert("Download Starting..."); }, 500);
+            link.href = url.replace("http://","https://");
+            link.setAttribute('download',''); link.setAttribute('target','_blank'); link.setAttribute('rel','noopener noreferrer');
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(()=>{ alert("Download Starting..."); }, 500);
         }
-
-        async function shareAPI(title, link) {
-            if (navigator.share) { try { await navigator.share({ title: title, url: link }); } catch (err) {} } 
+        async function shareAPI(title, link){
+            if (navigator.share) { try { await navigator.share({title, url: link}); } catch(e){} }
             else { navigator.clipboard.writeText(link); alert("Link Copied!"); }
         }
-
-        let linkIndex = 0;
-        const cooldowns = {}; 
-
-        function handlePopunder(btnId, callback) {
-            const now = Date.now();
-            const cooldownTime = 1800000; 
-
-            if (CONFIG.directAds.length > 0 && (!cooldowns[btnId] || (now - cooldowns[btnId] > cooldownTime))) {
+        let linkIndex = 0; const cooldowns = {};
+        function handlePopunder(btnId, callback){
+            const now = Date.now(), cd = 1800000;
+            if (CONFIG.directAds.length > 0 && (!cooldowns[btnId] || (now - cooldowns[btnId] > cd))) {
                 window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank');
-                linkIndex++;
-                cooldowns[btnId] = now;
+                linkIndex++; cooldowns[btnId] = now;
+                if (btnId === 'global_trigger') { document.getElementById('popunder-trigger').style.display = 'none'; }
             }
             if (callback) callback();
         }
 
-        function fmtTime(sec) {
-            sec = Math.floor(sec);
-            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-            const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
-            return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+        function fmtTime(sec){
+            sec = Math.max(0, Math.floor(sec||0));
+            const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+            const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+            return h > 0 ? h+':'+mm+':'+ss : mm+':'+ss;
         }
 
-        // SMART: ফাইলের নাম পড়ে তথ্য বের করা
-        function parseFileInfo() {
-            const raw = "{{ file_name }}";
-            const lower = raw.toLowerCase();
-            let quality = null;
+        /* ===== ফাইল ইনফো পার্স ===== */
+        function parseFileInfo(){
+            const lower = ("{{ file_name }}").toLowerCase();
             const qm = lower.match(/(2160p|1440p|1080p|720p|480p|360p)/);
-            if (qm) { quality = qm[1].toUpperCase(); }
             const isHEVC = /hevc|x265|h\.265/.test(lower);
+            const map = [['bangla','বাংলা'],['bengali','বাংলা'],['bangali','বাংলা'],['hindi','Hindi'],['tamil','Tamil'],['telugu','Telugu'],['malayalam','Malayalam'],['kannada','Kannada'],['punjabi','Punjabi'],['urdu','Urdu']];
             const langs = [];
-            const map = [
-                ['bangla', 'বাংলা'], ['bengali', 'বাংলা'],
-                ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['telugu', 'Telugu'],
-                ['malayalam', 'Malayalam'], ['kannada', 'Kannada'], ['punjabi', 'Punjabi'], ['urdu', 'Urdu']
-            ];
-            for (const [k, v] of map) { if (lower.includes(k)) { langs.push(v); } }
-            if (/\benglish\b|\beng\b/.test(lower)) { langs.push('English'); }
+            for (const [k,v] of map) { if (lower.includes(k)) langs.push(v); }
+            if (/\benglish\b|\beng\b/.test(lower)) langs.push('English');
             const uniq = [...new Set(langs)];
-            const hasSub = /\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower);
-            return { quality, isHEVC, langs: uniq, hasSub, dual: uniq.length > 1 };
+            return { quality: qm ? qm[1].toUpperCase() : null, isHEVC, langs: uniq, hasSub: /\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower), dual: uniq.length > 1 };
         }
 
-        function buildFileInfoUI() {
+        function buildFileInfoUI(){
             const info = parseFileInfo();
-            const badges = document.getElementById('mbx-badges');
-            const meta = document.getElementById('mbx-meta');
-            let bHtml = '';
-            let qPills = '';
-            let aPills = '';
+            try { document.getElementById('phTitle').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i,''); } catch(e){}
 
-            if (info.quality) {
-                const qLabel = info.quality + (info.isHEVC ? ' HEVC' : '');
-                bHtml += '<span class="v-badge"><i class="fa-solid fa-film"></i>' + qLabel + '</span>';
-                qPills = '<span class="pill active">✓ ' + info.quality + '</span>';
-            } else {
-                qPills = '<span class="pill active">✓ Original</span>';
-            }
+            let b = '';
+            if (info.quality) b += '<span class="v-badge"><i class="fa-solid fa-film"></i>' + info.quality + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            info.langs.forEach(lg => b += '<span class="v-badge"><i class="fa-solid fa-headphones"></i>' + lg + '</span>');
+            if (info.hasSub) b += '<span class="v-badge"><i class="fa-solid fa-closed-captioning"></i>Sub</span>';
+            document.getElementById('mbxBadges').innerHTML = b;
 
-            if (info.langs.length > 0) {
-                info.langs.forEach((lg, i) => {
-                    bHtml += '<span class="v-badge"><i class="fa-solid fa-headphones"></i>' + lg + '</span>';
-                    aPills += '<span class="pill clickable' + (i === 0 ? ' active">✓ ' : '">') + lg + '</span>';
-                });
-            } else {
-                aPills = '<span class="pill active">✓ Original</span>';
-            }
+            const qP = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            let aP = '';
+            if (info.langs.length) info.langs.forEach(lg => aP += '<span class="pill clickable" data-lang="'+lg+'">' + lg + '</span>');
+            else aP = '<span class="pill active">✓ Original</span>';
 
-            if (info.hasSub) {
-                bHtml += '<span class="v-badge"><i class="fa-solid fa-closed-captioning"></i>Sub</span>';
-            }
+            document.getElementById('mbxMeta').innerHTML =
+                '<div class="mm-title">🎬 Movie</div>' +
+                '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qP + '</div>' +
+                '<div class="mm-row"><span class="mm-label">AUDIO</span>' + aP + '</div>' +
+                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না — নিচের <b>MX Player / VLC</b>-এ ওপেন করলে অডিও (Hindi/বাংলা/English) বদলাতে পারবেন। 🎬</div>' : '');
 
-            badges.innerHTML = bHtml;
-
-            try {
-                document.getElementById('mbx-head-title').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i, '');
-            } catch (e) {}
-
-            meta.innerHTML = '<div class="mm-title">🎬 Movie</div>' +
-                '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qPills + '</div>' +
-                '<div class="mm-row"><span class="mm-label">🎧 AUDIO</span>' + aPills + '</div>' +
-                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না। নিচের <b>MX Player / VLC</b> বাটনে চেপে ওপেন করলে প্লেয়ারের ভিতরে অডিও বদলাতে পারবেন। 🎬</div>' : '');
-
-            meta.querySelectorAll('.pill.clickable').forEach(p => {
-                p.addEventListener('click', () => {
-                    if (window.MBX_NOTICE) { window.MBX_NOTICE('🎧 অডিও বদলাতে নিচের MX Player / VLC বাটনে চাপ দিয়ে ওপেন করুন'); }
-                });
-            });
+            document.querySelectorAll('#mbxMeta .pill.clickable').forEach(p => p.addEventListener('click', () => toast('🎧 অডিও বদলাতে MX Player / VLC-তে ওপেন করুন')));
         }
         buildFileInfoUI();
 
-        function ensureProgressBar() {
-            const card = document.querySelector('.main-container .glass-card.text-center');
-            if (!card || document.getElementById('mbx-progress')) { return; }
-            const wrap = document.createElement('div');
-            wrap.id = 'mbx-progress';
-            wrap.style.cssText = 'margin-top:10px;text-align:left;';
-            wrap.innerHTML = '<div style="height:5px;background:rgba(255,255,255,0.15);border-radius:5px;overflow:hidden;"><div id="mbx-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#00ff88,#00b09b);transition:width .5s;"></div></div><div id="mbx-progress-text" class="small" style="opacity:0.6;margin-top:4px;"></div>';
-            card.appendChild(wrap);
+        /* ===== Settings menu (Quality / Audio / Speed / Subtitle) ===== */
+        function buildMenu(){
+            const info = parseFileInfo();
+            document.getElementById('menuQuality').innerHTML = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            let a = '';
+            if (info.langs.length) info.langs.forEach(lg => a += '<span class="pill clickable" data-lang="'+lg+'">' + lg + '</span>');
+            else a = '<span class="pill active">✓ Original</span>';
+            document.getElementById('menuAudio').innerHTML = a;
+
+            const speeds = [0.75, 1, 1.25, 1.5, 2];
+            document.getElementById('menuSpeed').innerHTML = speeds.map(s => '<span class="pill clickable" data-speed="'+s+'">' + (s===1 ? '1x (Normal)' : s+'x') + '</span>').join('');
+
+            document.querySelectorAll('#menuAudio .pill.clickable').forEach(p => p.addEventListener('click', () => toast('🎧 অডিও বদলাতে MX Player / VLC-তে ওপেন করুন')));
+            document.querySelectorAll('#menuSpeed .pill').forEach(p => p.addEventListener('click', () => {
+                MBX.video.playbackRate = parseFloat(p.dataset.speed);
+                updateMenuActive(); toast('⏩ Speed: ' + p.dataset.speed + 'x');
+            }));
+            document.getElementById('subOff').addEventListener('click', () => {
+                MBX.tracks.forEach(t => { try { t.mode = 'disabled'; } catch(e){} });
+                document.getElementById('subOff').classList.add('active');
+                toast('সাবটাইটেল বন্ধ');
+            });
+            document.getElementById('subLoad').addEventListener('click', loadSubtitleFile);
         }
-        function updateProgressUI(video, key) {
-            try {
-                const saved = parseFloat(localStorage.getItem(key));
-                if (!(saved > 0) || !video.duration) { return; }
-                ensureProgressBar();
-                const fill = document.getElementById('mbx-progress-fill');
-                const txt = document.getElementById('mbx-progress-text');
-                if (!fill) { return; }
-                const pct = Math.min(100, (saved / video.duration) * 100);
-                fill.style.width = pct + '%';
-                txt.textContent = '📺 দেখা হয়েছে ' + Math.floor(pct) + '% (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
-            } catch (e) {}
+        function updateMenuActive(){
+            document.querySelectorAll('#menuSpeed .pill').forEach(p => p.classList.toggle('active', parseFloat(p.dataset.speed) === MBX.video.playbackRate));
         }
 
-        function showFallbackBox() {
-            if (document.getElementById('mbx-fallback')) { return; }
-            const div = document.createElement('div');
-            div.id = 'mbx-fallback';
-            div.className = 'big-file-warning';
-            div.innerHTML = '❌ <b>ব্রাউজারে প্লে করা যাচ্ছে না!</b><br>নিচের বাটনে চাপ দিয়ে এক্সটার্নাল প্লেয়ারে দেখুন 👇';
-            const b1 = document.createElement('button');
-            b1.textContent = '▶ MX Player';
-            b1.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:8px;border:none;background:#00ff88;color:#000;font-weight:800;cursor:pointer;';
-            b1.onclick = () => play_intent('com.mxtech.videoplayer.ad');
-            const b2 = document.createElement('button');
-            b2.textContent = '▶ VLC';
-            b2.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:8px;border:none;background:#ff8c00;color:#fff;font-weight:800;cursor:pointer;';
-            b2.onclick = () => play_intent('org.videolan.vlc');
-            div.appendChild(b1); div.appendChild(b2);
-            const sec = document.getElementById('player-section');
-            if (sec) { sec.insertAdjacentElement('afterend', div); }
+        /* ===== Subtitle (SRT→VTT কনভার্ট) ===== */
+        function srtToVtt(srt){
+            return 'WEBVTT\n\n' + srt.replace(/\r+/g,'').replace(/^\uFEFF/,'').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
         }
-
-        function pickSubtitle(art) {
+        function loadSubtitleFile(){
             const inp = document.createElement('input');
-            inp.type = 'file';
-            inp.accept = '.srt,.vtt,text/vtt';
+            inp.type = 'file'; inp.accept = '.srt,.vtt';
             inp.onchange = () => {
-                const f = inp.files[0];
-                if (!f) { return; }
-                const url = URL.createObjectURL(f);
-                const type = f.name.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt';
-                try {
-                    art.subtitle = {
-                        url: url,
-                        type: type,
-                        style: { color: '#fff', fontSize: '16px', textShadow: '0 0 4px #000', background: 'rgba(0,0,0,0.35)', padding: '2px 6px', borderRadius: '4px' }
-                    };
-                    art.notice.show = '✅ সাবটাইটেল লোড হয়েছে: ' + f.name;
-                } catch (e) {
-                    art.notice.show = '❌ সাবটাইটেল লোড ফেল করেছে';
-                }
+                const f = inp.files[0]; if (!f) return;
+                const rd = new FileReader();
+                rd.onload = () => {
+                    try {
+                        let content = rd.result;
+                        if (f.name.toLowerCase().endsWith('.srt')) content = srtToVtt(content);
+                        const url = URL.createObjectURL(new Blob([content], {type:'text/vtt'}));
+                        MBX.video.querySelectorAll('track').forEach(t => t.remove()); MBX.tracks = [];
+                        const tr = document.createElement('track');
+                        tr.kind = 'subtitles'; tr.label = f.name; tr.src = url; tr.default = true;
+                        MBX.video.appendChild(tr);
+                        setTimeout(() => { try { tr.mode = 'showing'; } catch(e){} }, 300);
+                        MBX.tracks = [tr];
+                        document.getElementById('subOff').classList.remove('active');
+                        toast('✅ সাবটাইটেল: ' + f.name);
+                        document.getElementById('mbxMenu').classList.remove('open');
+                    } catch(e){ toast('❌ সাব লোড ফেল'); }
+                };
+                rd.readAsText(f);
             };
             inp.click();
         }
 
-        function initPlayer() {
+        /* ===== প্রোগ্রেস বার (ফাইল কার্ডে) ===== */
+        function ensureProgressBar(){
+            const card = document.querySelector('.main-container .glass-card.text-center');
+            if (!card || document.getElementById('mbx-progress')) return;
+            const w = document.createElement('div');
+            w.id = 'mbx-progress'; w.style.cssText = 'margin-top:10px;text-align:left;';
+            w.innerHTML = '<div style="height:5px;background:rgba(255,255,255,.12);border-radius:5px;overflow:hidden;"><div id="mbx-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s;"></div></div><div id="mbx-progress-text" class="small" style="color:var(--dim);margin-top:4px;"></div>';
+            card.appendChild(w);
+        }
+        function updateProgressUI(video, key){
+            try {
+                const saved = parseFloat(localStorage.getItem(key));
+                if (!(saved > 0) || !video.duration) return;
+                ensureProgressBar();
+                const pct = Math.min(100, (saved / video.duration) * 100);
+                document.getElementById('mbx-progress-fill').style.width = pct + '%';
+                document.getElementById('mbx-progress-text').textContent = '📺 দেখা হয়েছে ' + Math.floor(pct) + '% (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
+            } catch(e){}
+        }
+        function showFallbackBox(){
+            if (document.getElementById('mbx-fallback')) return;
+            const d = document.createElement('div');
+            d.className = 'big-file-warning';
+            d.innerHTML = '❌ <b>ব্রাউজারে প্লে করা যাচ্ছে না!</b><br>এক্সটার্নাল প্লেয়ারে দেখুন 👇';
+            const b1 = document.createElement('button'); b1.textContent = '▶ MX Player';
+            b1.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:var(--accent);color:#04141a;font-weight:800;cursor:pointer;';
+            b1.onclick = () => play_intent('com.mxtech.videoplayer.ad');
+            const b2 = document.createElement('button'); b2.textContent = '▶ VLC';
+            b2.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:#ff8c00;color:#fff;font-weight:800;cursor:pointer;';
+            b2.onclick = () => play_intent('org.videolan.vlc');
+            d.appendChild(b1); d.appendChild(b2);
+            const sec = document.getElementById('player-section');
+            if (sec) sec.insertAdjacentElement('afterend', d);
+        }
+
+        /* ============================================================
+                        CUSTOM PLAYER ENGINE
+        ============================================================ */
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, lastSave: 0 };
+        let toastTimer = null;
+
+        function toast(msg, ms){
+            const t = document.getElementById('mbxToast');
+            t.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.classList.remove('show'), ms || 1600);
+        }
+
+        function initPlayer(){
+            const player = document.getElementById('mbxPlayer');
+            const video = document.getElementById('mbxVideo');
+            MBX.video = video;
             const VIDEO_URL = '{{ file_url }}'.replace("http://", "https://");
             const STORAGE_KEY = 'mbx_pos_' + VIDEO_URL;
+            video.src = VIDEO_URL;
 
-            const art = new Artplayer({
-                container: '#artplayer',
-                url: VIDEO_URL,
-                playbackRate: true,
-                setting: true, fullscreen: true, pip: false, theme: '#00ff88',
-                preload: 'auto',
-                hotkey: true,
-                playAndPause: false,
-                moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
-                controls: [
-                    {
-                        position: 'right',
-                        html: '<i class="fa-solid fa-arrows-rotate"></i>',
-                        tooltip: 'Rotate',
-                        click: function () {
-                            if (!art.fullscreen) { art.fullscreen = true; }
-                            if (screen.orientation && screen.orientation.lock) {
-                                screen.orientation.lock('landscape').catch(function(error) {
-                                    art.rotate = (art.rotate === 0) ? 90 : 0;
-                                });
-                            } else {
-                                art.rotate = (art.rotate === 0) ? 90 : 0;
-                            }
-                        },
-                    },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-left"></i>', tooltip: '-10s', click: () => { art.backward = 10; } },
-                    { position: 'right', html: '<i class="fa-solid fa-rotate-right"></i>', tooltip: '+10s', click: () => { art.forward = 10; } },
-                    { position: 'left', html: '<i class="fa-solid fa-closed-captioning"></i>', tooltip: 'Subtitle (.srt/.vtt)', click: () => pickSubtitle(art) }
-                ]
-            });
-            window.MBX_NOTICE = (msg) => { art.notice.show = msg; };
+            const btnPlay = document.getElementById('btnPlay');
+            const btnMute = document.getElementById('btnMute');
+            const centerBtn = document.getElementById('mbxCenter');
+            const statusEl = document.getElementById('mbxStatus');
+            const menu = document.getElementById('mbxMenu');
+            const seek = document.getElementById('mbxSeek');
+            const playedEl = document.getElementById('mbxPlayed');
+            const buffEl = document.getElementById('mbxBuffered');
+            const tipEl = document.getElementById('mbxSeekTip');
 
-            const video = art.video;
-            const container = document.querySelector('#artplayer');
-            const overlay = document.getElementById('mbx-overlay');
-            const centerBtn = document.getElementById('mbx-center');
-            const statusBadge = document.getElementById('mbx-status');
+            buildMenu();
 
-            // ===== সেন্টার বাটন + স্ট্যাটাস + অটো-হাইড =====
+            /* --- UI show/hide --- */
             let hideTimer = null;
-            function setCenterIcon(playing) {
+            function showUI(autoHide){
+                player.classList.add('ui-on');
+                clearTimeout(hideTimer);
+                if (autoHide && !video.paused) hideTimer = setTimeout(hideUI, 3000);
+            }
+            function hideUI(){
+                if (video.paused) return;
+                clearTimeout(hideTimer);
+                player.classList.remove('ui-on');
+                menu.classList.remove('open');
+            }
+            function toggleUI(){
+                if (player.classList.contains('ui-on')) {
+                    if (video.paused) { clearTimeout(hideTimer); return; }
+                    hideUI();
+                } else showUI(true);
+            }
+
+            function setPlayIcons(playing){
+                btnPlay.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
             }
-            function setStatus(playing) {
-                if (playing) { statusBadge.classList.remove('paused'); statusBadge.innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'; }
-                else { statusBadge.classList.add('paused'); statusBadge.innerHTML = '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused'; }
-            }
-            function showOverlay(autoHide) {
-                overlay.classList.add('show');
-                clearTimeout(hideTimer);
-                if (autoHide) { hideTimer = setTimeout(() => overlay.classList.remove('show'), 2500); }
-            }
-            function hideOverlay() {
-                clearTimeout(hideTimer);
-                overlay.classList.remove('show');
+            function setStatus(state){
+                statusEl.className = 'status-badge' + (state==='play' ? '' : state==='load' ? ' loading' : ' paused');
+                statusEl.innerHTML = state==='play' ? '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'
+                    : state==='load' ? '<i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading'
+                    : '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused';
             }
 
-            centerBtn.addEventListener('click', (e) => {
+            /* --- Controls --- */
+            function togglePlay(){ if (video.paused) video.play().catch(()=>{}); else video.pause(); }
+            btnPlay.addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
+            centerBtn.addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
+            document.getElementById('btnBack').addEventListener('click', e => { e.stopPropagation(); seekBy(-10); });
+            document.getElementById('btnFwd').addEventListener('click', e => { e.stopPropagation(); seekBy(10); });
+            btnMute.addEventListener('click', e => {
                 e.stopPropagation();
-                if (video.paused) { art.play(); } else { art.pause(); }
+                video.muted = !video.muted;
+                if (!video.muted && video.volume === 0) video.volume = 0.7;
+                updateMuteIcon(); showUI(true);
+            });
+            document.getElementById('volRange').addEventListener('input', e => {
+                video.volume = parseFloat(e.target.value);
+                video.muted = video.volume === 0;
+                updateMuteIcon();
+            });
+            function updateMuteIcon(){
+                const off = video.muted || video.volume === 0;
+                btnMute.innerHTML = off ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+                document.getElementById('volRange').value = off ? 0 : video.volume;
+            }
+            video.addEventListener('volumechange', () => {
+                updateMuteIcon();
+                try { localStorage.setItem('mbx_vol', video.muted ? 0 : video.volume); } catch(e){}
             });
 
-            art.on('play', () => { setCenterIcon(true); setStatus(true); showOverlay(true); tryBoost(art); });
-            art.on('pause', () => { setCenterIcon(false); setStatus(false); showOverlay(false); });
+            document.getElementById('btnSettings').addEventListener('click', e => {
+                e.stopPropagation(); menu.classList.toggle('open'); showUI(true);
+            });
+            document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target.id !== 'btnSettings') menu.classList.remove('open'); });
 
-            try {
-                const savedVol = parseFloat(localStorage.getItem('mbx_vol'));
-                if (!isNaN(savedVol)) { art.volume = savedVol; }
-            } catch (e) {}
-            art.on('video:volumechange', () => { try { localStorage.setItem('mbx_vol', art.volume); } catch (e) {} });
+            /* --- Fullscreen --- */
+            const btnFull = document.getElementById('btnFull');
+            function isFs(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+            function toggleFull(){
+                if (isFs()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+                else if (player.requestFullscreen) player.requestFullscreen();
+                else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
+                else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+            }
+            btnFull.addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
+            ['fullscreenchange','webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+                btnFull.innerHTML = isFs() ? '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
+                showUI(true);
+            }));
 
-            // SMART: Wake Lock
-            let wakeLock = null;
-            async function reqWake() {
-                try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); } } catch (e) {}
+            /* --- Seek bar (pointer: touch+mouse) --- */
+            let seeking = false;
+            function seekPos(e){
+                const r = seek.querySelector('.mbx-track').getBoundingClientRect();
+                const x = Math.min(Math.max(e.clientX - r.left, 0), r.width);
+                return { p: x / r.width, xPct: (x / r.width) * 100 };
             }
-            function relWake() {
-                try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) { wakeLock = null; }
+            seek.addEventListener('pointerdown', e => {
+                seeking = true; seek.classList.add('dragging');
+                try { seek.setPointerCapture(e.pointerId); } catch(err){}
+                const s = seekPos(e);
+                playedEl.style.width = s.xPct + '%';
+                tipEl.style.left = s.xPct + '%';
+                tipEl.textContent = fmtTime(s.p * (video.duration||0));
+                e.preventDefault();
+            });
+            seek.addEventListener('pointermove', e => {
+                if (!seeking) return;
+                const s = seekPos(e);
+                playedEl.style.width = s.xPct + '%';
+                tipEl.style.left = s.xPct + '%';
+                tipEl.textContent = fmtTime(s.p * (video.duration||0));
+            });
+            function endSeek(e){
+                if (!seeking) return;
+                seeking = false; seek.classList.remove('dragging');
+                const s = seekPos(e);
+                try { video.currentTime = s.p * (video.duration||0); } catch(err){}
+                savePos(s.p * (video.duration||0));
+                showUI(true);
             }
-            art.on('play', reqWake);
-            art.on('pause', relWake);
-            document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible' && !video.paused) { reqWake(); }
+            seek.addEventListener('pointerup', endSeek);
+            seek.addEventListener('pointercancel', () => { seeking = false; seek.classList.remove('dragging'); });
+
+            function seekBy(sec){
+                try { video.currentTime = Math.min(Math.max(video.currentTime + sec, 0), (video.duration||0) - 1); } catch(e){}
+                showRipple(sec < 0 ? 'left' : 'right');
+                toast((sec < 0 ? '⏪ ' : '⏩ ') + Math.abs(sec) + 's');
+                showUI(true);
+            }
+
+            /* --- Video events --- */
+            video.addEventListener('play', () => { setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake(); });
+            video.addEventListener('pause', () => { setPlayIcons(false); setStatus('paused'); showUI(false); relWake(); });
+            video.addEventListener('waiting', () => { if (!video.paused) setStatus('load'); });
+            video.addEventListener('playing', () => { setStatus('play'); MBX.hasPlayed = true; MBX.errTries = 0; });
+
+            video.addEventListener('timeupdate', () => {
+                document.getElementById('tCur').textContent = fmtTime(video.currentTime);
+                if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
+                const now = Date.now();
+                if (now - MBX.lastSave > 3000 && video.currentTime > 5) {
+                    MBX.lastSave = now; savePos(video.currentTime);
+                }
+            });
+            video.addEventListener('loadedmetadata', () => {
+                document.getElementById('tDur').textContent = fmtTime(video.duration);
+            });
+            video.addEventListener('progress', updateBuffered);
+            video.addEventListener('timeupdate', updateBuffered);
+            function updateBuffered(){
+                try {
+                    const b = video.buffered;
+                    if (b.length && video.duration) {
+                        const end = b.end(b.length - 1);
+                        buffEl.style.width = (end / video.duration * 100) + '%';
+                    }
+                } catch(e){}
+            }
+            video.addEventListener('ended', () => {
+                try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+                ensureProgressBar();
+                const f = document.getElementById('mbx-progress-fill');
+                if (f) f.style.width = '100%';
+                const t = document.getElementById('mbx-progress-text');
+                if (t) t.textContent = '✅ মুভি শেষ! ধন্যবাদ 🎬';
+            });
+            video.addEventListener('error', () => {
+                if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
+                MBX.errTries++;
+                toast('🔁 আবার চেষ্টা করছি (' + MBX.errTries + '/3)...');
+                setTimeout(() => { try { video.load(); video.play().catch(()=>{}); } catch(e){} }, 1500);
             });
 
-            // ==========================================
-            //  জেসচার (নতুন সহজ-সরল ভার্সন):
-            //  উপর-নিচ সোয়াইপ: বাঁয়ে=ব্রাইটনেস, ডানে=ভলিউম
-            //  বাঁয়ে-ডানে টান = সিক (প্রিভিউসহ)
-            //  ডাবল-ট্যাপ: বাঁয়ে ১/৩=-10s, ডানে ১/৩=+10s, মাঝ=পজ/প্লে
-            //  সিঙ্গেল ট্যাপ = কন্ট্রোল/ব্যাজ দেখাও-লুকাও
-            // ==========================================
-            const isUI = (t) => !!(t.closest && (t.closest('.art-bottom') || t.closest('.art-setting') || t.closest('.art-control') || t.closest('.art-notice') || t.closest('.art-progress') || t.closest('#mbx-center')));
-            function getBrightness() {
-                const m = (video.style.filter || '').match(/brightness\(([^)]+)\)/);
-                return m ? parseFloat(m[1]) : 1;
+            function savePos(t){
+                try { localStorage.setItem(STORAGE_KEY, t); } catch(e){}
+                updateProgressUI(video, STORAGE_KEY);
             }
-            function doSeek(delta, label) {
-                const target = Math.min(Math.max(video.currentTime + delta, 0), (video.duration || 0) - 1);
-                try { video.currentTime = target; } catch (e) {}
-                art.notice.show = label + ' → ' + fmtTime(target);
-            }
-            function showRipple(side) {
+
+            /* --- জেসচার: tap/double-tap/swipe/drag-seek --- */
+            const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center')));
+            function showRipple(side){
                 const r = document.createElement('div');
                 r.className = 'tap-ripple ' + side;
                 r.innerHTML = side === 'left' ? '<i class="fa-solid fa-backward"></i>' : '<i class="fa-solid fa-forward"></i>';
-                container.appendChild(r);
+                player.appendChild(r);
                 setTimeout(() => r.remove(), 500);
             }
+            let gX=0, gY=0, gTime=0, gBright=1, gVol=1, gMode=null, gMoved=false, gRect=null;
+            let lastTapT=0, lastTapX=0, tapTimer=null;
 
-            let gStartX = 0, gStartY = 0, gStartTime = 0, gBaseTime = 0, gStartBright = 1, gStartVol = 1;
-            let gMode = null, gMoved = false, gRect = null;
-            let lastTapTime = 0, lastTapX = 0;
-
-            container.addEventListener('touchstart', (e) => {
+            player.addEventListener('touchstart', e => {
+                if (menu.classList.contains('open') && !e.target.closest('.mbx-menu') && !e.target.closest('#btnSettings')) {
+                    menu.classList.remove('open'); return;
+                }
                 if (isUI(e.target)) { gMode = null; return; }
-                gRect = container.getBoundingClientRect();
-                gStartX = e.touches[0].clientX;
-                gStartY = e.touches[0].clientY;
-                gStartTime = Date.now();
-                gBaseTime = video.currentTime;
-                gStartBright = getBrightness();
-                gStartVol = video.volume;
-                gMode = 'pending';
-                gMoved = false;
+                gRect = player.getBoundingClientRect();
+                gX = e.touches[0].clientX; gY = e.touches[0].clientY;
+                gTime = video.currentTime;
+                gBright = parseFloat(((video.style.filter||'').match(/brightness\(([^)]+)\)/) || [])[1] || 1);
+                gVol = video.muted ? 0 : video.volume;
+                gMode = 'pending'; gMoved = false;
             }, { passive: true });
 
-            container.addEventListener('touchmove', (e) => {
-                if (!gMode) { return; }
-                const dx = e.touches[0].clientX - gStartX;
-                const dy = gStartY - e.touches[0].clientY;
-
+            player.addEventListener('touchmove', e => {
+                if (!gMode) return;
+                e.preventDefault();
+                const dx = e.touches[0].clientX - gX;
+                const dy = gY - e.touches[0].clientY;
                 if (gMode === 'pending') {
-                    if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
-                        gMode = 'h'; gMoved = true;
-                    } else if (Math.abs(dy) > 14) {
+                    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) { gMode = 'h'; gMoved = true; }
+                    else if (Math.abs(dy) > 12) {
                         gMoved = true;
-                        const xIn = e.touches[0].clientX - gRect.left;
-                        gMode = (xIn < gRect.width / 2) ? 'bright' : 'vol';
+                        const xin = e.touches[0].clientX - gRect.left;
+                        gMode = (xin < gRect.width/2) ? 'bright' : 'vol';
                     }
                 }
-
                 if (gMode === 'h') {
-                    e.preventDefault();
                     const secs = Math.round(dx / 10);
-                    const target = Math.min(Math.max(gBaseTime + secs, 0), (video.duration || 0) - 1);
-                    art.notice.show = (secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(target);
+                    const tgt = Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1);
+                    toast((secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(tgt), 30000);
                 } else if (gMode === 'bright') {
-                    e.preventDefault();
-                    const nb = Math.min(Math.max(gStartBright + dy / 800, 0.4), 2.0);
+                    const nb = Math.min(Math.max(gBright + dy/800, 0.35), 2);
                     video.style.filter = 'brightness(' + nb + ')';
-                    art.notice.show = 'Brightness: ' + Math.round(nb * 100) + '%';
+                    toast('🔆 Brightness: ' + Math.round(nb*100) + '%', 30000);
                 } else if (gMode === 'vol') {
-                    e.preventDefault();
-                    const nv = Math.min(Math.max(gStartVol + dy / 600, 0), 1);
-                    art.volume = nv;
-                    art.notice.show = 'Volume: ' + Math.round(nv * 100) + '%';
+                    const nv = Math.min(Math.max(gVol + dy/600, 0), 1);
+                    video.volume = nv; video.muted = nv === 0; updateMuteIcon();
+                    toast('🔊 Volume: ' + Math.round(nv*100) + '%', 30000);
                 }
             }, { passive: false });
 
-            container.addEventListener('touchend', (e) => {
-                const wasMode = gMode;
-                gMode = null;
-
-                if (wasMode === 'h') {
-                    const dx = e.changedTouches[0].clientX - gStartX;
+            player.addEventListener('touchend', e => {
+                if (gMode === 'h') {
+                    const dx = e.changedTouches[0].clientX - gX;
                     const secs = Math.round(dx / 10);
-                    doSeek(secs, '⏭️');
-                    setTimeout(() => { gMoved = false; }, 100);
+                    const tgt = Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1);
+                    try { video.currentTime = tgt; } catch(err){}
+                    toast('⏭️ ' + fmtTime(tgt));
+                    gMode = null; setTimeout(() => gMoved = false, 80); savePos(tgt);
                     return;
                 }
-                if (gMoved) { setTimeout(() => { gMoved = false; }, 100); return; }
-                if (isUI(e.target)) { return; }
+                gMode = null;
+                if (gMoved) { gMoved = false; return; }
+                if (isUI(e.target)) return;
 
-                const dt = Date.now() - gStartTime;
-                if (dt > 400) { return; }
-
-                const rect = container.getBoundingClientRect();
-                const x = e.changedTouches[0].clientX - rect.left;
                 const now = Date.now();
-
-                if (now - lastTapTime < 320 && Math.abs(x - lastTapX) < 80) {
-                    lastTapTime = 0;
-                    if (x < rect.width * 0.33) {
-                        doSeek(-10, '⏪');
-                        showRipple('left');
-                    } else if (x > rect.width * 0.67) {
-                        doSeek(10, '⏩');
-                        showRipple('right');
-                    } else {
-                        if (video.paused) { art.play(); } else { art.pause(); }
-                    }
-                    hideOverlay();
+                const rect = player.getBoundingClientRect();
+                const x = e.changedTouches[0].clientX - rect.left;
+                if (now - lastTapT < 300 && Math.abs(x - lastTapX) < 80) {
+                    clearTimeout(tapTimer); lastTapT = 0;
+                    const w3 = rect.width / 3;
+                    if (x < w3) { seekBy(-10); }
+                    else if (x > rect.width - w3) { seekBy(10); }
+                    else { togglePlay(); }
                 } else {
-                    lastTapTime = now;
-                    lastTapX = x;
-                    if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
+                    lastTapT = now; lastTapX = x;
+                    tapTimer = setTimeout(() => toggleUI(), 260);
                 }
             }, { passive: true });
+            player.addEventListener('touchcancel', () => { gMode = null; });
 
-            container.addEventListener('touchcancel', () => { gMode = null; });
-
-            container.addEventListener('click', (e) => {
-                if (e.pointerType === 'touch') { return; }
-                if (isUI(e.target)) { return; }
-                if (overlay.classList.contains('show')) { hideOverlay(); } else { showOverlay(!video.paused); }
+            player.addEventListener('click', e => {
+                if (e.pointerType === 'touch') return;
+                if (isUI(e.target)) return;
+                toggleUI();
             });
 
+            /* PC: কীবোর্ড */
+            document.addEventListener('keydown', e => {
+                if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+                if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+                else if (e.code === 'ArrowLeft') seekBy(-10);
+                else if (e.code === 'ArrowRight') seekBy(10);
+                else if (e.key.toLowerCase() === 'f') toggleFull();
+                else if (e.key.toLowerCase() === 'm') { video.muted = !video.muted; updateMuteIcon(); }
+            });
+
+            /* --- Wake Lock --- */
+            let wakeLock = null;
+            async function reqWake(){ try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
+            function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
+            document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
+
+            /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => {
-                    try {
-                        const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (window.innerWidth > window.innerHeight);
-                        if (land && !video.paused && !art.fullscreen) { art.fullscreen = true; }
-                    } catch (e) {}
+                    const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (innerWidth > innerHeight);
+                    if (land && !video.paused && !isFs()) toggleFull();
                 }, 300);
             });
 
-            // SMART: পজিশন সেভ + রিজিউম + প্রোগ্রেস বার
-            let lastSave = 0;
-            video.addEventListener('timeupdate', () => {
-                const now = Date.now();
-                if (now - lastSave > 3000 && video.currentTime > 5) {
-                    lastSave = now;
-                    try { localStorage.setItem(STORAGE_KEY, video.currentTime); } catch (e) {}
-                    updateProgressUI(video, STORAGE_KEY);
-                }
-            });
-            video.addEventListener('seeked', () => {
-                if (video.currentTime > 5) {
-                    try { localStorage.setItem(STORAGE_KEY, video.currentTime); } catch (e) {}
-                    updateProgressUI(video, STORAGE_KEY);
-                }
-            });
-            video.addEventListener('ended', () => {
-                try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-                try {
-                    ensureProgressBar();
-                    const fill = document.getElementById('mbx-progress-fill');
-                    if (fill) { fill.style.width = '100%'; }
-                    const txt = document.getElementById('mbx-progress-text');
-                    if (txt) { txt.textContent = '✅ মুভি শেষ! ধন্যবাদ 🎬'; }
-                } catch (e) {}
-            });
-
-            // SMART ওয়াচডগ: বাফার আছে কিন্তু ফ্রেম জমে → নেড় → রিলোড
-            function hasBufferAhead(t) {
-                try {
-                    const b = video.buffered;
-                    for (let i = 0; i < b.length; i++) {
-                        if (t >= b.start(i) - 0.5 && t < b.end(i) - 0.5) { return true; }
-                    }
-                } catch (e) {}
+            /* --- স্মার্ট ওয়াচডগ --- */
+            function hasBufferAhead(t){
+                try { const b = video.buffered;
+                    for (let i=0;i<b.length;i++){ if (t >= b.start(i)-0.5 && t < b.end(i)-0.5) return true; }
+                } catch(e){}
                 return false;
             }
-            let lastTime = 0, stuckCount = 0, hasPlayed = false, lastReload = 0;
-            video.addEventListener('playing', () => { hasPlayed = true; stuckCount = 0; });
+            let lastT = 0, stuck = 0, lastReload = 0;
             setInterval(() => {
-                if (!art || video.paused || video.ended || video.seeking) { return; }
+                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) return;
                 const t = video.currentTime;
-                const frozen = Math.abs(t - lastTime) < 0.1;
-                lastTime = t;
-                if (!frozen) { stuckCount = 0; return; }
-                if (!hasPlayed) { return; }
+                const frozen = Math.abs(t - lastT) < 0.1;
+                lastT = t;
+                if (!frozen) { stuck = 0; return; }
                 if (hasBufferAhead(t)) {
-                    stuckCount++;
-                    if (stuckCount === 2) {
-                        try { video.currentTime = t + 0.3; } catch (e) {}
-                        art.notice.show = '🔄 নিজে নিজে ঠিক করছি...';
-                    } else if (stuckCount >= 5) {
-                        stuckCount = 0;
+                    stuck++;
+                    if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
+                    else if (stuck >= 5) {
+                        stuck = 0;
                         if (Date.now() - lastReload > 30000) {
                             lastReload = Date.now();
                             const pos = t;
                             try {
-                                video.src = video.src;
                                 video.load();
-                                video.addEventListener('loadedmetadata', function onMeta() {
-                                    video.removeEventListener('loadedmetadata', onMeta);
-                                    try { video.currentTime = pos; } catch (e) {}
-                                    video.play().catch(() => {});
+                                video.addEventListener('loadedmetadata', function m(){
+                                    video.removeEventListener('loadedmetadata', m);
+                                    try { video.currentTime = pos; } catch(e){}
+                                    video.play().catch(()=>{});
                                 });
-                            } catch (e) {}
+                            } catch(e){}
                         }
                     }
-                } else {
-                    if (stuckCount === 0) { art.notice.show = '⏳ একটু অপেক্ষা করুন...'; }
                 }
             }, 2000);
 
-            // SMART: লোড ফেল → ৩ বার রিট্রাই → MX/VLC ফলব্যাক
-            let errTries = 0;
-            video.addEventListener('playing', () => { errTries = 0; });
-            video.addEventListener('error', () => {
-                if (errTries >= 3) {
-                    art.notice.show = '❌ ব্রাউজারে প্লে করা যাচ্ছে না';
-                    showFallbackBox();
-                    return;
-                }
-                errTries++;
-                art.notice.show = '🔁 আবার চেষ্টা করছি (' + errTries + '/3)...';
-                setTimeout(() => {
+            /* --- অটো-প্লে + রিজিউম --- */
+            try {
+                const sv = parseFloat(localStorage.getItem('mbx_vol'));
+                if (!isNaN(sv)) { video.volume = sv; video.muted = sv === 0; }
+            } catch(e){}
+            updateMuteIcon();
+
+            showUI(true);
+
+            video.play().then(() => {
+                toast('▶️ Auto Play (Sound ON)');
+            }).catch(() => {
+                video.muted = true;
+                video.play().then(() => {
+                    toast('🔊 স্ক্রিনে একবার ট্যাপ করলেই সাউন্ড চালু হবে', 4000);
+                    armTapUnmute();
+                }).catch(() => { armTapUnmute(); });
+            });
+
+            function armTapUnmute(){
+                const un = () => {
+                    player.removeEventListener('touchend', un); player.removeEventListener('click', un);
                     try {
-                        video.src = video.src;
-                        video.load();
-                        video.play().catch(() => {});
-                    } catch (e) {}
-                }, 1500);
-            });
+                        if (video.muted) video.muted = false;
+                        video.play().catch(()=>{});
+                        toast('🔊 Sound ON'); tryBoost();
+                    } catch(e){}
+                };
+                player.addEventListener('touchend', un);
+                player.addEventListener('click', un);
+            }
 
-            art.on('ready', () => { 
-                autoPlayVideo(art);
-                let resumed = false;
+            try {
+                const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+                if (saved && saved > 15) {
+                    const doSeek = () => {
+                        if (video.duration && saved < video.duration - 30) {
+                            try { video.currentTime = saved; } catch(e){}
+                            toast('⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন', 3500);
+                            updateProgressUI(video, STORAGE_KEY);
+                        }
+                    };
+                    if (video.readyState >= 1) doSeek();
+                    else video.addEventListener('loadedmetadata', doSeek, { once: true });
+                }
+            } catch(e){}
+
+            function tryBoost(){
+                if (window.audioBoosted || video.muted) return;
                 try {
-                    const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
-                    if (saved && saved > 15) {
-                        const seekTo = () => {
-                            if (video.duration && saved < video.duration - 30) {
-                                try { video.currentTime = saved; } catch (e) {}
-                                resumed = true;
-                                art.notice.show = '⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন';
-                                updateProgressUI(video, STORAGE_KEY);
-                            }
-                        };
-                        if (video.readyState >= 1) { seekTo(); } else { video.addEventListener('loadedmetadata', seekTo, { once: true }); }
-                    }
-                } catch (e) {}
-                video.addEventListener('seeked', function onRes() {
-                    if (resumed) {
-                        video.removeEventListener('seeked', onRes);
-                        setTimeout(() => { video.play().catch(() => {}); }, 300);
-                    }
-                });
-            });
-        }
-
-        // AUTO PLAY
-        function autoPlayVideo(art) {
-            const p = art.video.play();
-            if (p !== undefined) {
-                p.then(() => {
-                    art.notice.show = '▶️ Auto Play (Sound ON)';
-                    nudgeIfStuck(art);
-                }).catch(() => {
-                    art.muted = true;
-                    art.video.play().then(() => {
-                        art.notice.show = '🔊 স্ক্রিনে একবার ট্যাপ করলেই সাউন্ড চালু হবে';
-                        nudgeIfStuck(art);
-                        soundOnFirstTouch(art);
-                    }).catch(() => {
-                        soundOnFirstTouch(art);
-                    });
-                });
-            } else {
-                nudgeIfStuck(art);
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    const ctx = new AC();
+                    if (ctx.state === 'suspended') ctx.resume();
+                    const src = ctx.createMediaElementSource(video);
+                    const gain = ctx.createGain();
+                    gain.gain.value = 4;
+                    src.connect(gain); gain.connect(ctx.destination);
+                    window.audioBoosted = true;
+                } catch(e){}
             }
         }
 
-        function soundOnFirstTouch(art) {
-            const unmute = () => {
-                window.removeEventListener('click', unmute);
-                window.removeEventListener('touchstart', unmute);
-                try {
-                    if (art.muted) { art.muted = false; }
-                    const pp = art.video.play();
-                    if (pp && pp.catch) { pp.catch(() => {}); }
-                    art.notice.show = '🔊 Sound ON';
-                    tryBoost(art);
-                } catch (e) {}
-            };
-            window.addEventListener('click', unmute);
-            window.addEventListener('touchstart', unmute);
-        }
-
-        function nudgeIfStuck(art) {
-            let tries = 0;
-            const timer = setInterval(() => {
-                tries++;
-                const v = art.video;
-                if (v.currentTime > 0.5 || v.paused || tries > 20) {
-                    clearInterval(timer);
-                    return;
-                }
-                try { v.currentTime = 0.5; } catch (e) {}
-            }, 1500);
-        }
-
-        function tryBoost(art) {
-            if (window.audioBoosted || art.muted) { return; }
+        /* ===== 2GB+ সতর্কবার্তা ===== */
+        (function(){
             try {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AudioCtx();
-                if (ctx.state === 'suspended') { ctx.resume(); }
-                const source = ctx.createMediaElementSource(art.video);
-                const gainNode = ctx.createGain();
-                gainNode.gain.value = 4;
-                source.connect(gainNode);
-                gainNode.connect(ctx.destination);
-                window.audioBoosted = true;
-                art.notice.show = 'Sound Boosted to 400%';
-            } catch (e) { console.log("Boost Error"); }
-        }
-
-        // 2GB+ ফাইলের লাল সতর্কবার্তা
-        function checkFileSizeWarning() {
-            try {
-                const sizeText = "{{ file_size }}";
-                const m = sizeText.match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
-                if (!m) { return; }
-                const val = parseFloat(m[1]);
-                const unit = m[2].toUpperCase();
-                const isBig = (unit === 'GB' && val >= 2) || (unit === 'TB');
-                if (isBig) {
-                    const warn = document.createElement('div');
-                    warn.className = 'big-file-warning';
-                    warn.innerHTML = '⚠️ <b>এই ফাইলটি 2GB-এর বেশি!</b><br>টেলিগ্রামের নিয়মে 2GB+ ফাইল বট দিয়ে স্ট্রিম করা যায় না — শুধু লোডিং দেখাবে।<br>নিচের <b>⚡ HIGH SPEED DOWNLOAD</b> বাটন থেকে ডাউনলোড করে দেখুন। 🎬';
-                    const infoCard = document.querySelector('.main-container .glass-card.text-center');
-                    if (infoCard) { infoCard.insertAdjacentElement('afterend', warn); }
+                const m = "{{ file_size }}".match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
+                if (!m) return;
+                const v = parseFloat(m[1]); const u = m[2].toUpperCase();
+                if ((u === 'GB' && v >= 2) || u === 'TB') {
+                    const w = document.createElement('div');
+                    w.className = 'big-file-warning';
+                    w.innerHTML = '⚠️ <b>এই ফাইলটি 2GB-এর বেশি!</b><br>টেলিগ্রামের নিয়মে 2GB+ ফাইল বট দিয়ে স্ট্রিম হয় না — শুধু লোডিং দেখাবে।<br>নিচের <b>⚡ HIGH SPEED DOWNLOAD</b> থেকে ডাউনলোড করে দেখুন। 🎬';
+                    const card = document.querySelector('.main-container .glass-card.text-center');
+                    if (card) card.insertAdjacentElement('afterend', w);
                 }
-            } catch (e) {}
-        }
-        checkFileSizeWarning();
+            } catch(e){}
+        })();
 
-        function toggleDarkMode() {
-            document.body.classList.toggle('light-mode');
-            const icon = document.querySelector('#themeToggle i');
-            icon.className = document.body.classList.contains('light-mode') ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+        function toggleEyeCare(){
+            const o = document.getElementById('eyeCareOverlay');
+            o.style.display = (o.style.display === 'block') ? 'none' : 'block';
         }
-        function toggleEyeCare() {
-            const overlay = document.getElementById('eyeCareOverlay');
-            overlay.style.display = (overlay.style.display === 'block') ? 'none' : 'block';
-        }
-
-        function play_intent(pkg) { 
+        function play_intent(pkg){
             let url = '{{ file_url }}'.replace("http://", "https://");
-            window.location.href = `intent:${url}#Intent;package=${pkg};type=video/*;end`; 
+            window.location.href = `intent:${url}#Intent;package=${pkg};type=video/*;end`;
         }
-        function play_system() {
+        function play_system(){
             let url = '{{ file_url }}'.replace("http://", "https://");
             window.location.href = `intent:${url}#Intent;action=android.intent.action.VIEW;type=video/*;end`;
         }
-        function play_nplayer() {
-            let url = '{{ file_url }}'.replace("http://", "https://");
-            if (/Android/i.test(navigator.userAgent)) {
-                window.location.href = `intent:${url}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.newin.nplayer.pro;end`;
-            } else {
-                window.location.href = `nplayer-${url}`;
-            }
-        }
 
-        // PAGE OPEN HOLOBEI VIDEO AUTO PLAY START 🎬
-        try { initPlayer(); } catch (e) { console.log("Auto init error:", e); }
+        try { initPlayer(); } catch(e) { console.log("Player init error:", e); }
     </script>
 </body>
 </html>
