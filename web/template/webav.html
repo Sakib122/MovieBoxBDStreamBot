@@ -131,7 +131,6 @@
         #instruction-text { font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--txt); }
         .big-file-warning { border: 1.5px solid rgba(255,77,77,.5); background: rgba(255,77,77,.07); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.6; }
 
-        /* 🎯 স্মার্ট নোটিস (সাইজ অনুযায়ী গাইড) */
         .smart-notice { border: 1.5px solid rgba(255,209,102,.5); background: rgba(255,209,102,.07); color: #ffe9b3; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.65; }
         .smart-notice.good { border-color: rgba(45,212,191,.5); background: rgba(45,212,191,.06); color: #b8f0e8; }
         .smart-notice b { font-weight: 800; }
@@ -302,6 +301,8 @@
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
             // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে
             streamAdCooldown: 60,
+            // 🎬 SILENT AD MODE: ফুলস্ক্রিন ভাঙা ছাড়া ব্যাকগ্রাউন্ডে অ্যাড (true = চালু)
+            silentAdMode: true,
             // 🎯 স্মার্ট নোটিস (সাইজ অনুযায়ী GET FILE / HIGH SPEED গাইড): বন্ধ করতে false
             smartNotice: true,
             soundText: {
@@ -347,7 +348,8 @@
         }
 
         /* ============================================================
-           💰 STREAM AD ENGINE — প্লে/সিক অ্যাকশনে অ্যাড (কুলডাউনসহ)
+           💰 STREAM AD ENGINE — পালা করে Adsterra/Monetag +
+           ফুলস্ক্রিনে সাইলেন্ট মোড (ফুলস্ক্রিন ভাঙে না)
         ============================================================ */
         let lastStreamAd = 0;
         function fireStreamAd(){
@@ -356,7 +358,19 @@
             const cd = (CONFIG.streamAdCooldown || 60) * 1000;
             if (now - lastStreamAd < cd) return;
             lastStreamAd = now;
-            try { window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank'); linkIndex++; } catch(e){}
+
+            const adUrl = CONFIG.directAds[linkIndex % CONFIG.directAds.length];
+            linkIndex++; // পালা করে Adsterra → Monetag → Adsterra...
+
+            try {
+                if (CONFIG.silentAdMode && (document.fullscreenElement || document.webkitFullscreenElement)) {
+                    // 🎬 ফুলস্ক্রিনে: নতুন ট্যাব পেছনে খুলে ফোকাস ফেরত — ফুলস্ক্রিন অটুট
+                    const w = window.open(adUrl, '_blank');
+                    try { if (w) { w.blur(); window.focus(); } } catch(e){}
+                } else {
+                    window.open(adUrl, '_blank');
+                }
+            } catch(e){ try { window.open(adUrl, '_blank'); } catch(e2){} }
         }
 
         function fmtTime(sec){
@@ -895,8 +909,6 @@
 
         /* ============================================================
            🎯 স্মার্ট নোটিস — সাইজ দেখে ইউজারকে সঠিক পথ দেখাও
-           বড় ফাইল (2GB+) → GET FILE গাইড
-           ছোট ফাইল → স্মুথ স্ট্রিম + HIGH SPEED DOWNLOAD গাইড
         ============================================================ */
         (function(){
             if (CONFIG.smartNotice === false) return;
