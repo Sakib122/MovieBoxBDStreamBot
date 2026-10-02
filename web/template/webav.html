@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,7 +58,6 @@
         .mbx-center:active { transform: translate(-50%,-50%) scale(.9); background: rgba(34,211,238,.25); }
         .mbx-center .fa-play { margin-left: 4px; }
 
-        /* ⚡ সিক স্পিনার */
         .mbx-spinner { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 7; display: none; pointer-events: none; }
         .mbx-spinner.show { display: block; }
         .mbx-spinner .spin { width: 46px; height: 46px; border: 4px solid rgba(255,255,255,.18); border-top-color: var(--accent); border-radius: 50%; animation: spinAnim .8s linear infinite; }
@@ -143,7 +141,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Fast Seek | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Fast Seek | 4GB পর্যন্ত স্ট্রিম চলে! | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -244,7 +242,7 @@
             <div class="sound-fix-box">
                 <div class="lang-switch">
                     <button class="lang-btn active" id="bn-btn" onclick="setLanguage('bn')">বাংলা</button>
-                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">हिन्दी</button>
+                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">হিন্দি</button>
                     <button class="lang-btn" id="en-btn" onclick="setLanguage('en')">English</button>
                 </div>
                 <div id="instruction-text">
@@ -291,14 +289,16 @@
 
     <script>
         const CONFIG = {
-            notice: "⚡ Auto Play + Fast Seek | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Fast Seek | 4GB পর্যন্ত স্ট্রিম চলে! | Join @SakibMovieBox",
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
                 "https://omg10.com/4/10918781",
             ],
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
-            // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে (কম দিলে বেশি অ্যাড, বেশি দিলে কম)
+            // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে
             streamAdCooldown: 60,
+            // ⚠️ 2GB+ সতর্কবার্তা: প্রিমিয়াম আছে = false, শেষ হলে true করে দিবে
+            showBigFileWarning: false,
             soundText: {
                 bn: "সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧",
                 hi: "यदि आवाज़ नहीं आ रही है, तो नीचे दिए गए VLC/MX Player में स्ट्रीम देखें। 📱🎧",
@@ -352,6 +352,7 @@
             if (now - lastStreamAd < cd) return;
             lastStreamAd = now;
             try { window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank'); linkIndex++; } catch(e){}
+
         }
 
         function fmtTime(sec){
@@ -799,6 +800,14 @@
             function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
             document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
 
+            /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (innerWidth > innerHeight);
+                    if (land && !video.paused && !isFs()) toggleFull();
+                }, 300);
+            });
+
             /* --- স্মার্ট ওয়াচডগ --- */
             function hasBufferAhead(t){
                 try { const b = video.buffered;
@@ -833,7 +842,7 @@
                 }
             }, 2000);
 
-            /* --- অটো-প্লে (প্রথম লোডে অ্যাড নেই — ইউজার জেস্চারেই অ্যাড) --- */
+            /* --- অটো-প্লে --- */
             try {
                 const sv = parseFloat(localStorage.getItem('mbx_vol'));
                 if (!isNaN(sv)) { video.volume = sv; video.muted = sv === 0; }
@@ -880,8 +889,9 @@
             }
         }
 
-        /* ===== 2GB+ সতর্কবার্তা ===== */
+        /* ===== 2GB+ সতর্কবার্তা (CONFIG.showBigFileWarning = true হলেই শুধু দেখাবে) ===== */
         (function(){
+            if (CONFIG.showBigFileWarning === false) return;
             try {
                 const m = "{{ file_size }}".match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
                 if (!m) return;
