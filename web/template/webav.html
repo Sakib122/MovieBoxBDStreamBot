@@ -131,6 +131,11 @@
         #instruction-text { font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--txt); }
         .big-file-warning { border: 1.5px solid rgba(255,77,77,.5); background: rgba(255,77,77,.07); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.6; }
 
+        /* 🎯 স্মার্ট নোটিস (সাইজ অনুযায়ী গাইড) */
+        .smart-notice { border: 1.5px solid rgba(255,209,102,.5); background: rgba(255,209,102,.07); color: #ffe9b3; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.65; }
+        .smart-notice.good { border-color: rgba(45,212,191,.5); background: rgba(45,212,191,.06); color: #b8f0e8; }
+        .smart-notice b { font-weight: 800; }
+
         #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
         #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,165,0,.12); pointer-events: none; z-index: 9999; display: none; }
     </style>
@@ -141,7 +146,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Fast Seek | 4GB পর্যন্ত স্ট্রিম চলে! | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Fast Seek | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -289,7 +294,7 @@
 
     <script>
         const CONFIG = {
-            notice: "⚡ Auto Play + Fast Seek | 4GB পর্যন্ত স্ট্রিম চলে! | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Fast Seek | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox",
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
                 "https://omg10.com/4/10918781",
@@ -297,8 +302,8 @@
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
             // 💰 STREAM AD: প্লে/সিকে অ্যাড — কুলডাউন সেকেন্ডে
             streamAdCooldown: 60,
-            // ⚠️ 2GB+ সতর্কবার্তা: প্রিমিয়াম আছে = false, শেষ হলে true করে দিবে
-            showBigFileWarning: false,
+            // 🎯 স্মার্ট নোটিস (সাইজ অনুযায়ী GET FILE / HIGH SPEED গাইড): বন্ধ করতে false
+            smartNotice: true,
             soundText: {
                 bn: "সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧",
                 hi: "यदि आवाज़ नहीं आ रही है, तो नीचे दिए गए VLC/MX Player में स्ट्रीम देखें। 📱🎧",
@@ -352,7 +357,6 @@
             if (now - lastStreamAd < cd) return;
             lastStreamAd = now;
             try { window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank'); linkIndex++; } catch(e){}
-
         }
 
         function fmtTime(sec){
@@ -889,20 +893,31 @@
             }
         }
 
-        /* ===== 2GB+ সতর্কবার্তা (CONFIG.showBigFileWarning = true হলেই শুধু দেখাবে) ===== */
+        /* ============================================================
+           🎯 স্মার্ট নোটিস — সাইজ দেখে ইউজারকে সঠিক পথ দেখাও
+           বড় ফাইল (2GB+) → GET FILE গাইড
+           ছোট ফাইল → স্মুথ স্ট্রিম + HIGH SPEED DOWNLOAD গাইড
+        ============================================================ */
         (function(){
-            if (CONFIG.showBigFileWarning === false) return;
+            if (CONFIG.smartNotice === false) return;
             try {
                 const m = "{{ file_size }}".match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
                 if (!m) return;
-                const v = parseFloat(m[1]); const u = m[2].toUpperCase();
-                if ((u === 'GB' && v >= 2) || u === 'TB') {
-                    const w = document.createElement('div');
-                    w.className = 'big-file-warning';
-                    w.innerHTML = '⚠️ <b>এই ফাইলটি 2GB-এর বেশি!</b><br>টেলিগ্রামের নিয়মে 2GB+ ফাইল বট দিয়ে স্ট্রিম হয় না — শুধু লোডিং দেখাবে।<br>নিচের <b>⚡ HIGH SPEED DOWNLOAD</b> থেকে ডাউনলোড করে দেখুন। 🎬';
-                    const card = document.querySelector('.main-container .glass-card.text-center');
-                    if (card) card.insertAdjacentElement('afterend', w);
+                const v = parseFloat(m[1]);
+                const u = m[2].toUpperCase();
+                const isBig = (u === 'GB' && v >= 2) || (u === 'TB');
+                const card = document.querySelector('.main-container .glass-card.text-center');
+                if (!card) return;
+
+                const box = document.createElement('div');
+                if (isBig) {
+                    box.className = 'smart-notice';
+                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে নিচের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলে লোড হতে একটু সময় লাগতে পারে, ধৈর্য ধরে অপেক্ষা করুন। 🙏';
+                } else {
+                    box.className = 'smart-notice good';
+                    box.innerHTML = '✅ <b>এই ফাইলটি আরামসে স্ট্রিম করা যাবে!</b><br>চাইলে <b>⚡ HIGH SPEED DOWNLOAD</b> দিয়ে সরাসরি ডাউনলোডও করতে পারেন। 🎬';
                 }
+                card.insertAdjacentElement('afterend', box);
             } catch(e){}
         })();
 
