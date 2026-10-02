@@ -33,7 +33,6 @@
 
         .main-container { max-width: 620px; margin: 0 auto; padding: 14px 14px 24px 14px; }
 
-        /* ============ PLAYER CARD ============ */
         #player-section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; z-index: 2100; }
 
         .player-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px 11px; }
@@ -43,7 +42,6 @@
         .status-badge.paused { background: rgba(255,255,255,.06); color: var(--dim); border-color: var(--border); }
         .status-badge.loading { background: rgba(255,209,102,.08); color: #ffd166; border-color: rgba(255,209,102,.3); }
 
-        /* ============ CUSTOM PLAYER ============ */
         .mbx-player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; touch-action: none; user-select: none; }
         .mbx-player:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
         .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
@@ -81,7 +79,6 @@
         .mbx-vol { display: flex; align-items: center; }
         #volRange { width: 54px; accent-color: var(--accent); cursor: pointer; height: 3px; }
 
-        /* SMART: মোবাইলে কম্প্যাক্ট — স্লাইডার লুকিয়ে সব বাটন (ফুলস্ক্রিনসহ) ফিট */
         @media (max-width: 520px) {
             #volRange { display: none; }
             .mbx-btn { width: 30px; height: 30px; font-size: 13px; }
@@ -92,7 +89,6 @@
             .mbx-center { width: 60px; height: 60px; font-size: 20px; }
         }
 
-        /* Settings menu */
         .mbx-menu { position: absolute; right: 8px; bottom: 52px; z-index: 8; background: rgba(13,15,19,.97); border: 1px solid var(--border); border-radius: 13px; padding: 10px 12px; min-width: 235px; display: none; backdrop-filter: blur(12px); box-shadow: 0 12px 34px rgba(0,0,0,.55); }
         .mbx-menu.open { display: block; }
         .mm-head { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--dim); margin: 8px 0 6px; }
@@ -102,16 +98,13 @@
         .pill.active { border-color: var(--accent); color: var(--accent); background: rgba(34,211,238,.08); }
         .pill.clickable { cursor: pointer; }
 
-        /* Toast */
         .mbx-toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; background: rgba(10,12,16,.88); border: 1px solid var(--border); color: #fff; padding: 7px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
         .mbx-toast.show { opacity: 1; }
 
-        /* Ripple */
         .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 68px; height: 68px; border-radius: 50%; background: rgba(34,211,238,.22); border: 1px solid rgba(34,211,238,.4); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 18px; z-index: 4; animation: rip .5s ease-out forwards; pointer-events: none; }
         .tap-ripple.left { left: 8%; } .tap-ripple.right { right: 8%; }
         @keyframes rip { from { opacity: 1; transform: translateY(-50%) scale(.6); } to { opacity: 0; transform: translateY(-50%) scale(1.35); } }
 
-        /* Movie meta */
         .movie-meta { padding: 12px 15px 14px; background: var(--card2); border-top: 1px solid var(--border); }
         .mm-title { font-weight: 800; font-size: 14.5px; margin-bottom: 9px; color: #fff; }
         .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
@@ -143,7 +136,7 @@
     <div id="eyeCareOverlay"></div>
 
     <div class="notice-bar" id="notice-container">
-        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Resume | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
+        <marquee scrollamount="6" id="marquee-element">⚡ Auto Play + Fast Seek | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox</marquee>
     </div>
 
     <nav class="navbar d-flex justify-content-between align-items-center">
@@ -289,7 +282,7 @@
 
     <script>
         const CONFIG = {
-            notice: "⚡ Auto Play + Resume | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
+            notice: "⚡ Auto Play + Fast Seek | ⚠️ 2GB+ ফাইল স্ট্রিম হয় না — Download করুন | Join @SakibMovieBox",
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
                 "https://omg10.com/4/10918781",
@@ -382,7 +375,7 @@
         }
         buildFileInfoUI();
 
-        /* ===== Settings menu (Quality / Audio / Speed / Subtitle) ===== */
+        /* ===== Settings menu ===== */
         function buildMenu(){
             const info = parseFileInfo();
             document.getElementById('menuQuality').innerHTML = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
@@ -410,7 +403,7 @@
             document.querySelectorAll('#menuSpeed .pill').forEach(p => p.classList.toggle('active', parseFloat(p.dataset.speed) === MBX.video.playbackRate));
         }
 
-        /* ===== Subtitle (SRT→VTT কনভার্ট) ===== */
+        /* ===== Subtitle ===== */
         function srtToVtt(srt){
             return 'WEBVTT\n\n' + srt.replace(/\r+/g,'').replace(/^\uFEFF/,'').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
         }
@@ -441,25 +434,6 @@
             inp.click();
         }
 
-        /* ===== প্রোগ্রেস বার (ফাইল কার্ডে) ===== */
-        function ensureProgressBar(){
-            const card = document.querySelector('.main-container .glass-card.text-center');
-            if (!card || document.getElementById('mbx-progress')) return;
-            const w = document.createElement('div');
-            w.id = 'mbx-progress'; w.style.cssText = 'margin-top:10px;text-align:left;';
-            w.innerHTML = '<div style="height:5px;background:rgba(255,255,255,.12);border-radius:5px;overflow:hidden;"><div id="mbx-progress-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s;"></div></div><div id="mbx-progress-text" class="small" style="color:var(--dim);margin-top:4px;"></div>';
-            card.appendChild(w);
-        }
-        function updateProgressUI(video, key){
-            try {
-                const saved = parseFloat(localStorage.getItem(key));
-                if (!(saved > 0) || !video.duration) return;
-                ensureProgressBar();
-                const pct = Math.min(100, (saved / video.duration) * 100);
-                document.getElementById('mbx-progress-fill').style.width = pct + '%';
-                document.getElementById('mbx-progress-text').textContent = '📺 দেখা হয়েছে ' + Math.floor(pct) + '% (' + fmtTime(saved) + ' / ' + fmtTime(video.duration) + ')';
-            } catch(e){}
-        }
         function showFallbackBox(){
             if (document.getElementById('mbx-fallback')) return;
             const d = document.createElement('div');
@@ -479,7 +453,7 @@
         /* ============================================================
                         CUSTOM PLAYER ENGINE
         ============================================================ */
-        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, lastSave: 0 };
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0 };
         let toastTimer = null;
 
         function toast(msg, ms){
@@ -493,9 +467,7 @@
             const player = document.getElementById('mbxPlayer');
             const video = document.getElementById('mbxVideo');
             MBX.video = video;
-            const VIDEO_URL = '{{ file_url }}'.replace("http://", "https://");
-            const STORAGE_KEY = 'mbx_pos_' + VIDEO_URL;
-            video.src = VIDEO_URL;
+            video.src = '{{ file_url }}'.replace("http://", "https://");
 
             const btnPlay = document.getElementById('btnPlay');
             const btnMute = document.getElementById('btnMute');
@@ -572,20 +544,56 @@
             });
             document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target.id !== 'btnSettings') menu.classList.remove('open'); });
 
-            /* --- Fullscreen --- */
+            /* --- Fullscreen + অটো-রোটেট (ল্যান্ডস্কেপ লক) --- */
             const btnFull = document.getElementById('btnFull');
             function isFs(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+            async function lockLandscape(){
+                try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch(e){}
+            }
+            function unlockOrientation(){
+                try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+            }
             function toggleFull(){
-                if (isFs()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
-                else if (player.requestFullscreen) player.requestFullscreen();
-                else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
-                else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+                if (isFs()) {
+                    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                } else {
+                    if (player.requestFullscreen) player.requestFullscreen();
+                    else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
+                    else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+                }
             }
             btnFull.addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
             ['fullscreenchange','webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
-                btnFull.innerHTML = isFs() ? '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
+                const fs = isFs();
+                btnFull.innerHTML = fs ? '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
+                if (fs) { lockLandscape(); } else { unlockOrientation(); }
                 showUI(true);
             }));
+
+            /* --- ⚡ FAST SEEK ENGINE ---
+               বড় লাফে fastSeek (কী-ফ্রেমে সাথে সাথে) + Loading ব্যাজ + বাফার হলেই অটো-প্লে */
+            let wantPlayAfterSeek = false;
+            function doSeek(t){
+                t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
+                try {
+                    if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
+                    else { video.currentTime = t; }
+                } catch(e){ try { video.currentTime = t; } catch(e2){} }
+                if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); }
+            }
+            video.addEventListener('canplay', () => {
+                if (wantPlayAfterSeek) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+            });
+            video.addEventListener('seeked', () => {
+                if (wantPlayAfterSeek && video.readyState >= 2) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+            });
+
+            function seekBy(sec){
+                doSeek(video.currentTime + sec);
+                showRipple(sec < 0 ? 'left' : 'right');
+                toast((sec < 0 ? '⏪ ' : '⏩ ') + Math.abs(sec) + 's');
+                showUI(true);
+            }
 
             /* --- Seek bar (pointer: touch+mouse) --- */
             let seeking = false;
@@ -614,19 +622,11 @@
                 if (!seeking) return;
                 seeking = false; seek.classList.remove('dragging');
                 const s = seekPos(e);
-                try { video.currentTime = s.p * (video.duration||0); } catch(err){}
-                savePos(s.p * (video.duration||0));
+                doSeek(s.p * (video.duration||0));
                 showUI(true);
             }
             seek.addEventListener('pointerup', endSeek);
             seek.addEventListener('pointercancel', () => { seeking = false; seek.classList.remove('dragging'); });
-
-            function seekBy(sec){
-                try { video.currentTime = Math.min(Math.max(video.currentTime + sec, 0), (video.duration||0) - 1); } catch(e){}
-                showRipple(sec < 0 ? 'left' : 'right');
-                toast((sec < 0 ? '⏪ ' : '⏩ ') + Math.abs(sec) + 's');
-                showUI(true);
-            }
 
             /* --- Video events --- */
             video.addEventListener('play', () => { setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake(); });
@@ -637,10 +637,6 @@
             video.addEventListener('timeupdate', () => {
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
-                const now = Date.now();
-                if (now - MBX.lastSave > 3000 && video.currentTime > 5) {
-                    MBX.lastSave = now; savePos(video.currentTime);
-                }
             });
             video.addEventListener('loadedmetadata', () => {
                 document.getElementById('tDur').textContent = fmtTime(video.duration);
@@ -657,12 +653,7 @@
                 } catch(e){}
             }
             video.addEventListener('ended', () => {
-                try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
-                ensureProgressBar();
-                const f = document.getElementById('mbx-progress-fill');
-                if (f) f.style.width = '100%';
-                const t = document.getElementById('mbx-progress-text');
-                if (t) t.textContent = '✅ মুভি শেষ! ধন্যবাদ 🎬';
+                setPlayIcons(false); setStatus('paused'); showUI(false);
             });
             video.addEventListener('error', () => {
                 if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
@@ -671,12 +662,7 @@
                 setTimeout(() => { try { video.load(); video.play().catch(()=>{}); } catch(e){} }, 1500);
             });
 
-            function savePos(t){
-                try { localStorage.setItem(STORAGE_KEY, t); } catch(e){}
-                updateProgressUI(video, STORAGE_KEY);
-            }
-
-            /* --- জেসচার: tap/double-tap/swipe/drag-seek --- */
+            /* --- জেসচার --- */
             const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center')));
             function showRipple(side){
                 const r = document.createElement('div');
@@ -733,10 +719,9 @@
                 if (gMode === 'h') {
                     const dx = e.changedTouches[0].clientX - gX;
                     const secs = Math.round(dx / 10);
-                    const tgt = Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1);
-                    try { video.currentTime = tgt; } catch(err){}
-                    toast('⏭️ ' + fmtTime(tgt));
-                    gMode = null; setTimeout(() => gMoved = false, 80); savePos(tgt);
+                    doSeek(gTime + secs);
+                    toast('⏭️ ' + fmtTime(Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1)));
+                    gMode = null; setTimeout(() => gMoved = false, 80);
                     return;
                 }
                 gMode = null;
@@ -781,14 +766,6 @@
             function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
             document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
 
-            /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
-            window.addEventListener('orientationchange', () => {
-                setTimeout(() => {
-                    const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (innerWidth > innerHeight);
-                    if (land && !video.paused && !isFs()) toggleFull();
-                }, 300);
-            });
-
             /* --- স্মার্ট ওয়াচডগ --- */
             function hasBufferAhead(t){
                 try { const b = video.buffered;
@@ -815,8 +792,7 @@
                                 video.load();
                                 video.addEventListener('loadedmetadata', function m(){
                                     video.removeEventListener('loadedmetadata', m);
-                                    try { video.currentTime = pos; } catch(e){}
-                                    video.play().catch(()=>{});
+                                    doSeek(pos);
                                 });
                             } catch(e){}
                         }
@@ -824,7 +800,7 @@
                 }
             }, 2000);
 
-            /* --- অটো-প্লে + রিজিউম --- */
+            /* --- অটো-প্লে (রিজিউম নাই — সবসময় প্রথম থেকে) --- */
             try {
                 const sv = parseFloat(localStorage.getItem('mbx_vol'));
                 if (!isNaN(sv)) { video.volume = sv; video.muted = sv === 0; }
@@ -855,21 +831,6 @@
                 player.addEventListener('touchend', un);
                 player.addEventListener('click', un);
             }
-
-            try {
-                const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
-                if (saved && saved > 15) {
-                    const doSeek = () => {
-                        if (video.duration && saved < video.duration - 30) {
-                            try { video.currentTime = saved; } catch(e){}
-                            toast('⏩ আগেরবার ' + fmtTime(saved) + ' পর্যন্ত দেখেছেন', 3500);
-                            updateProgressUI(video, STORAGE_KEY);
-                        }
-                    };
-                    if (video.readyState >= 1) doSeek();
-                    else video.addEventListener('loadedmetadata', doSeek, { once: true });
-                }
-            } catch(e){}
 
             function tryBoost(){
                 if (window.audioBoosted || video.muted) return;
