@@ -730,7 +730,7 @@
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
             });
-                        /* ⚡ SMART PRELOAD: দেখার সময় পেছনে পরের অংশের ডেটা আগে টানা
+            /* ⚡ SMART PRELOAD: দেখার সময় পেছনে পরের অংশের ডেটা আগে টানা
                → ছোট সিকে লোডিং প্রায় শূন্য, বড় সিকেও দ্রুত */
             let lastPreload = 0;
             video.addEventListener('timeupdate', () => {
@@ -937,6 +937,25 @@
             updateMuteIcon();
 
             showUI(true);
+
+            /* 🎯 START FIX: শুরুতে 00:00-তে ফ্রিজ হলে নিজে নিজে জাগিয়ে তোলা */
+            (function startKick(){
+                let kicks = 0;
+                const timer = setInterval(() => {
+                    const v = video;
+                    if (!v.paused && v.currentTime < 0.5) {
+                        kicks++;
+                        if (kicks > 12) { clearInterval(timer); return; } // সর্বোচ্চ ~৩০ সেকেন্ড চেষ্টা
+                        try {
+                            if (v.buffered.length && v.buffered.end(0) > 0.5) {
+                                v.currentTime = 0.5; // ছোট ধাক্কা — এটাই জাগায়
+                            }
+                        } catch(e){}
+                    } else if (v.currentTime >= 0.5 || v.paused) {
+                        clearInterval(timer); // চলছে বা থামানো হলো — কাজ শেষ
+                    }
+                }, 1500);
+            })();
 
             video.play().then(() => {
                 toast('▶️ Auto Play (Sound ON)');
