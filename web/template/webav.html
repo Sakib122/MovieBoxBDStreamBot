@@ -730,6 +730,27 @@
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
             });
+                        /* ⚡ SMART PRELOAD: দেখার সময় পেছনে পরের অংশের ডেটা আগে টানা
+               → ছোট সিকে লোডিং প্রায় শূন্য, বড় সিকেও দ্রুত */
+            let lastPreload = 0;
+            video.addEventListener('timeupdate', () => {
+                const now = Date.now();
+                if (now - lastPreload < 4000) return; // ৪ সেকেন্ড পর পর চেক
+                lastPreload = now;
+                try {
+                    const ahead = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0;
+                    // সামনে ২০ সেকেন্ডের কম বাফার থাকলে ছোট লাফ দিয়ে টান ধরো
+                    if (!video.paused && video.duration && (ahead - video.currentTime) < 20 && ahead < video.duration - 5) {
+                        const poke = Math.min(ahead + 1, video.duration - 1);
+                        const tmp = video.currentTime;
+                        video.currentTime = poke;
+                        video.addEventListener('seeked', function back() {
+                            video.removeEventListener('seeked', back);
+                            try { video.currentTime = tmp; } catch(e){}
+                        });
+                    }
+                } catch(e){}
+            });
             video.addEventListener('loadedmetadata', () => {
                 document.getElementById('tDur').textContent = fmtTime(video.duration);
             });
