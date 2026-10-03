@@ -730,34 +730,6 @@
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
             });
-            /* ⚡ SMART PRELOAD v3: শুধু সামনের দিকে বাফার (পিছনে দরকার নেই)
-               - শুরুর ১৫ সেকেন্ডে চলবে না (START FIX-এর সাথে লড়াই এড়াতে)
-               - মাঝপথে ২০ সেকেন্ডের বাফার কমলে সামনে ঝাঁকুনি দিয়ে আগে টানবে */
-            let preloadBusy = false;
-            let lastPreload = 0;
-            video.addEventListener('timeupdate', () => {
-                const now = Date.now();
-                if (preloadBusy) return;
-                if (now - lastPreload < 4000) return; // ৪ সেকেন্ড পর পর চেক
-                if (video.currentTime < 15) return; // শুরুর ১৫ সেকেন্ডে হাত না
-                lastPreload = now;
-                try {
-                    const ahead = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0;
-                    if (!video.paused && video.duration && (ahead - video.currentTime) < 20 && ahead < video.duration - 5) {
-                        const poke = Math.min(ahead + 1, video.duration - 1);
-                        const tmp = video.currentTime;
-                        preloadBusy = true;
-                        video.currentTime = poke; // সামনে ঝাঁকুনি — ডেটা টানা
-                        const back = () => {
-                            video.removeEventListener('seeked', back);
-                            try { video.currentTime = tmp; } catch(e){} // ফিরে এসে চলতে থাকো
-                            setTimeout(() => { preloadBusy = false; }, 300);
-                        };
-                        video.addEventListener('seeked', back);
-                        setTimeout(() => { preloadBusy = false; }, 2000); // নিরাপত্তা
-                    }
-                } catch(e){}
-            });
             video.addEventListener('loadedmetadata', () => {
                 document.getElementById('tDur').textContent = fmtTime(video.duration);
             });
