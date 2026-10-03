@@ -7,7 +7,7 @@ from web.bot import work_loads
 from pyrogram import Client, utils, raw
 from .file_properties import get_file_ids
 from pyrogram.session import Session, Auth
-from pyrogram.errors import AuthBytesInvalid
+from pyrogram.errors import AuthBytesInvalid, FileReferenceExpired
 from web.server.exceptions import FileNotFound
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
 
@@ -15,47 +15,53 @@ class ByteStreamer:
     def __init__(self, client: Client):
         self.clean_timer = 30 * 60
         self.client: Client = client
-        self.cached_file_ids: Dict[int, FileId] = {}
-        # ⚡ প্রিমিয়াম ফ্রেশ-রেফারেন্স ক্যাশ: id -> (file_id, timestamp)
+        # ⚡ ক্যাশ এখন (file_id, timestamp) — টিকিট ১০ মিনিটের বেশি পুরনো হলে অটো ফ্রেশ
+        self.cached_file_ids: Dict[int, tuple] = {}
+        self.ref_ttl = 10 * 60
         self.premium_cache: Dict[int, tuple] = {}
-        self.premium_ttl = 300  # ৫ মিনিট — টিকিট ঘণ্টার পর ঘণ্টা বৈধ থাকে
+        self.premium_ttl = 5 * 60
         try:
             asyncio.create_task(self.clean_cache())
         except RuntimeError:
             pass 
 
     async def get_file_properties(self, id: int) -> FileId:
-        # ⚡ প্রিমিয়াম (ইউজার) ক্লায়েন্ট: নিজের নামে ফ্রেশ টিকিট, তবে ৫ মিনিট ক্যাশে
-        # (প্রতি সিকে বাড়তি রাউন্ড-ট্রিপ বাদ = দ্রুত সিক)
+        now = time.time()
+
+        # ⚡ প্রিমিয়াম (ইউজার অ্যাকাউন্ট): নিজের নামে ফ্রেশ টিকিট, ৫ মিনিট ক্যাশ
         try:
             me = await self.client.get_me()
             if me and not getattr(me, "is_bot", True):
-                now = time.time()
-                entry = self.premium_cache.get(id)
-                if entry and (now - entry[1]) < self.premium_ttl:
+                e = self.premium_cache.get(id)
+                if e and (now - e[1]) < self.premium_ttl:
                     logging.debug(f"Premium cached reference for ID {id}")
-                    return entry[0]
-                file_id = await get_file_ids(self.client, BIN_CHANNEL, id)
-                if file_id:
-                    self.premium_cache[id] = (file_id, now)
-                    logging.info(f"Fresh file reference (premium client) for ID {id}")
-                    return file_id
+                    return e[0]
+                fid = await get_file_ids(self.client, BIN_CHANNEL, id)
+                if fid:
+                    self.premium_cache[id] = (fid, now)
+                    logging.info(f"Fresh file reference (premium) for ID {id}")
+                    return fid
         except Exception as e:
             logging.warning(f"Premium fresh-fetch failed for ID {id}: {e}")
 
-        # বট ক্লায়েন্ট: আগের মতোই ক্যাশ (স্পিড অক্ষত)
-        if id not in self.cached_file_ids:
-            await self.generate_file_properties(id)
-            logging.debug(f"Cached file properties for message with ID {id}")
-        return self.cached_file_ids[id]
+        # ⚡ বট ক্লায়েন্ট: ক্যাশ, কিন্তু ১০ মিনিটের পুরনো টিকিট হলে ফ্রেশ নেয়
+        e = self.cached_file_ids.get(id)
+        if e and (now - e[1]) < self.ref_ttl:
+            return e[0]
+
+        fid = await get_file_ids(self.client, BIN_CHANNEL, id)
+        if not fid:
+            raise FileNotFound
+        self.cached_file_ids[id] = (fid, now)
+        logging.debug(f"Generated file properties for message with ID {id}")
+        return fid
 
     async def generate_file_properties(self, id: int) -> FileId:
-        file_id = await get_file_ids(self.client, BIN_CHANNEL, id)
-        logging.debug(f"Generated file ID and Unique ID for message with ID {id}")
-        if not file_id:
+        fid = await get_file_ids(self.client, BIN_CHANNEL, id)
+        if not fid:
             raise FileNotFound
-        self.cached_file_ids[id] = file_id
-        return self.cached_file_ids[id]
+        self.cached_file_ids[id] = (fid, time.time())
+        return fid
 
     async def generate_media_session(self, client: Client, file_id: FileId) -> Session:
         media_session = client.media_sessions.get(file_id.dc_id, None)
@@ -152,63 +158,74 @@ class ByteStreamer:
         last_part_cut: int,
         part_count: int,
         chunk_size: int,
+        msg_id: int = None,
     ) -> Union[str, None]:
         client = self.client
         work_loads[index] += 1
-        logging.debug(f"Starting to yield file with client {index}.")
         current_part = 1
 
         try:
-            media_session = await self.generate_media_session(client, file_id)
-            location = await self.get_location(file_id)
-
-            r = await media_session.send(
-                raw.functions.upload.GetFile(
-                    location=location, offset=offset, limit=chunk_size
-                ),
-            )
-            if isinstance(r, raw.types.upload.File):
-                while True:
-                    chunk = r.bytes
-                    if not chunk:
-                        break
-                    elif part_count == 1:
-                        yield chunk[first_part_cut:last_part_cut]
-                    elif current_part == 1:
-                        yield chunk[first_part_cut:]
-                    elif current_part == part_count:
-                        yield chunk[:last_part_cut]
-                    else:
-                        yield chunk
-
-                    current_part += 1
-                    offset += chunk_size
-
-                    if current_part > part_count:
-                        break
+            # 🔁 টিকিট মেয়াদ শেষ হলে নিজে নিজে ফ্রেশ নিয়ে ১ বার রিট্রাই
+            for attempt in range(2):
+                try:
+                    media_session = await self.generate_media_session(client, file_id)
+                    location = await self.get_location(file_id)
 
                     r = await media_session.send(
                         raw.functions.upload.GetFile(
                             location=location, offset=offset, limit=chunk_size
                         ),
                     )
+                    if isinstance(r, raw.types.upload.File):
+                        while True:
+                            chunk = r.bytes
+                            if not chunk:
+                                break
+                            elif part_count == 1:
+                                yield chunk[first_part_cut:last_part_cut]
+                            elif current_part == 1:
+                                yield chunk[first_part_cut:]
+                            elif current_part == part_count:
+                                yield chunk[:last_part_cut]
+                            else:
+                                yield chunk
+
+                            current_part += 1
+                            offset += chunk_size
+
+                            if current_part > part_count:
+                                break
+
+                            r = await media_session.send(
+                                raw.functions.upload.GetFile(
+                                    location=location, offset=offset, limit=chunk_size
+                                ),
+                            )
+                    return
+                except FileReferenceExpired:
+                    logging.warning(f"FILE_REFERENCE_EXPIRED for msg {msg_id} (attempt {attempt + 1}) — refreshing...")
+                    if msg_id and attempt == 0:
+                        fid = await get_file_ids(client, BIN_CHANNEL, msg_id)
+                        if fid:
+                            file_id = fid
+                            now = time.time()
+                            self.cached_file_ids[msg_id] = (fid, now)
+                            self.premium_cache[msg_id] = (fid, now)
+                            logging.info(f"Refreshed file reference for msg {msg_id} — retrying stream")
+                        continue
+                    else:
+                        raise
         except (TimeoutError, AttributeError) as e:
             logging.error(f"Error yielding file: {e}")
-            pass
         except Exception as e:
             logging.error(f"Unexpected error in yield_file: {e}")
         finally:
-            logging.debug(f"Finished yielding file with {current_part} parts.")
             work_loads[index] -= 1
 
     async def clean_cache(self) -> None:
         while True:
             await asyncio.sleep(self.clean_timer)
-            self.cached_file_ids.clear()
-            # ⚡ পুরনো প্রিমিয়াম ক্যাশও পরিষ্কার
             now = time.time()
-            self.premium_cache = {
-                k: v for k, v in self.premium_cache.items()
-                if (now - v[1]) < self.premium_ttl
-            }
+            self.cached_file_ids = {k: v for k, v in self.cached_file_ids.items() if (now - v[1]) < self.ref_ttl}
+            self.premium_cache = {k: v for k, v in self.premium_cache.items() if (now - v[1]) < self.premium_ttl}
             logging.debug("Cleaned the cache")
