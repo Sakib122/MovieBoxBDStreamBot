@@ -730,24 +730,31 @@
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
             });
-            /* ⚡ SMART PRELOAD: দেখার সময় পেছনে পরের অংশের ডেটা আগে টানা
-               → ছোট সিকে লোডিং প্রায় শূন্য, বড় সিকেও দ্রুত */
+            /* ⚡ SMART PRELOAD v3: শুধু সামনের দিকে বাফার (পিছনে দরকার নেই)
+               - শুরুর ১৫ সেকেন্ডে চলবে না (START FIX-এর সাথে লড়াই এড়াতে)
+               - মাঝপথে ২০ সেকেন্ডের বাফার কমলে সামনে ঝাঁকুনি দিয়ে আগে টানবে */
+            let preloadBusy = false;
             let lastPreload = 0;
             video.addEventListener('timeupdate', () => {
                 const now = Date.now();
+                if (preloadBusy) return;
                 if (now - lastPreload < 4000) return; // ৪ সেকেন্ড পর পর চেক
+                if (video.currentTime < 15) return; // শুরুর ১৫ সেকেন্ডে হাত না
                 lastPreload = now;
                 try {
                     const ahead = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0;
-                    // সামনে ২০ সেকেন্ডের কম বাফার থাকলে ছোট লাফ দিয়ে টান ধরো
                     if (!video.paused && video.duration && (ahead - video.currentTime) < 20 && ahead < video.duration - 5) {
                         const poke = Math.min(ahead + 1, video.duration - 1);
                         const tmp = video.currentTime;
-                        video.currentTime = poke;
-                        video.addEventListener('seeked', function back() {
+                        preloadBusy = true;
+                        video.currentTime = poke; // সামনে ঝাঁকুনি — ডেটা টানা
+                        const back = () => {
                             video.removeEventListener('seeked', back);
-                            try { video.currentTime = tmp; } catch(e){}
-                        });
+                            try { video.currentTime = tmp; } catch(e){} // ফিরে এসে চলতে থাকো
+                            setTimeout(() => { preloadBusy = false; }, 300);
+                        };
+                        video.addEventListener('seeked', back);
+                        setTimeout(() => { preloadBusy = false; }, 2000); // নিরাপত্তা
                     }
                 } catch(e){}
             });
@@ -895,39 +902,46 @@
                 }, 300);
             });
 
-            /* --- স্মার্ট ওয়াচডগ --- */
-            function hasBufferAhead(t){
-                try { const b = video.buffered;
-                    for (let i=0;i<b.length;i++){ if (t >= b.start(i)-0.5 && t < b.end(i)-0.5) return true; }
-                } catch(e){}
-                return false;
-            }
-            let lastT = 0, stuck = 0, lastReload = 0;
-            setInterval(() => {
-                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) return;
-                const t = video.currentTime;
-                const frozen = Math.abs(t - lastT) < 0.1;
-                lastT = t;
-                if (!frozen) { stuck = 0; return; }
-                if (hasBufferAhead(t)) {
-                    stuck++;
-                    if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
-                    else if (stuck >= 5) {
-                        stuck = 0;
-                        if (Date.now() - lastReload > 30000) {
-                            lastReload = Date.now();
-                            const pos = t;
-                            try {
-                                video.load();
-                                video.addEventListener('loadedmetadata', function m(){
-                                    video.removeEventListener('loadedmetadata', m);
-                                    doSeek(pos);
-                                });
-                            } catch(e){}
+            /* --- SMART WATCHDOG: ভিডিও যেকোনো জায়গায় জমলে (শুরু বা মাঝে)
+               নিজে নিজে জাগিয়ে তোলে — তবে প্রিলোডের ঝাঁকুনিকে সমস্যা ভাবে না --- */
+            (function smartWatchdog(){
+                let lastPos = -1, freezeCount = 0;
+                setInterval(() => {
+                    const v = video;
+                    if (v.paused || v.ended || v.seeking) { freezeCount = 0; lastPos = v.currentTime; return; }
+                    if (preloadBusy) { freezeCount = 0; lastPos = v.currentTime; return; } // প্রিলোড কাজ করছে — হাত দিয়ো না
+                    const pos = v.currentTime;
+                    // সময় এগোচ্ছে? → সব ঠিক, রিসেট
+                    if (Math.abs(pos - lastPos) > 0.1) { freezeCount = 0; lastPos = pos; return; }
+                    // সময় এগোচ্ছে না + বাফার সামনে আছে? → ফ্রিজ-বাগ, ধাক্কা দাও
+                    let bufferedAhead = false;
+                    try {
+                        const b = v.buffered;
+                        for (let i = 0; i < b.length; i++) {
+                            if (pos >= b.start(i) - 0.5 && pos < b.end(i) - 0.5) { bufferedAhead = true; break; }
                         }
+                    } catch(e){}
+                    if (!bufferedAhead) { lastPos = pos; return; } // আসল বাফারিং — হাত দিয়ো না
+                    freezeCount++;
+                    if (freezeCount === 2) {
+                        toast('🔄 নিজে নিজে ঠিক করছি...');
+                        try { v.currentTime = pos + 0.4; } catch(e){} // সামান্য সামনে ধাক্কা
+                    } else if (freezeCount >= 5) {
+                        freezeCount = 0;
+                        // শেষ অস্ত্র: পুনরায় লোড, সেইম পয়েন্ট থেকে
+                        try {
+                            const reloadPos = pos;
+                            v.load();
+                            v.addEventListener('loadedmetadata', function m() {
+                                v.removeEventListener('loadedmetadata', m);
+                                try { v.currentTime = reloadPos; } catch(e){}
+                                v.play().catch(()=>{});
+                            });
+                        } catch(e){}
                     }
-                }
-            }, 2000);
+                    lastPos = pos;
+                }, 2000);
+            })();
 
             /* --- অটো-প্লে --- */
             try {
@@ -937,25 +951,6 @@
             updateMuteIcon();
 
             showUI(true);
-
-            /* 🎯 START FIX: শুরুতে 00:00-তে ফ্রিজ হলে নিজে নিজে জাগিয়ে তোলা */
-            (function startKick(){
-                let kicks = 0;
-                const timer = setInterval(() => {
-                    const v = video;
-                    if (!v.paused && v.currentTime < 0.5) {
-                        kicks++;
-                        if (kicks > 12) { clearInterval(timer); return; } // সর্বোচ্চ ~৩০ সেকেন্ড চেষ্টা
-                        try {
-                            if (v.buffered.length && v.buffered.end(0) > 0.5) {
-                                v.currentTime = 0.5; // ছোট ধাক্কা — এটাই জাগায়
-                            }
-                        } catch(e){}
-                    } else if (v.currentTime >= 0.5 || v.paused) {
-                        clearInterval(timer); // চলছে বা থামানো হলো — কাজ শেষ
-                    }
-                }, 1500);
-            })();
 
             video.play().then(() => {
                 toast('▶️ Auto Play (Sound ON)');
