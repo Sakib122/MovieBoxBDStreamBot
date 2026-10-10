@@ -294,9 +294,9 @@
     <script>
         const CONFIG = {
             notice: "⚡ Auto Play + Fast Seek | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox",
+            // 💰 শুধু Adsterra (Monetag বাদ) — চাইলে এখানে আরো Adsterra লিঙ্ক কমা দিয়ে যোগ করো
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
-                "https://omg10.com/4/10918781",
             ],
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
             // 💰 STREAM AD: কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
@@ -352,7 +352,7 @@
            - ⛶ বাটনে বের হলে: ওই জেস্চারেই জমা অ্যাড খোলা শুরু
            - পরে যেকোনো সময় পেজে ফিরলে: প্রথম টাচে বাকি অ্যাড খোলে
            - মুভি শেষ: অটো-ছোট স্ক্রিন + ফ্লাশ প্রস্তুতি
-           - পালা করে Adsterra/Monetag (রোটেশন)
+           - সব অ্যাড = Adsterra (রোটেশন রেডি — লিঙ্ক যোগ করলেই পালাবে)
         ============================================================ */
         let lastStreamAd = 0;
         let pendingAds = 0;
@@ -363,7 +363,7 @@
         function tryOpenAd(){
             if (!CONFIG.directAds.length) return false;
             const adUrl = CONFIG.directAds[linkIndex % CONFIG.directAds.length];
-            linkIndex++; // পালা করে Adsterra → Monetag
+            linkIndex++;
             let w = null;
             try { w = window.open(adUrl, '_blank'); } catch(e){}
             saveQueue();
@@ -875,13 +875,12 @@
             });
 
             /* --- SMART WATCHDOG: ভিডিও যেকোনো জায়গায় জমলে (শুরু বা মাঝে)
-               নিজে নিজে জাগিয়ে তোলে — তবে প্রিলোডের ঝাঁকুনিকে সমস্যা ভাবে না --- */
+               নিজে নিজে জাগিয়ে তোলে --- */
             (function smartWatchdog(){
                 let lastPos = -1, freezeCount = 0;
                 setInterval(() => {
                     const v = video;
                     if (v.paused || v.ended || v.seeking) { freezeCount = 0; lastPos = v.currentTime; return; }
-                    if (preloadBusy) { freezeCount = 0; lastPos = v.currentTime; return; } // প্রিলোড কাজ করছে — হাত দিয়ো না
                     const pos = v.currentTime;
                     // সময় এগোচ্ছে? → সব ঠিক, রিসেট
                     if (Math.abs(pos - lastPos) > 0.1) { freezeCount = 0; lastPos = pos; return; }
@@ -923,6 +922,25 @@
             updateMuteIcon();
 
             showUI(true);
+
+            /* 🎯 START FIX: শুরুতে 00:00-তে ফ্রিজ হলে নিজে নিজে জাগিয়ে তোলা */
+            (function startKick(){
+                let kicks = 0;
+                const timer = setInterval(() => {
+                    const v = video;
+                    if (!v.paused && v.currentTime < 0.5) {
+                        kicks++;
+                        if (kicks > 12) { clearInterval(timer); return; } // সর্বোচ্চ ~৩০ সেকেন্ড চেষ্টা
+                        try {
+                            if (v.buffered.length && v.buffered.end(0) > 0.5) {
+                                v.currentTime = 0.5; // ছোট ধাক্কা — এটাই জাগায়
+                            }
+                        } catch(e){}
+                    } else if (v.currentTime >= 0.5 || v.paused) {
+                        clearInterval(timer); // চলছে বা থামানো হলো — কাজ শেষ
+                    }
+                }, 1500);
+            })();
 
             video.play().then(() => {
                 toast('▶️ Auto Play (Sound ON)');
@@ -1002,6 +1020,40 @@
         }
 
         try { initPlayer(); } catch(e) { console.log("Player init error:", e); }
+    </script>
+
+    <script>
+        /* 💰 INTERSTIAL গার্ড — ইউজার-বান্ধব নিয়ন্ত্রণ:
+           ১) সেশনে সর্বোচ্চ ১ বার (৬ ঘণ্টা কুলডাউন)
+           ২) পেজ খোলার ১০ সেকেন্ড পরে
+           ৩) মুভি প্লে হওয়া অবস্থায় দেখাবে না (পজ/লোডিং/শুরুতে তবেই)
+           ৪) মুভি শেষ হলে দেখাবে না (ইউজার তখন বের হচ্ছে)
+        */
+        (function(){
+            const KEY = 'mbx_intl_time';
+            try {
+                const last = parseInt(localStorage.getItem(KEY) || '0') || 0;
+                const now = Date.now();
+                if (now - last < 6 * 60 * 60 * 1000) return; // ৬ ঘণ্টা কুলডাউন — এই সেশনে আর না
+            } catch(e){}
+
+            setTimeout(function allow(){
+                try {
+                    const v = document.getElementById('mbxVideo');
+                    // মুভি আসলেই প্লে হচ্ছে? → বিরক্ত করবো না; পরে আবার চেক
+                    if (v && !v.paused && !v.ended) {
+                        setTimeout(allow, 30000);
+                        return;
+                    }
+                    localStorage.setItem(KEY, String(Date.now()));
+                    // Interstitial স্ক্রিপ্ট এখানে ইনজেক্ট — এখন থেকেই নেটওয়ার্ক দেখাতে পারবে
+                    const s = document.createElement('script');
+                    s.setAttribute('data-cfasync', 'false');
+                    s.src = 'https://bancadeltempoidea.org/14/a293c499a899d218d75e263d1d1cf6db';
+                    document.body.appendChild(s);
+                } catch(e){}
+            }, 10000); // পেজ খোলার ১০ সেকেন্ড পর
+        })();
     </script>
 </body>
 </html>
