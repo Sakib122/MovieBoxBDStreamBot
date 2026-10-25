@@ -227,19 +227,19 @@
         </div>
 
         <div class="glass-card">
-            <div onclick="handlePopunder('high_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass btn-main py-3">
-                <i class="fa-solid fa-bolt"></i> HIGH SPEED DOWNLOAD
-            </div>
+            <a href="javascript:void(0)" onclick="handlePopunder('tg_get_file', () => window.open('{{ file_get }}', '_blank'))" class="btn-glass btn-main py-3">
+                <i class="fa-brands fa-telegram"></i> GET FILE — DOWNLOAD & WATCH
+            </a>
             <div class="row g-2 mt-1">
                 <div class="col-6">
-                    <div onclick="handlePopunder('normal_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass">
-                        <i class="fa-solid fa-download"></i> DOWNLOAD
+                    <div onclick="handlePopunder('high_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass btn-secondary-sm">
+                        <i class="fa-solid fa-bolt"></i> HIGH SPEED DOWNLOAD
                     </div>
                 </div>
                 <div class="col-6">
-                    <a href="javascript:void(0)" onclick="handlePopunder('tg_get_file', () => window.open('{{ file_get }}', '_blank'))" class="btn-glass btn-tg">
-                        <i class="fa-brands fa-telegram"></i> GET FILE
-                    </a>
+                    <div onclick="handlePopunder('normal_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass btn-secondary-sm">
+                        <i class="fa-solid fa-download"></i> BROWSER DOWNLOAD
+                    </div>
                 </div>
             </div>
 
