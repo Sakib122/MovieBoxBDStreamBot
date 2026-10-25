@@ -47,6 +47,10 @@
         .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
         .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
 
+        /* 🖼️ প্রথম ফ্রেম পোস্টার — কালো স্ক্রিন নয়, মুভির সিন দেখাবে */
+        .mbx-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 3; display: none; }
+        .mbx-poster.show { display: block; }
+
         .mbx-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .25s; }
         .mbx-player.ui-on .mbx-overlay { opacity: 1; }
 
@@ -63,16 +67,15 @@
         .mbx-skip small { font-size: 8.5px; font-weight: 800; color: var(--accent); line-height: 1; margin-top: 2px; }
         .mbx-skip:active { transform: scale(.88); background: rgba(34,211,238,.28); }
 
-        /* ===== 🎮 LOAD GAME — সিক/বাফার লোডিং গেমের মতো % ===== */
+        /* ===== 🐍 SNAKE LOAD GAME — সাপ খাবার খাবে, % বাড়বে, ১০০% = প্লে ===== */
         .mbx-loadgame { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.74); backdrop-filter: blur(6px); cursor: pointer; }
         .mbx-loadgame.show { display: flex; }
         .lg-box { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
-        .lg-ring { --p: 0; width: 104px; height: 104px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--p) * 1%), rgba(255,255,255,.12) 0); display: flex; align-items: center; justify-content: center; position: relative; filter: drop-shadow(0 0 14px rgba(34,211,238,.35)); }
-        .lg-ring::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: rgba(8,10,14,.94); border: 1px solid rgba(255,255,255,.08); }
-        .lg-ring.go { animation: lgPop .45s ease; }
-        @keyframes lgPop { 0% { transform: scale(1); } 50% { transform: scale(1.14); } 100% { transform: scale(1); } }
-        .lg-pct { position: relative; z-index: 2; font-size: 22px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 14px rgba(34,211,238,.6); }
-        .lg-label { color: var(--accent); font-weight: 800; font-size: 12.5px; letter-spacing: 1.2px; text-shadow: 0 0 12px rgba(34,211,238,.4); }
+        .lg-arena { position: relative; }
+        #lgSnake { width: 150px; height: 150px; display: block; filter: drop-shadow(0 0 16px rgba(34,211,238,.3)); }
+        .lg-pct { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -55%); font-size: 27px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px rgba(34,211,238,.65); pointer-events: none; }
+        .lg-pct.go { animation: lgPop .45s ease; color: var(--accent); }
+        @keyframes lgPop { 0% { transform: translate(-50%,-55%) scale(1); } 50% { transform: translate(-50%,-55%) scale(1.18); } 100% { transform: translate(-50%,-55%) scale(1); } }
         .lg-tip { color: var(--dim); font-size: 10.5px; max-width: 230px; text-align: center; line-height: 1.5; }
         .lg-tip b { color: var(--accent); }
 
@@ -108,8 +111,8 @@
             .mbx-skip { width: 40px; height: 40px; font-size: 11.5px; }
             .mbx-skip small { font-size: 7.5px; }
             .mbx-center-row { gap: 16px; }
-            .lg-ring { width: 92px; height: 92px; }
-            .lg-pct { font-size: 19px; }
+            #lgSnake { width: 118px; height: 118px; }
+            .lg-pct { font-size: 21px; }
         }
 
         .mbx-menu { position: absolute; right: 8px; bottom: 52px; z-index: 8; background: rgba(13,15,19,.97); border: 1px solid var(--border); border-radius: 13px; padding: 10px 12px; min-width: 235px; display: none; backdrop-filter: blur(12px); box-shadow: 0 12px 34px rgba(0,0,0,.55); }
@@ -186,6 +189,7 @@
 
             <div class="mbx-player" id="mbxPlayer">
                 <video id="mbxVideo" playsinline webkit-playsinline preload="auto" crossorigin="anonymous"></video>
+                <canvas id="mbxPoster" class="mbx-poster"></canvas>
 
                 <div class="mbx-overlay">
                     <div class="v-badges" id="mbxBadges"></div>
@@ -198,8 +202,10 @@
 
                 <div class="mbx-loadgame" id="mbxLoadGame">
                     <div class="lg-box">
-                        <div class="lg-ring" id="lgRing"><div class="lg-pct" id="lgPct">0%</div></div>
-                        <div class="lg-label" id="lgLabel">⚡ BOOSTING...</div>
+                        <div class="lg-arena">
+                            <canvas id="lgSnake" width="150" height="150"></canvas>
+                            <div class="lg-pct" id="lgPct">4%</div>
+                        </div>
                         <div class="lg-tip">💡 টিপস: বড় ফাইলে <b>GET FILE</b> = টেলিগ্রাম ফুল স্পিড ডাউনলোড</div>
                     </div>
                 </div>
@@ -567,7 +573,7 @@
            ⏸️ NO AUTOPLAY: প্রথম ফ্রেম পোস্টারের মতো থাকবে,
            ইউজার প্লে চাপলে সাউন্ডসহ ন্যাচারালি চলবে
         ============================================================ */
-        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false };
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, posterPainted: false };
         let toastTimer = null;
 
         function toast(msg, ms){
@@ -592,6 +598,21 @@
             const playedEl = document.getElementById('mbxPlayed');
             const buffEl = document.getElementById('mbxBuffered');
             const tipEl = document.getElementById('mbxSeekTip');
+            const poster = document.getElementById('mbxPoster');
+
+            /* --- 🖼️ প্রথম ফ্রেম পোস্টার: কালো স্ক্রিন নয়, মুভির প্রথম সিন দেখাও --- */
+            function paintPoster(){
+                if (MBX.hasPlayed || MBX.posterPainted) return;
+                try {
+                    if (!video.videoWidth || !video.videoHeight) return;
+                    poster.width = video.videoWidth; poster.height = video.videoHeight;
+                    poster.getContext('2d').drawImage(video, 0, 0, poster.width, poster.height);
+                    poster.classList.add('show');
+                    MBX.posterPainted = true;
+                } catch(e){}
+            }
+            video.addEventListener('loadeddata', () => setTimeout(paintPoster, 80));
+            video.addEventListener('canplay', () => setTimeout(paintPoster, 80));
 
             buildMenu();
 
@@ -697,15 +718,22 @@
                বড় সিক = গেমের মতো % (1% → 100%), ১০০% হলেই ভিডিও প্লে
             ============================================================ */
             let wantPlayAfterSeek = false;
-            const LG_LABELS = ['⚡ BOOSTING...', '🎮 LOADING LEVEL...', '🎯 ALMOST THERE...', '🔥 BUFFER POWER...', '🚀 FULL THROTTLE...'];
+            /* 🐍 সাপ + খাবার: খাবার খাবে তো % বাড়বে — কখনো ০% এ আটকে থাকবে না,
+               ডেটা স্লো হলেও ফাস্ট মোডে বাড়ে, ১০০% হলেই ভিডিও প্লে */
             const lg = {
                 el: document.getElementById('mbxLoadGame'),
-                ring: document.getElementById('lgRing'),
+                cvs: document.getElementById('lgSnake'),
                 pct: document.getElementById('lgPct'),
-                label: document.getElementById('lgLabel'),
-                on: false, done: false, disp: 0, target: null, wantPlay: false,
-                raf: 0, pendT: null, finT: null, labelT: 0, labelI: 0
+                on: false, done: false, disp: 4, target: null, wantPlay: false,
+                raf: 0, pendT: null, finT: null,
+                headAng: -Math.PI / 2, trail: [], foodAng: null, eats: 0, parts: [], last: 0
             };
+            const lgCtx = lg.cvs.getContext('2d');
+            function lgResize(){
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                lg.cvs.width = 150 * dpr; lg.cvs.height = 150 * dpr;
+                lgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
             function bufferedAheadOf(t){
                 try {
                     const b = video.buffered;
@@ -722,25 +750,102 @@
                 if (end <= T) return 0;
                 return Math.max(0, Math.min(100, ((end - T) / 15) * 100));
             }
-            function lgTick(){
+            function lgSnakeReset(){
+                lgResize();
+                lg.headAng = -Math.PI / 2;
+                lg.trail = []; lg.parts = []; lg.eats = 0;
+                lg.foodAng = lg.headAng + 0.9;
+            }
+            function lgDraw(dt, now){
+                const ctx = lgCtx, C = 75, R = 58, TAU = Math.PI * 2;
+                ctx.clearRect(0, 0, 150, 150);
+                // ট্র্যাক সার্কেল
+                ctx.beginPath(); ctx.arc(C, C, R, 0, TAU);
+                ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2.5; ctx.stroke();
+                // প্রগ্রেস আর্ক
+                if (lg.disp > 0.5) {
+                    ctx.beginPath(); ctx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + (Math.min(lg.disp, 100) / 100) * TAU);
+                    ctx.strokeStyle = 'rgba(34,211,238,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+                }
+                // হেড মুভ (গেমের মতো সবসময় চলতেই থাকে)
+                const spd = 2.3;
+                lg.headAng += spd * dt;
+                const hx = C + Math.cos(lg.headAng) * R, hy = C + Math.sin(lg.headAng) * R;
+                lg.trail.push({ x: hx, y: hy });
+                const maxSeg = 12 + Math.min(lg.eats * 2, 30);
+                while (lg.trail.length > maxSeg) lg.trail.shift();
+                // 🍎 খাবার খাওয়া: মুখ ছুঁলেই % লাফ দেয় + পার্টিকেল বিস্ফোরণ
+                if (lg.foodAng == null || lg.headAng >= lg.foodAng) {
+                    if (lg.foodAng != null) {
+                        lg.eats++;
+                        const fx = C + Math.cos(lg.foodAng) * R, fy = C + Math.sin(lg.foodAng) * R;
+                        for (let i = 0; i < 7; i++) {
+                            const a = Math.random() * TAU, s = 14 + Math.random() * 26;
+                            lg.parts.push({ x: fx, y: fy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.45 });
+                        }
+                        if (lg.disp < 97) lg.disp = Math.min(97, lg.disp + 0.9);
+                        else if (lg.disp < 98.9) lg.disp += 0.25;
+                    }
+                    lg.foodAng = lg.headAng + 1.1 + Math.random() * 1.6;
+                }
+                // খাবার আঁকা (পালস করে)
+                const fx2 = C + Math.cos(lg.foodAng) * R, fy2 = C + Math.sin(lg.foodAng) * R;
+                const pulse = 3.2 + Math.sin(now / 130) * 1.1;
+                ctx.beginPath(); ctx.arc(fx2, fy2, pulse + 2.5, 0, TAU);
+                ctx.fillStyle = 'rgba(255,93,93,.18)'; ctx.fill();
+                ctx.beginPath(); ctx.arc(fx2, fy2, pulse, 0, TAU);
+                ctx.fillStyle = '#ff5d5d'; ctx.shadowColor = '#ff5d5d'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+                // সাপের বডি (লেজ → মাথা)
+                for (let i = 0; i < lg.trail.length; i++) {
+                    const p = lg.trail[i], k = i / lg.trail.length;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 1.2 + k * 3.4, 0, TAU);
+                    ctx.fillStyle = 'rgba(45,212,191,' + (0.25 + k * 0.6).toFixed(2) + ')';
+                    ctx.fill();
+                }
+                // সাপের মাথা + চোখ
+                ctx.beginPath(); ctx.arc(hx, hy, 5.2, 0, TAU);
+                ctx.fillStyle = '#22d3ee'; ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
+                const ea = lg.headAng + Math.PI / 2;
+                ctx.beginPath();
+                ctx.arc(hx + Math.cos(ea) * 2.2, hy + Math.sin(ea) * 2.2, 1.1, 0, TAU);
+                ctx.arc(hx - Math.cos(ea) * 2.2, hy - Math.sin(ea) * 2.2, 1.1, 0, TAU);
+                ctx.fillStyle = '#062028'; ctx.fill();
+                // খাওয়ার পার্টিকেল
+                for (let i = lg.parts.length - 1; i >= 0; i--) {
+                    const p = lg.parts[i];
+                    p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+                    if (p.life <= 0) { lg.parts.splice(i, 1); continue; }
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, TAU);
+                    ctx.fillStyle = 'rgba(255,180,80,' + (p.life / 0.45).toFixed(2) + ')'; ctx.fill();
+                }
+            }
+            function lgTick(now){
                 if (!lg.on) return;
                 lg.raf = requestAnimationFrame(lgTick);
+                if (!lg.last) lg.last = now;
+                const dt = Math.min((now - lg.last) / 1000, 0.05);
+                lg.last = now;
                 const real = lgRealPct();
-                if (lg.disp < real) lg.disp = Math.min(real, lg.disp + Math.max(0.35, (real - lg.disp) * 0.055));
-                if (real >= 100 && lg.disp < 100) lg.disp = Math.min(100, lg.disp + 1.7);
+                if (real >= 100) {
+                    // রেডি → স্প্রিন্ট: দ্রুত ১০০-তে উঠে প্লে
+                    lg.disp = Math.min(100, lg.disp + 34 * dt + (100 - lg.disp) * 0.12);
+                } else if (lg.disp < 97) {
+                    // ⚡ ফাস্ট মোড: ডেটা আসুক বা না আসুক ন্যূনতম ৭%/সেকেন্ডে বাড়বে —
+                    // ডেটা এগোলে আরও দ্রুত ফলো করবে — কখনো ০% এ আটকে থাকবে না
+                    const follow = Math.max(0, real - lg.disp) * 1.4;
+                    lg.disp = Math.min(97, lg.disp + Math.max(7, follow) * dt);
+                }
+                lgDraw(dt, now);
                 lg.pct.textContent = Math.floor(lg.disp) + '%';
-                lg.ring.style.setProperty('--p', lg.disp.toFixed(1));
-                if (Date.now() - lg.labelT > 1300) { lg.labelT = Date.now(); lg.label.textContent = LG_LABELS[lg.labelI++ % LG_LABELS.length]; }
                 if (lg.disp >= 100 && real >= 100 && !lg.done) {
                     lg.done = true;
-                    lg.pct.textContent = '100%';
-                    lg.ring.style.setProperty('--p', '100');
-                    lg.ring.classList.add('go');
-                    lg.label.textContent = '✅ GO!';
+                    lg.pct.textContent = 'GO!';
+                    lg.pct.classList.add('go');
                     lg.finT = setTimeout(() => {
                         lgHide();
                         if (lg.wantPlay) { lg.wantPlay = false; video.play().catch(()=>{}); }
-                    }, 430);
+                    }, 500);
                 }
             }
             function lgShow(targetSec, autoplayAfter){
@@ -748,10 +853,11 @@
                 lg.target = (typeof targetSec === 'number') ? targetSec : null;
                 lg.wantPlay = !!autoplayAfter;
                 if (lg.on) { lg.done = false; return; }
-                lg.on = true; lg.done = false; lg.disp = 0;
-                lg.labelI = 0; lg.labelT = 0;
-                lg.ring.classList.remove('go');
+                lg.on = true; lg.done = false; lg.disp = 4;
+                lg.pct.classList.remove('go');
+                lgSnakeReset();
                 lg.el.classList.add('show');
+                lg.last = 0;
                 lg.raf = requestAnimationFrame(lgTick);
             }
             function lgHide(){
@@ -781,6 +887,7 @@
             }
             function doSeek(t){
                 const from = video.currentTime;
+                poster.classList.remove('show');
                 t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
                 try {
                     if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
@@ -841,6 +948,7 @@
             /* --- Video events --- */
             video.addEventListener('play', () => {
                 setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake();
+                poster.classList.remove('show');
                 // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
                 if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
             });
@@ -888,6 +996,8 @@
             });
             video.addEventListener('error', () => {
                 lgHide();
+                poster.classList.remove('show');
+                MBX.posterPainted = false;
                 if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
                 MBX.errTries++;
                 toast('🔁 আবার চেষ্টা করছি (' + MBX.errTries + '/3)...');
@@ -1109,7 +1219,7 @@
                 const box = document.createElement('div');
                 if (isBig) {
                     box.className = 'smart-notice';
-                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে উপরের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলে গেম-লোডিং % দেখাবে, ১০০% হলেই প্লে হবে। 🙏';
+                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে উপরের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলে সাপ-গেম লোডিং দেখাবে 🐍 — ১০০% হলেই প্লে হবে। 🙏';
                 } else {
                     box.className = 'smart-notice good';
                     box.innerHTML = '✅ <b>এই ফাইলটি আরামসে স্ট্রিম করা যাবে!</b><br>চাইলে <b>⚡ HIGH SPEED DOWNLOAD</b> দিয়ে সরাসরি ডাউনলোডও করতে পারেন। 🎬';
