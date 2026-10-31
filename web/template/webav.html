@@ -25,6 +25,7 @@
             --dim: #9aa0a6;
         }
         * { -webkit-tap-highlight-color: transparent; }
+        html, body { overscroll-behavior-y: contain; }
         body { background: var(--bg); color: var(--txt); font-family: 'Outfit', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
 
         .notice-bar { background: linear-gradient(90deg, #22d3ee, #2dd4bf); color: #04141a; padding: 9px; font-weight: 800; text-align: center; font-size: 12.5px; position: relative; z-index: 1001; }
@@ -334,8 +335,6 @@
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
             // 💰 STREAM AD: কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
             streamAdCooldown: 60,
-            // PAUSE FIX: keep connection fresh while paused (set false to disable)
-            pauseKeepAlive: true,
             // 🎯 স্মার্ট নোটিস: বন্ধ করতে false
             smartNotice: true,
             soundText: {
@@ -599,7 +598,7 @@
                Now: press play -> drop dead connection -> fresh connection
                -> seek back to the same position -> play instantly.
             ============================================================ */
-            const RESUME = { pausedAt: 0, busy: false, wd: null, fails: 0, linkDead: false, posSaved: 0 };
+            const RESUME = { pausedAt: 0, busy: false, wd: null, fails: 0, linkDead: false, posSaved: 0, lastStart: 0, lastSeekAt: 0, wantPlayReq: false, selfNudge: false, seekHangFrom: 0 };
             const POS_KEY = 'mbx_pos::' + "{{ file_name }}";
 
             function saveWatchPos(){
@@ -677,15 +676,21 @@
                dead connection out -> new connection -> same position -> play
             ============================================================ */
             function resumeKickNeeded(){
+                // instant refresh ONLY when almost certainly dead:
+                // played before + paused long + no cushion + no frames at all.
+                // (a paused video naturally stops growing its buffer, so a small
+                // buffer alone must NOT trigger a refresh -- that was the bug)
                 if (!MBX.hasPlayed || RESUME.busy || video.ended) return false;
                 if (RESUME.linkDead) return true;
                 const pausedFor = RESUME.pausedAt ? (Date.now() - RESUME.pausedAt) : 0;
                 if (pausedFor < 45000) return false;
                 const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
-                return ahead < 2 || video.readyState < 3;
+                return ahead < 2 && video.readyState < 3;
             }
             let wdMarks = null;
             function armResumeWatchdog(){
+                // right after a seek the snake-loader is the designed UX -- don't probe then
+                if (Date.now() - RESUME.lastSeekAt < 8000) return;
                 disarmResumeWatchdog();
                 let alive = false;
                 const mark = () => { alive = true; };
@@ -695,8 +700,8 @@
                 RESUME.wd = setTimeout(() => {
                     const m = wdMarks; wdMarks = null;
                     if (m) { video.removeEventListener('timeupdate', m); video.removeEventListener('progress', m); }
-                    // 3s after play: not a single frame or byte -> dead connection -> refresh NOW
-                    if (!video.paused && !alive && !RESUME.busy) smartRefresh(true);
+                    // 3s after play: no frame AND no byte AND nothing decodable -> truly dead -> refresh
+                    if (!video.paused && !alive && !RESUME.busy && video.readyState < 3) smartRefresh(true);
                 }, 3000);
             }
             function disarmResumeWatchdog(){
@@ -708,16 +713,21 @@
                 toast('⚠️ লিংক এক্সপায়ার্ড — ফ্রেশ করে আসছি…', 4000);
                 setTimeout(() => { try { saveWatchPos(); } catch(e){} location.reload(); }, 1500);
             }
-            function smartRefresh(autoplay, quiet){
+            function smartRefresh(autoplay, quiet, force){
                 if (RESUME.busy) return;
+                // hard cooldown: never start a new refresh within 15s of the last one
+                // (this is what killed the refresh-loop / repeated-toast bug)
+                if (!force && !RESUME.linkDead && Date.now() - RESUME.lastStart < 15000) return;
                 RESUME.busy = true;
+                RESUME.lastStart = Date.now();
                 disarmResumeWatchdog();
                 clearTimeout(lg.pendT);
                 wantPlayAfterSeek = false;
                 lgHide();
                 const pos = Math.max(0, video.currentTime || 0);
                 const rate = video.playbackRate || 1;
-                const wantPlay = (autoplay === true) || !video.paused;
+                const wantPlay = (autoplay === true) || !video.paused || RESUME.wantPlayReq;
+                RESUME.wantPlayReq = false;
                 if (!quiet) toast('🔄 কানেকশন রিফ্রেশ হচ্ছে…', 5000);
                 setStatus('load');
 
@@ -725,6 +735,9 @@
                 const onMeta = () => {
                     clearTimeout(metaT);
                     try { if (Math.abs(video.currentTime - pos) > 1) video.currentTime = pos; } catch(e){}
+                    // metadata arrived but no playable data within 10s -> treat as failure (retry)
+                    clearTimeout(canT);
+                    canT = setTimeout(fail, 10000);
                 };
                 const onCan = () => {
                     if (done) return;
@@ -732,9 +745,8 @@
                     try { video.playbackRate = rate; } catch(e){}
                     RESUME.busy = false; RESUME.fails = 0; RESUME.linkDead = false;
                     if (wantPlay) video.play().catch(() => {
-                        video.muted = true; updateMuteIcon();
-                        video.play().catch(()=>{});
-                        toast('🔇 সাউন্ড ব্লক — স্পিকার আইকনে চাপ দিন', 3000);
+                        setPlayIcons(false); setStatus('paused');
+                        toast('▶ প্লে বাটনে একবার চাপ দিন');
                     });
                     else { setPlayIcons(false); setStatus('paused'); }
                 };
@@ -750,22 +762,18 @@
                     done = true; cleanup();
                     RESUME.busy = false;
                     RESUME.fails++;
-                    if (RESUME.fails >= 2) {
+                    // 3 strikes (not 2) before declaring the link dead -- a briefly
+                    // slow network must NOT cause a page reload
+                    if (RESUME.fails >= 3) {
                         RESUME.linkDead = true;
                         if (wantPlay) recoverByReload(pos);
                         else toast('⚠️ স্ট্রিম লিংক এক্সপায়ার্ড — প্লে চাপলেই অটো ঠিক হবে', 3500);
                     } else {
-                        setTimeout(() => smartRefresh(wantPlay, quiet), 1500);
+                        setTimeout(() => smartRefresh(wantPlay, quiet, true), 1500);
                     }
                 }
 
-                video.addEventListener('loadedmetadata', onMeta);
-                video.addEventListener('canplay', onCan);
-                video.addEventListener('error', onErr);
-                metaT = setTimeout(fail, 12000);
-                canT = setTimeout(onCan, 15000);
-
-                // drop the old dead connection
+                // drop the old (dead) connection
                 try { video.removeAttribute('src'); } catch(e){}
                 try { video.load(); } catch(e){}
                 // fresh connection + old position (set before metadata = default
@@ -773,17 +781,27 @@
                 // the file is NOT re-downloaded from the beginning)
                 video.src = SRC;
                 try { video.currentTime = pos; } catch(e){}
+                // listeners attached only after the new src is set (the brief
+                // no-src moment must not count as an error of this attempt)
+                video.addEventListener('loadedmetadata', onMeta);
+                video.addEventListener('canplay', onCan);
+                video.addEventListener('error', onErr);
+                metaT = setTimeout(fail, 10000);
             }
             // debug/test hook
-            window.MBXFix = { refresh: (a) => smartRefresh(a !== false, false), needsKick: resumeKickNeeded, state: RESUME };
+            window.MBXFix = { refresh: (a) => smartRefresh(a !== false, false, true), needsKick: resumeKickNeeded, state: RESUME };
 
             /* --- Controls --- */
             function togglePlay(){
+                // a refresh is already running: it will start playback itself,
+                // just remember that the user wants it playing
+                if (RESUME.busy) { RESUME.wantPlayReq = true; return; }
                 if (video.paused) {
                     // 🔊 প্রথম প্লে = ইউজারের নিজের ক্লিক → সাউন্ড অন (ন্যাচারাল)
                     if (!MBX.firstPlay) { MBX.firstPlay = true; video.muted = false; }
                     fireStreamAd();
-                    // pause-fix: long pause + dead connection -> instant refresh, instant play
+                    // pause-fix: instant refresh only if almost certainly dead;
+                    // otherwise give the normal path 3s and prove it before refreshing
                     if (resumeKickNeeded()) { smartRefresh(true); tryBoost(); return; }
                     video.play().catch(()=>{});
                     armResumeWatchdog();
@@ -1018,12 +1036,15 @@
                     wantPlayAfterSeek = false;
                 }, far ? 180 : 420);
             }
-            function doSeek(t){
+            function doSeek(t, exact){
                 const from = video.currentTime;
                 poster.classList.remove('show');
                 t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
                 try {
-                    if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
+                    // ±10s skip buttons must land EXACTLY (fastSeek snaps to
+                    // keyframes and lands in the wrong place); big seekbar/drag
+                    // jumps may still use fastSeek for speed
+                    if (!exact && video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
                     else { video.currentTime = t; }
                 } catch(e){ try { video.currentTime = t; } catch(e2){} }
                 if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); lgQueue(t, from); }
@@ -1038,7 +1059,7 @@
 
             function seekBy(sec){
                 fireStreamAd();
-                doSeek(video.currentTime + sec);
+                doSeek(video.currentTime + sec, true);
                 showRipple(sec < 0 ? 'left' : 'right');
                 toast((sec < 0 ? '⏪ ' : '⏩ ') + Math.abs(sec) + 's');
                 showUI(true);
@@ -1153,10 +1174,12 @@
                 if (video.paused || video.ended) return;
                 let tries = 0;
                 const iv = setInterval(() => {
+                    if (RESUME.busy) return; // a refresh is already handling this
                     if (video.paused || video.ended || video.currentTime > 0.6) { clearInterval(iv); return; }
                     tries++;
                     if (tries <= 3) {
                         // মাইক্রো-নাজ: স্ট্রিমকে জোর করে সামান্য সামনে নাড়াও
+                        RESUME.selfNudge = true; // own micro-nudge: must not open the seek-zone
                         try { if (video.currentTime < 0.03) video.currentTime = 0.012 * tries; } catch(e){}
                         video.play().catch(()=>{});
                     } else {
@@ -1176,7 +1199,7 @@
                 setTimeout(() => r.remove(), 500);
             }
             let gX=0, gY=0, gTime=0, gBright=1, gVol=1, gMode=null, gMoved=false, gRect=null;
-            let lastTapT=0, lastTapX=0, tapTimer=null;
+            let lastTapT=0, lastTapX=0, lastTapY=0, tapTimer=null;
 
             player.addEventListener('touchstart', e => {
                 if (menu.classList.contains('open') && !e.target.closest('.mbx-menu') && !e.target.closest('#btnSettings')) {
@@ -1236,14 +1259,18 @@
                 const now = Date.now();
                 const rect = player.getBoundingClientRect();
                 const x = e.changedTouches[0].clientX - rect.left;
-                if (now - lastTapT < 300 && Math.abs(x - lastTapX) < 80) {
+                const y = e.changedTouches[0].clientY - rect.top;
+                // ghost-tap guard: another finger still on screen = not a double-tap
+                // (this is what made the ⏪10 "back button" fire by itself)
+                if (e.touches.length > 0) { lastTapT = 0; return; }
+                if (now - lastTapT < 300 && Math.abs(x - lastTapX) < 80 && Math.abs(y - lastTapY) < 100) {
                     clearTimeout(tapTimer); lastTapT = 0;
                     const w3 = rect.width / 3;
                     if (x < w3) { seekBy(-10); }
                     else if (x > rect.width - w3) { seekBy(10); }
                     else { togglePlay(); }
                 } else {
-                    lastTapT = now; lastTapX = x;
+                    lastTapT = now; lastTapX = x; lastTapY = y;
                     tapTimer = setTimeout(() => toggleUI(), 260);
                 }
             }, { passive: true });
@@ -1269,30 +1296,13 @@
             let wakeLock = null;
             async function reqWake(){ try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
             function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
-            /* --- keep connection fresh while paused -> resume is instant --- */
-            if (CONFIG.pauseKeepAlive) {
-                setInterval(() => {
-                    if (RESUME.busy || RESUME.linkDead) return;
-                    if (!MBX.hasPlayed || !video.paused || video.ended || document.hidden) return;
-                    if (video.readyState < 1) return;
-                    const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
-                    if (ahead > 30) return; // 30s+ already buffered -> resume will be instant anyway
-                    smartRefresh(false, true); // silent renew, stays paused
-                }, 150000);
-            }
+            /* --- position is saved on exit for expired-link auto recovery --- */
             window.addEventListener('pagehide', saveWatchPos);
             window.addEventListener('beforeunload', saveWatchPos);
 
             document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') {
-                    if (!video.paused) reqWake();
-                    // back on tab: quietly renew the connection if it died while away
-                    else if (MBX.hasPlayed && !RESUME.busy && !RESUME.linkDead && video.readyState >= 1) {
-                        const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
-                        const pausedFor = RESUME.pausedAt ? (Date.now() - RESUME.pausedAt) : 0;
-                        if (ahead < 5 && pausedFor > 30000) smartRefresh(false, true);
-                    }
-                } else saveWatchPos();
+                if (document.visibilityState === 'visible') { if (!video.paused) reqWake(); }
+                else saveWatchPos();
             });
 
             /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
@@ -1311,28 +1321,54 @@
                 return false;
             }
             let lastT = 0, stuck = 0, lastReload = 0, lastBufEnd = -1, deadData = 0;
+            // a user seek opens a 20s "snake-loader zone": slow data there is NORMAL,
+            // the loading game owns that UX -- no refresh may interfere.
+            // our own 0.3s micro-nudges are marked so they never re-open that zone.
+            video.addEventListener('seeking', () => {
+                RESUME.seekHangFrom = Date.now();
+                if (RESUME.selfNudge) { RESUME.selfNudge = false; return; }
+                RESUME.lastSeekAt = Date.now();
+                lastBufEnd = -1; deadData = 0;
+            });
+            video.addEventListener('seeked', () => { RESUME.seekHangFrom = 0; });
             setInterval(() => {
-                if (RESUME.busy) { lastT = video.currentTime; stuck = 0; deadData = 0; return; }
-                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) { deadData = 0; return; }
+                if (RESUME.busy) { lastT = video.currentTime; stuck = 0; deadData = 0; lastBufEnd = -1; return; }
+                // a seek hanging >20s with no data arriving = dead connection too
+                // (the micro-nudge on a dead connection can hang in seeking state)
+                if (video.seeking) {
+                    if (RESUME.seekHangFrom && Date.now() - RESUME.seekHangFrom > 20000 && Date.now() - lastReload > 45000) {
+                        lastReload = Date.now();
+                        RESUME.seekHangFrom = 0;
+                        smartRefresh(true);
+                    }
+                    return;
+                }
+                if (video.paused || video.ended || !MBX.hasPlayed) { deadData = 0; return; }
                 const t = video.currentTime;
                 const frozen = Math.abs(t - lastT) < 0.1;
                 lastT = t;
                 if (!frozen) { stuck = 0; deadData = 0; return; }
                 if (hasBufferAhead(t)) {
                     stuck++;
-                    if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
+                    if (stuck === 2) { RESUME.selfNudge = true; try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
                     else if (stuck >= 5) {
                         stuck = 0;
-                        if (Date.now() - lastReload > 30000) {
+                        if (Date.now() - lastReload > 45000) {
                             lastReload = Date.now();
                             smartRefresh(true);
                         }
                     }
                 } else {
-                    // no buffer + no data arriving at all = dead connection -> refresh
+                    // frozen + zero buffer: within 20s of a seek this is the normal
+                    // snake-loader flow (do NOT refresh -- that caused the storm)
+                    if (Date.now() - RESUME.lastSeekAt < 20000) { deadData = 0; return; }
+                    // otherwise: 16s with not a single extra byte downloaded = dead connection
                     const end = bufferedAheadOf(t);
                     if (end > lastBufEnd + 0.1) { lastBufEnd = end; deadData = 0; }
-                    else if (++deadData >= 5) { deadData = 0; smartRefresh(true); }
+                    else if (++deadData >= 8) {
+                        deadData = 0; lastBufEnd = -1;
+                        if (Date.now() - lastReload > 45000) { lastReload = Date.now(); smartRefresh(true); }
+                    }
                 }
             }, 2000);
 
