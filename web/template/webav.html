@@ -749,7 +749,10 @@
                 const T = (lg.target != null) ? lg.target : video.currentTime;
                 const end = bufferedAheadOf(T);
                 if (end <= T) return 0;
-                return Math.max(0, Math.min(100, ((end - T) / 15) * 100));
+                // 🛡️ EOF-সচেতন: মুভির শেষের দিকে ১৫ সেকেন্ড বাফার অসম্ভব —
+                // প্রয়োজন অনুযায়ী স্প্যান ছোট করো, নাহলে লোডিং চিরকাল আটকে থাকে
+                const span = Math.max(2, Math.min(15, (video.duration || 1e9) - T - 0.4));
+                return Math.max(0, Math.min(100, ((end - T) / span) * 100));
             }
             function lgSnakeReset(){
                 lgResize();
@@ -853,6 +856,18 @@
                 clearTimeout(lg.finT);
                 lg.target = (typeof targetSec === 'number') ? targetSec : null;
                 lg.wantPlay = !!autoplayAfter;
+                // 🛡️ নো-ফ্রিজ গ্যারান্টি: লোডিং-ওভারলে ২২ সেকেন্ডের বেশি আটকে থাকতে পারবে না
+                clearTimeout(lg.forceT);
+                lg.forceT = setTimeout(() => {
+                    if (!lg.on || lg.done) return;
+                    lg.done = true;
+                    lg.pct.textContent = 'GO!';
+                    lg.pct.classList.add('go');
+                    lg.finT = setTimeout(() => {
+                        lgHide();
+                        if (lg.wantPlay) { lg.wantPlay = false; video.play().catch(()=>{}); }
+                    }, 400);
+                }, 22000);
                 if (lg.on) { lg.done = false; return; }
                 lg.on = true; lg.done = false; lg.disp = 4;
                 lg.pct.classList.remove('go');
@@ -866,6 +881,7 @@
                 lg.on = false;
                 cancelAnimationFrame(lg.raf);
                 clearTimeout(lg.finT);
+                clearTimeout(lg.forceT);
                 lg.el.classList.remove('show');
                 lg.target = null;
             }
@@ -1153,9 +1169,19 @@
                 return false;
             }
             let lastT = 0, stuck = 0, lastReload = 0, noBuf = 0;
+            const WD_CD = 20000; // দুটো জরুরি কিকের মধ্যে ন্যূনতম ফাঁক
             setInterval(() => {
-                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) return;
+                if (video.paused || video.ended || !MBX.hasPlayed) return;
                 const t = video.currentTime;
+                /* ⚡ F1 সিক-হ্যাং ব্লাইন্ড স্পট: আগে seeking=true থাকলে ওয়াচডগ চুপ করে
+                   যেত — মৃত কানেকশনে সিক ঝুলে থাকলে ৬ সেকেন্ডেই ফ্রেশ কানেকশন */
+                if (video.seeking) {
+                    if (seekStartedAt && !RESUME.busy && Date.now() - seekStartedAt > 6000 && Date.now() - lastReload > WD_CD) {
+                        lastReload = Date.now();
+                        resumeConn(true, t);
+                    }
+                    return;
+                }
                 const frozen = Math.abs(t - lastT) < 0.1;
                 lastT = t;
                 if (!frozen) { stuck = 0; noBuf = 0; return; }
@@ -1165,7 +1191,7 @@
                     if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
                     else if (stuck >= 5) {
                         stuck = 0;
-                        if (Date.now() - lastReload > 30000) {
+                        if (Date.now() - lastReload > WD_CD) {
                             lastReload = Date.now();
                             const pos = t;
                             try {
@@ -1178,11 +1204,13 @@
                         }
                     }
                 } else if (video.readyState < 3) {
-                    // 🔌 জমে আছে + বাফারও নেই = কানেকশন মরে গেছে → একবার নিয়ন্ত্রিত রিফ্রেশ
+                    // 🔌 জমে আছে + বাফারও নেই = কানেকশন মরে গেছে → নিয়ন্ত্রিত রিফ্রেশ
+                    // 🛡️ F2 আর কোনো সীমা নেই (আগের fails<3 ক্যাপে ৩ বারের পর চিরতরে ফ্রিজ
+                    // হয়ে যেত) — এখন শুধু ২০ সেকেন্ড কুলডাউন, যতবার দরকার ততবার
                     noBuf++;
-                    if (noBuf >= 3 && !RESUME.busy && RESUME.fails < 3 && Date.now() - lastReload > 30000) {
-                        noBuf = 0; lastReload = Date.now(); RESUME.fails++;
-                        resumeConn(true);
+                    if (noBuf >= 2 && !RESUME.busy && Date.now() - lastReload > WD_CD) {
+                        noBuf = 0; lastReload = Date.now();
+                        resumeConn(true, t);
                     }
                 } else {
                     noBuf = 0;
@@ -1243,10 +1271,12 @@
                     }
                 }, 45000);
             });
-            function resumeConn(autoplay){
+            function resumeConn(autoplay, posOverride){
                 if (RESUME.busy) return;
                 RESUME.busy = true; RESUME.userPaused = false;
-                const pos = (video.currentTime > 0.5 ? video.currentTime : (RESUME.lastPos || 0));
+                const pos = (typeof posOverride === 'number' && posOverride > 0.5)
+                    ? posOverride
+                    : (video.currentTime > 0.5 ? video.currentTime : (RESUME.lastPos || 0));
                 const rate = video.playbackRate;
                 const cleanup = () => {
                     video.removeEventListener('loadedmetadata', onMeta);
@@ -1259,10 +1289,17 @@
                     setPlayIcons(false); setStatus('paused');
                     try { showFallbackBox(); } catch(e){}
                     toast(msg, 4500);
+                    // 🛡️ F6 নো-ফ্রিজ গ্যারান্টি: হাল ছাড়ি না — চুপচাপ আবার চেষ্টা,
+                    // নেটওয়ার্ক ফিরলেই নিজে নিজে ঠিক জায়গা থেকে চালু হবে
+                    setTimeout(() => { if (!RESUME.busy && !video.ended && MBX.hasPlayed) resumeConn(true, pos); }, 20000);
                 };
                 const onMeta = () => {
                     if (!RESUME.busy) { cleanup(); return; }
-                    try { if (pos > 0.5 && pos < (video.duration || Infinity) - 2) video.currentTime = pos; } catch(e){}
+                    try {
+                        // 🛡️ F5 শেষ ০.৪ সেকেন্ডেও পজিশন ফেরত দাও — নাহলে মুভি ০ থেকে চালু হয়ে যেত
+                        const tgt = Math.min(pos, (video.duration || Infinity) - 0.4);
+                        if (tgt > 0.5) video.currentTime = tgt;
+                    } catch(e){}
                     try { video.playbackRate = rate; } catch(e){}
                 };
                 const onCan = () => {
@@ -1306,6 +1343,37 @@
                 video.addEventListener('error', onErr);
             }
             window.MBXResume = { kick: () => resumeConn(true), state: RESUME };
+
+            /* ============================================================
+               ⚡ F9 SEEKBOOST ENGINE — সিক/টানকে অনেক ফাস্ট করে
+               ============================================================
+               সমস্যা: বড় জাম্প (১০-২০ মিনিট) বা মৃত/অতি-ধীর কানেকশনে সিক
+               দিলে ব্রাউজার পুরনো কানেকশনেই ডেটার অপেক্ষা করত — মিনিটের
+               পর মিনিট ঝুলে থাকত ("Loading" + টানা-টানি নিষ্ক্রিয়)।
+               সমাধান: প্রতিটি সিকের সাথে ছোট "ফিউজ" বসে —
+               - ফিউজের মধ্যে ডেটা এলে → স্বাভাবিক ফাস্ট সিক, কিছুই করে না
+               - ডেটা না এলে → সঙ্গে সঙ্গে ফ্রেশ কানেকশন খুলে ঠিক ওই
+                 পজিশন থেকে প্লে করায় (এক লাফে, অপেক্ষা নেই)
+               ফিউজ: ৪ মিনিট+ জাম্প = ১.৫ সে | ৩০ সে+ জাম্প = ২.৫ সে | ছোট = ৪ সে
+               ============================================================ */
+            let seekFuseT = null, seekFuseTarget = 0, seekStartedAt = 0;
+            video.addEventListener('seeking', () => {
+                if (RESUME.busy) return;
+                seekStartedAt = Date.now();
+                clearTimeout(seekFuseT);
+                seekFuseTarget = video.currentTime;
+                const from = (RESUME.lastPos > 0.5) ? RESUME.lastPos : seekFuseTarget;
+                const d = Math.abs(seekFuseTarget - from);
+                const ms = d >= 240 ? 1500 : (d >= 30 ? 2500 : 4000);
+                seekFuseT = setTimeout(() => {
+                    seekFuseT = null;
+                    if (RESUME.busy || !MBX.hasPlayed) return;
+                    // ডেটা এসে গেলে কিছুই করার নেই — নেটিভ সিকই জিতেছে
+                    if (video.readyState >= 3 || bufferedAheadOf(video.currentTime) > video.currentTime) return;
+                    resumeConn(!video.paused, seekFuseTarget);
+                }, ms);
+            });
+            video.addEventListener('seeked', () => { seekStartedAt = 0; clearTimeout(seekFuseT); seekFuseT = null; });
 
             /* --- ⏸️ NO AUTOPLAY: ভলিউম প্রস্তুত, প্লে ইউজারের হাতে --- */
             try {
