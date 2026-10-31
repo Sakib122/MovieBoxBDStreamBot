@@ -154,6 +154,16 @@
         #instruction-text { font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--txt); }
         .big-file-warning { border: 1.5px solid rgba(255,77,77,.5); background: rgba(255,77,77,.07); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.6; }
 
+        /* 📢 নন-ইনট্রুসিভ ব্যানার স্লট: প্লেয়ারের উপরে, ভিডিও/কন্ট্রোল কিছুই ঢাকে না,
+           লোডের সময় লেআউট লাফায় না (জায়গা আগেই রিজার্ভড)। ডেস্কটপে 468x60,
+           মোবাইলে 320x50 — একই জায়গায় অটো-সুইচ, স্ক্রিনে সবসময় ফিট। */
+        .mbx-ad-top { display:flex; justify-content:center; align-items:center; margin:0 auto 14px; min-height:66px; max-width:100%; overflow:hidden; }
+        .mbx-ad-top .ad-mobile { display:none; }
+        @media (max-width:519px) {
+            .mbx-ad-top { min-height:56px; }
+            .mbx-ad-top .ad-desktop { display:none; }
+            .mbx-ad-top .ad-mobile { display:block; }
+        }
         .smart-notice { border: 1.5px solid rgba(255,209,102,.5); background: rgba(255,209,102,.07); color: #ffe9b3; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.65; }
         .smart-notice.good { border-color: rgba(45,212,191,.5); background: rgba(45,212,191,.06); color: #b8f0e8; }
         .smart-notice b { font-weight: 800; }
@@ -185,6 +195,35 @@
                     <div class="ph-title" id="phTitle">{{ file_name }}</div>
                 </div>
                 <span class="status-badge paused" id="mbxStatus"><i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused</span>
+            </div>
+
+            <!-- 📢 ব্যানার স্লট: প্লেয়ারের ঠিক উপরে — ভিডিও, কন্ট্রোল বা সিক-বার
+                 কিছুই ঢাকে না; ডেস্কটপে 468x60, মোবাইলে 320x50 দেখায় (অটো-সুইচ) -->
+            <div class="mbx-ad-top">
+                <div class="ad-desktop">
+                    <script>
+                      atOptions = {
+                        'key' : 'e29a2af548bd3c9fa5512bd423e484a5',
+                        'format' : 'iframe',
+                        'height' : 60,
+                        'width' : 468,
+                        'params' : {}
+                      };
+                    </script>
+                    <script src="https://bicea.org/22/e29a2af548bd3c9fa5512bd423e484a5"></script>
+                </div>
+                <div class="ad-mobile">
+                    <script>
+                      atOptions = {
+                        'key' : 'a19161feecb13d6d32cfa3a7f599f5a2',
+                        'format' : 'iframe',
+                        'height' : 50,
+                        'width' : 320,
+                        'params' : {}
+                      };
+                    </script>
+                    <script src="https://bicea.org/22/a19161feecb13d6d32cfa3a7f599f5a2"></script>
+                </div>
             </div>
 
             <div class="mbx-player" id="mbxPlayer">
@@ -860,6 +899,9 @@
                 clearTimeout(lg.forceT);
                 lg.forceT = setTimeout(() => {
                     if (!lg.on || lg.done) return;
+                    // 🛡️ R5: ডেটা আসছে = ওভারলে নিজেই শেষ হবে; জোর করে বন্ধ+প্লে করলে
+                    // স্টল → আবার লোড লুপ হয়। ফোর্স কেবল প্লেহেডে ডেটা থাকলে।
+                    if (video.readyState < 2 || bufferedAheadOf(video.currentTime) <= video.currentTime) return;
                     lg.done = true;
                     lg.pct.textContent = 'GO!';
                     lg.pct.classList.add('go');
@@ -1168,6 +1210,21 @@
                 } catch(e){}
                 return false;
             }
+            /* 📡 R5 ডাউনলোড-প্রগ্রেস ট্র্যাকার: বাফার বাড়ছে = কানেকশন বেঁচে আছে।
+               কিক/রিফ্রেশ করবো কেবল প্রগ্রেস সত্যিই থেমে গেলে — ধীর সার্ভারে
+               অযথা কিক দিলে সার্ভার আবার শুন্য থেকে টানতে শুরু করে →
+               "লোড → আবার লোড → আবার লোড" চিরকাল লুপ হয় */
+            let lastBufEnd = -1, lastProgressAt = Date.now();
+            function noteProgress(){
+                try {
+                    const b = video.buffered; let e = 0;
+                    for (let i = 0; i < b.length; i++) if (b.end(i) > e) e = b.end(i);
+                    if (e > lastBufEnd + 0.05) { lastBufEnd = e; lastProgressAt = Date.now(); }
+                } catch(err){}
+            }
+            function resetProgress(){ lastBufEnd = -1; lastProgressAt = Date.now(); }
+            video.addEventListener('progress', noteProgress);
+            video.addEventListener('emptied', resetProgress);
             let lastT = 0, stuck = 0, lastReload = 0, noBuf = 0;
             const WD_CD = 20000; // দুটো জরুরি কিকের মধ্যে ন্যূনতম ফাঁক
             setInterval(() => {
@@ -1176,7 +1233,10 @@
                 /* ⚡ F1 সিক-হ্যাং ব্লাইন্ড স্পট: আগে seeking=true থাকলে ওয়াচডগ চুপ করে
                    যেত — মৃত কানেকশনে সিক ঝুলে থাকলে ৬ সেকেন্ডেই ফ্রেশ কানেকশন */
                 if (video.seeking) {
-                    if (seekStartedAt && !RESUME.busy && Date.now() - seekStartedAt > 6000 && Date.now() - lastReload > WD_CD) {
+                    // 🛡️ R5: সিক ঝুলে থাকলেও যতক্ষণ ডেটা আসছে ততক্ষণ অপেক্ষা —
+                    // সার্ভার কাজ করছে; ৮ সে+ সিক আর ১২ সে+ প্রগ্রেস-বন্ধ হলে তবেই কিক
+                    if (seekStartedAt && !RESUME.busy && Date.now() - seekStartedAt > 8000
+                        && Date.now() - lastProgressAt > 12000 && Date.now() - lastReload > WD_CD) {
                         lastReload = Date.now();
                         resumeConn(true, t);
                     }
@@ -1208,7 +1268,7 @@
                     // 🛡️ F2 আর কোনো সীমা নেই (আগের fails<3 ক্যাপে ৩ বারের পর চিরতরে ফ্রিজ
                     // হয়ে যেত) — এখন শুধু ২০ সেকেন্ড কুলডাউন, যতবার দরকার ততবার
                     noBuf++;
-                    if (noBuf >= 2 && !RESUME.busy && Date.now() - lastReload > WD_CD) {
+                    if (noBuf >= 2 && !RESUME.busy && Date.now() - lastProgressAt > 12000 && Date.now() - lastReload > WD_CD) {
                         noBuf = 0; lastReload = Date.now();
                         resumeConn(true, t);
                     }
@@ -1281,10 +1341,12 @@
                 const cleanup = () => {
                     video.removeEventListener('loadedmetadata', onMeta);
                     video.removeEventListener('canplay', onCan);
+                    video.removeEventListener('seeked', onSeeked);
                     video.removeEventListener('error', onErr);
+                    stopDeadPoll();
                 };
                 const giveUp = (msg) => {
-                    cleanup(); clearTimeout(deadT);
+                    cleanup();
                     RESUME.busy = false;
                     setPlayIcons(false); setStatus('paused');
                     try { showFallbackBox(); } catch(e){}
@@ -1302,9 +1364,8 @@
                     } catch(e){}
                     try { video.playbackRate = rate; } catch(e){}
                 };
-                const onCan = () => {
-                    if (!RESUME.busy) { cleanup(); return; }
-                    cleanup(); clearTimeout(deadT);
+                const finishResume = () => {
+                    cleanup();
                     RESUME.busy = false; RESUME.fails = 0; RESUME.pausedAt = 0;
                     RESUME.freshUntil = Date.now() + 60000;
                     if (autoplay && !RESUME.userPaused) {
@@ -1314,17 +1375,40 @@
                         setPlayIcons(false); setStatus('paused');
                     }
                 };
+                const onCan = () => {
+                    if (!RESUME.busy) { cleanup(); return; }
+                    // 🛡️ R5: রিস্টোর-সিক এখনও চলমান থাকলে (টার্গেটের ডেটা তখনও আসেনি)
+                    // এখনই শেষ/প্লে করো না — সিক শেষ হলে onSeeked প্লে করাবে;
+                    // আগে এখানেই "লোড → প্লে → আবার লোড" লুপ শুরু হত
+                    if (video.seeking) return;
+                    finishResume();
+                };
+                const onSeeked = () => {
+                    if (!RESUME.busy || video.seeking) return;
+                    if (video.readyState >= 2) finishResume();
+                };
                 const onErr = () => {
                     if (!RESUME.busy) { cleanup(); return; }
-                    cleanup(); clearTimeout(deadT);
+                    cleanup();
                     RESUME.fails++;
                     RESUME.busy = false;
-                    if (RESUME.fails <= 2) { setTimeout(() => { try { resumeConn(autoplay); } catch(e){} }, 2500); }
+                    if (RESUME.fails <= 2) { setTimeout(() => { try { resumeConn(autoplay, pos); } catch(e){} }, 2500); }
                     else giveUp('⚠️ কানেকশন পাওয়া যাচ্ছে না — পেজ রিফ্রেশ করে আবার চেষ্টা করুন');
                 };
-                const deadT = setTimeout(() => {
-                    if (RESUME.busy) giveUp('⚠️ খুব ধীর হচ্ছে — আবার প্লে চাপুন');
-                }, 75000);
+                // 🛡️ R5 প্রগ্রেস-সচেতন ডেড-টাইমার (আগের ৭৫ সেকেন্ডের ফিক্সড টাইমার ধীর
+                // সার্ভারে কাজটাই বাতিল করে দিত → লুপ): ডেটা আসছে = অপেক্ষা চলবে;
+                // ৩৫ সেকেন্ড একটুও ডেটা না এলে কেবল তখনই হাল ছেড়ে আবার চেষ্টা
+                resetProgress();
+                const startedAt = Date.now();
+                const deadPoll = setInterval(() => {
+                    if (!RESUME.busy) { clearInterval(deadPoll); return; }
+                    noteProgress();
+                    if (Date.now() - lastProgressAt > 35000 || Date.now() - startedAt > 300000) {
+                        clearInterval(deadPoll);
+                        giveUp('⚠️ কানেকশন খুব ধীর — আবার চেষ্টা করছি…');
+                    }
+                }, 2000);
+                const stopDeadPoll = () => clearInterval(deadPoll);
                 try {
                     video.pause();
                     video.removeAttribute('src');
@@ -1340,38 +1424,44 @@
                 if (pos > 3) lgShow(pos, autoplay);
                 video.addEventListener('loadedmetadata', onMeta);
                 video.addEventListener('canplay', onCan);
+                video.addEventListener('seeked', onSeeked);
                 video.addEventListener('error', onErr);
             }
             window.MBXResume = { kick: () => resumeConn(true), state: RESUME };
 
             /* ============================================================
-               ⚡ F9 SEEKBOOST ENGINE — সিক/টানকে অনেক ফাস্ট করে
+               ⚡ SEEKBOOST ENGINE v2 — সিক ফাস্ট + কখনো লুপে আটকায় না
                ============================================================
-               সমস্যা: বড় জাম্প (১০-২০ মিনিট) বা মৃত/অতি-ধীর কানেকশনে সিক
-               দিলে ব্রাউজার পুরনো কানেকশনেই ডেটার অপেক্ষা করত — মিনিটের
-               পর মিনিট ঝুলে থাকত ("Loading" + টানা-টানি নিষ্ক্রিয়)।
-               সমাধান: প্রতিটি সিকের সাথে ছোট "ফিউজ" বসে —
-               - ফিউজের মধ্যে ডেটা এলে → স্বাভাবিক ফাস্ট সিক, কিছুই করে না
-               - ডেটা না এলে → সঙ্গে সঙ্গে ফ্রেশ কানেকশন খুলে ঠিক ওই
-                 পজিশন থেকে প্লে করায় (এক লাফে, অপেক্ষা নেই)
-               ফিউজ: ৪ মিনিট+ জাম্প = ১.৫ সে | ৩০ সে+ জাম্প = ২.৫ সে | ছোট = ৪ সে
+               আগের ফিউজ ছিল সময়-ভিত্তিক: ২.৫ সেকেন্ডে ডেটা না এলেই কিক।
+               কিন্তু ধীর সার্ভারে বড় জাম্পের ডেটা আসতে ১-২ মিনিটও লাগে —
+               তখন কিক মানে সার্ভারের কাজ শুন্য থেকে শুরু → "লোড → আবার
+               লোড → আবার লোড" চিরকাল লুপ (৫-১০ মিনিট প্লেই হয় না)।
+               R5: ফিউজ এখন প্রগ্রেস-ভিত্তিক —
+               - ডেটা আসছে (বাফার বাড়ছে) → অপেক্ষা, ওভারলে প্রগ্রেস দেখাবে
+               - ১০ সেকেন্ড একটুও ডেটা আসেনি → তবেই ফ্রেশ কানেকশন
                ============================================================ */
             let seekFuseT = null, seekFuseTarget = 0, seekStartedAt = 0;
+            function seekFuseCheck(){
+                seekFuseT = null;
+                if (!MBX.hasPlayed) return;
+                if (RESUME.busy) return; // রিজিউম-ইঞ্জিন নিজে সামলাচ্ছে
+                // ডেটা এসে গেলে কিছুই করার নেই — নেটিভ সিকই জিতেছে
+                if (video.readyState >= 3 || bufferedAheadOf(video.currentTime) > video.currentTime) return;
+                if (Date.now() - lastProgressAt < 10000) { // ডেটা আসছে → অপেক্ষাই সঠিক
+                    seekFuseT = setTimeout(seekFuseCheck, 2000);
+                    return;
+                }
+                // ১০ সেকেন্ডে কোনো ডেটাই আসেনি = কানেকশন মরা → ফ্রেশ কানেকশন
+                resumeConn(!video.paused, seekFuseTarget);
+            }
             video.addEventListener('seeking', () => {
-                if (RESUME.busy) return;
                 seekStartedAt = Date.now();
-                clearTimeout(seekFuseT);
                 seekFuseTarget = video.currentTime;
+                if (RESUME.busy) return; // রিস্টোর-সিক: শুধু ট্র্যাকিং, ফিউজ নয়
                 const from = (RESUME.lastPos > 0.5) ? RESUME.lastPos : seekFuseTarget;
                 const d = Math.abs(seekFuseTarget - from);
-                const ms = d >= 240 ? 1500 : (d >= 30 ? 2500 : 4000);
-                seekFuseT = setTimeout(() => {
-                    seekFuseT = null;
-                    if (RESUME.busy || !MBX.hasPlayed) return;
-                    // ডেটা এসে গেলে কিছুই করার নেই — নেটিভ সিকই জিতেছে
-                    if (video.readyState >= 3 || bufferedAheadOf(video.currentTime) > video.currentTime) return;
-                    resumeConn(!video.paused, seekFuseTarget);
-                }, ms);
+                clearTimeout(seekFuseT);
+                seekFuseT = setTimeout(seekFuseCheck, d >= 240 ? 2500 : (d >= 30 ? 3000 : 4000));
             });
             video.addEventListener('seeked', () => { seekStartedAt = 0; clearTimeout(seekFuseT); seekFuseT = null; });
 
