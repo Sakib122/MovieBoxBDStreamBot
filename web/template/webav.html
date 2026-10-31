@@ -334,6 +334,8 @@
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
             // 💰 STREAM AD: কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
             streamAdCooldown: 60,
+            // PAUSE FIX: keep connection fresh while paused (set false to disable)
+            pauseKeepAlive: true,
             // 🎯 স্মার্ট নোটিস: বন্ধ করতে false
             smartNotice: true,
             soundText: {
@@ -588,6 +590,29 @@
             const video = document.getElementById('mbxVideo');
             MBX.video = video;
             video.src = '{{ file_url }}'.replace("http://", "https://");
+            const SRC = video.src;
+
+            /* ============================================================
+               PAUSE-RESUME FIX ENGINE
+               Long pause -> CDN connection dies -> browser keeps waiting
+               on that dead connection (the 5-6 min freeze you saw).
+               Now: press play -> drop dead connection -> fresh connection
+               -> seek back to the same position -> play instantly.
+            ============================================================ */
+            const RESUME = { pausedAt: 0, busy: false, wd: null, fails: 0, linkDead: false, posSaved: 0 };
+            const POS_KEY = 'mbx_pos::' + "{{ file_name }}";
+
+            function saveWatchPos(){
+                try {
+                    if (!MBX.hasPlayed || !video.currentTime || !isFinite(video.duration)) return;
+                    if (video.ended || (video.duration - video.currentTime) < 30) { localStorage.removeItem(POS_KEY); return; }
+                    localStorage.setItem(POS_KEY, String(Math.floor(video.currentTime)));
+                } catch(e){}
+            }
+            // restore last session position (also used by expired-link auto reload)
+            let restorePos = 0;
+            try { restorePos = parseFloat(localStorage.getItem(POS_KEY) || '0') || 0; } catch(e){}
+            if (restorePos > 30) { try { video.currentTime = restorePos; } catch(e){} }
 
             const btnPlay = document.getElementById('btnPlay');
             const btnMute = document.getElementById('btnMute');
@@ -647,13 +672,121 @@
                     : '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused';
             }
 
+            /* ============================================================
+               SMART REFRESH -- the real fix for the after-pause freeze
+               dead connection out -> new connection -> same position -> play
+            ============================================================ */
+            function resumeKickNeeded(){
+                if (!MBX.hasPlayed || RESUME.busy || video.ended) return false;
+                if (RESUME.linkDead) return true;
+                const pausedFor = RESUME.pausedAt ? (Date.now() - RESUME.pausedAt) : 0;
+                if (pausedFor < 45000) return false;
+                const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
+                return ahead < 2 || video.readyState < 3;
+            }
+            let wdMarks = null;
+            function armResumeWatchdog(){
+                disarmResumeWatchdog();
+                let alive = false;
+                const mark = () => { alive = true; };
+                video.addEventListener('timeupdate', mark);
+                video.addEventListener('progress', mark);
+                wdMarks = mark;
+                RESUME.wd = setTimeout(() => {
+                    const m = wdMarks; wdMarks = null;
+                    if (m) { video.removeEventListener('timeupdate', m); video.removeEventListener('progress', m); }
+                    // 3s after play: not a single frame or byte -> dead connection -> refresh NOW
+                    if (!video.paused && !alive && !RESUME.busy) smartRefresh(true);
+                }, 3000);
+            }
+            function disarmResumeWatchdog(){
+                if (RESUME.wd) { clearTimeout(RESUME.wd); RESUME.wd = null; }
+                if (wdMarks) { video.removeEventListener('timeupdate', wdMarks); video.removeEventListener('progress', wdMarks); wdMarks = null; }
+            }
+            function recoverByReload(pos){
+                try { localStorage.setItem(POS_KEY, String(Math.floor(Math.max(0, pos)))); } catch(e){}
+                toast('⚠️ লিংক এক্সপায়ার্ড — ফ্রেশ করে আসছি…', 4000);
+                setTimeout(() => { try { saveWatchPos(); } catch(e){} location.reload(); }, 1500);
+            }
+            function smartRefresh(autoplay, quiet){
+                if (RESUME.busy) return;
+                RESUME.busy = true;
+                disarmResumeWatchdog();
+                clearTimeout(lg.pendT);
+                wantPlayAfterSeek = false;
+                lgHide();
+                const pos = Math.max(0, video.currentTime || 0);
+                const rate = video.playbackRate || 1;
+                const wantPlay = (autoplay === true) || !video.paused;
+                if (!quiet) toast('🔄 কানেকশন রিফ্রেশ হচ্ছে…', 5000);
+                setStatus('load');
+
+                let metaT = null, canT = null, done = false;
+                const onMeta = () => {
+                    clearTimeout(metaT);
+                    try { if (Math.abs(video.currentTime - pos) > 1) video.currentTime = pos; } catch(e){}
+                };
+                const onCan = () => {
+                    if (done) return;
+                    done = true; cleanup();
+                    try { video.playbackRate = rate; } catch(e){}
+                    RESUME.busy = false; RESUME.fails = 0; RESUME.linkDead = false;
+                    if (wantPlay) video.play().catch(() => {
+                        video.muted = true; updateMuteIcon();
+                        video.play().catch(()=>{});
+                        toast('🔇 সাউন্ড ব্লক — স্পিকার আইকনে চাপ দিন', 3000);
+                    });
+                    else { setPlayIcons(false); setStatus('paused'); }
+                };
+                const onErr = () => fail();
+                function cleanup(){
+                    video.removeEventListener('loadedmetadata', onMeta);
+                    video.removeEventListener('canplay', onCan);
+                    video.removeEventListener('error', onErr);
+                    clearTimeout(metaT); clearTimeout(canT);
+                }
+                function fail(){
+                    if (done) return;
+                    done = true; cleanup();
+                    RESUME.busy = false;
+                    RESUME.fails++;
+                    if (RESUME.fails >= 2) {
+                        RESUME.linkDead = true;
+                        if (wantPlay) recoverByReload(pos);
+                        else toast('⚠️ স্ট্রিম লিংক এক্সপায়ার্ড — প্লে চাপলেই অটো ঠিক হবে', 3500);
+                    } else {
+                        setTimeout(() => smartRefresh(wantPlay, quiet), 1500);
+                    }
+                }
+
+                video.addEventListener('loadedmetadata', onMeta);
+                video.addEventListener('canplay', onCan);
+                video.addEventListener('error', onErr);
+                metaT = setTimeout(fail, 12000);
+                canT = setTimeout(onCan, 15000);
+
+                // drop the old dead connection
+                try { video.removeAttribute('src'); } catch(e){}
+                try { video.load(); } catch(e){}
+                // fresh connection + old position (set before metadata = default
+                // playback start position, so data is fetched from that point --
+                // the file is NOT re-downloaded from the beginning)
+                video.src = SRC;
+                try { video.currentTime = pos; } catch(e){}
+            }
+            // debug/test hook
+            window.MBXFix = { refresh: (a) => smartRefresh(a !== false, false), needsKick: resumeKickNeeded, state: RESUME };
+
             /* --- Controls --- */
             function togglePlay(){
                 if (video.paused) {
                     // 🔊 প্রথম প্লে = ইউজারের নিজের ক্লিক → সাউন্ড অন (ন্যাচারাল)
                     if (!MBX.firstPlay) { MBX.firstPlay = true; video.muted = false; }
                     fireStreamAd();
+                    // pause-fix: long pause + dead connection -> instant refresh, instant play
+                    if (resumeKickNeeded()) { smartRefresh(true); tryBoost(); return; }
                     video.play().catch(()=>{});
+                    armResumeWatchdog();
                     tryBoost();
                 } else video.pause();
             }
@@ -952,8 +1085,9 @@
                 // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
                 if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
             });
-            video.addEventListener('pause', () => { setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
+            video.addEventListener('pause', () => { RESUME.pausedAt = Date.now(); saveWatchPos(); setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
             video.addEventListener('waiting', () => {
+                if (RESUME.busy) return;
                 if (!video.paused) {
                     setStatus('load');
                     clearTimeout(lg.pendT);
@@ -962,15 +1096,23 @@
                     }, 600);
                 }
             });
-            video.addEventListener('playing', () => { setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; });
+            video.addEventListener('playing', () => { setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; disarmResumeWatchdog(); RESUME.pausedAt = 0; });
 
             video.addEventListener('timeupdate', () => {
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
+                // save position for expired-link auto recovery
+                if (Date.now() - RESUME.posSaved > 10000) { RESUME.posSaved = Date.now(); saveWatchPos(); }
             });
 
             video.addEventListener('loadedmetadata', () => {
                 document.getElementById('tDur').textContent = fmtTime(video.duration);
+                // resume last session position if present
+                if (restorePos > 30 && video.duration && restorePos < video.duration - 20) {
+                    try { if (Math.abs(video.currentTime - restorePos) > 1) video.currentTime = restorePos; } catch(e){}
+                    toast('⏯️ আগের পজিশন থেকে শুরু: ' + fmtTime(restorePos), 3000);
+                }
+                restorePos = 0;
                 // 🖼️ প্রথম ফ্রেম পোস্টার: মাইক্রো-সিক দিয়ে ফ্রেম-১ আঁকা (অটো-প্লে ছাড়াই)
                 try { if (video.currentTime === 0) video.currentTime = 0.001; } catch(e){}
             });
@@ -987,6 +1129,7 @@
             }
             /* 🎬 মুভি শেষ: অটোমেটিক ফুলস্ক্রিন ছোট + জমা অ্যাড ফ্লাশের প্রস্তুতি */
             video.addEventListener('ended', () => {
+                try { localStorage.removeItem(POS_KEY); } catch(e){}
                 setPlayIcons(false); setStatus('paused'); showUI(false); lgHide();
                 const wasFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
                 if (wasFs) {
@@ -995,6 +1138,7 @@
                 if (pendingAds > 0) armFlush();
             });
             video.addEventListener('error', () => {
+                if (RESUME.busy) return; // smart-refresh in progress, it handles this
                 lgHide();
                 poster.classList.remove('show');
                 MBX.posterPainted = false;
@@ -1017,15 +1161,7 @@
                         video.play().catch(()=>{});
                     } else {
                         clearInterval(iv);
-                        const pos = Math.max(video.currentTime, 0.05);
-                        try {
-                            video.load();
-                            video.addEventListener('loadedmetadata', function m(){
-                                video.removeEventListener('loadedmetadata', m);
-                                try { video.currentTime = pos; } catch(e){}
-                                video.play().catch(()=>{});
-                            });
-                        } catch(e){}
+                        smartRefresh(true);
                     }
                 }, 1900);
             }
@@ -1133,7 +1269,31 @@
             let wakeLock = null;
             async function reqWake(){ try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
             function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
-            document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
+            /* --- keep connection fresh while paused -> resume is instant --- */
+            if (CONFIG.pauseKeepAlive) {
+                setInterval(() => {
+                    if (RESUME.busy || RESUME.linkDead) return;
+                    if (!MBX.hasPlayed || !video.paused || video.ended || document.hidden) return;
+                    if (video.readyState < 1) return;
+                    const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
+                    if (ahead > 30) return; // 30s+ already buffered -> resume will be instant anyway
+                    smartRefresh(false, true); // silent renew, stays paused
+                }, 150000);
+            }
+            window.addEventListener('pagehide', saveWatchPos);
+            window.addEventListener('beforeunload', saveWatchPos);
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    if (!video.paused) reqWake();
+                    // back on tab: quietly renew the connection if it died while away
+                    else if (MBX.hasPlayed && !RESUME.busy && !RESUME.linkDead && video.readyState >= 1) {
+                        const ahead = bufferedAheadOf(video.currentTime) - video.currentTime;
+                        const pausedFor = RESUME.pausedAt ? (Date.now() - RESUME.pausedAt) : 0;
+                        if (ahead < 5 && pausedFor > 30000) smartRefresh(false, true);
+                    }
+                } else saveWatchPos();
+            });
 
             /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
             window.addEventListener('orientationchange', () => {
@@ -1150,13 +1310,14 @@
                 } catch(e){}
                 return false;
             }
-            let lastT = 0, stuck = 0, lastReload = 0;
+            let lastT = 0, stuck = 0, lastReload = 0, lastBufEnd = -1, deadData = 0;
             setInterval(() => {
-                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) return;
+                if (RESUME.busy) { lastT = video.currentTime; stuck = 0; deadData = 0; return; }
+                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) { deadData = 0; return; }
                 const t = video.currentTime;
                 const frozen = Math.abs(t - lastT) < 0.1;
                 lastT = t;
-                if (!frozen) { stuck = 0; return; }
+                if (!frozen) { stuck = 0; deadData = 0; return; }
                 if (hasBufferAhead(t)) {
                     stuck++;
                     if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
@@ -1164,16 +1325,14 @@
                         stuck = 0;
                         if (Date.now() - lastReload > 30000) {
                             lastReload = Date.now();
-                            const pos = t;
-                            try {
-                                video.load();
-                                video.addEventListener('loadedmetadata', function m(){
-                                    video.removeEventListener('loadedmetadata', m);
-                                    doSeek(pos);
-                                });
-                            } catch(e){}
+                            smartRefresh(true);
                         }
                     }
+                } else {
+                    // no buffer + no data arriving at all = dead connection -> refresh
+                    const end = bufferedAheadOf(t);
+                    if (end > lastBufEnd + 0.1) { lastBufEnd = end; deadData = 0; }
+                    else if (++deadData >= 5) { deadData = 0; smartRefresh(true); }
                 }
             }, 2000);
 
