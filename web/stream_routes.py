@@ -11,6 +11,7 @@ from pyrogram.errors import FloodWait
 from web.bot import multi_clients, work_loads, WebavBot
 from web.server.exceptions import FileNotFound, InvalidHash
 from web.utils.custom_dl import ByteStreamer
+from web.utils.file_properties import get_media_from_message
 from web.utils.render_template import render_page
 from info import *
 from utils import temp, get_readable_time
@@ -190,6 +191,91 @@ async def watch_handler(request: web.Request):
     except Exception as e:
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
+
+
+# ---------------------------------------------------------------
+# 🖼️ THUMBNAIL ROUTE — মুভির ছবি (পেজ খোলার সাথে সাথেই দেখাবে)
+# ---------------------------------------------------------------
+# টেলিগ্রাম প্রতিটি ভিডিওর জন্য নিজে থেকেই একটা স্ক্রিনশট (thumbnail) বানায়।
+# সেটা সার্ভ করলে ইউজার ভিডিও ডিকোডের অপেক্ষায় কালো স্ক্রিন দেখে না —
+# HEVC 10-bit ফাইলেও মুভির ছবি সাথে সাথে আসে।
+thumb_cache: dict = {}          # msg_id -> (jpeg_bytes, ts)
+THUMB_CACHE_MAX = 800
+
+
+@routes.get(r"/thumb/{path:\S+}", allow_head=True)
+async def thumb_handler(request: web.Request):
+    try:
+        path = request.match_info["path"]
+        match = re.search(r"^([a-zA-Z0-9_-]{6})(\d+)$", path)
+        if match:
+            secure_hash = match.group(1)
+            id = int(match.group(2))
+        else:
+            id = int(re.search(r"(\d+)", path).group(1))
+            secure_hash = request.rel_url.query.get("hash")
+
+        # হ্যাশ ছাড়া / ভুল হ্যাশ → ছবি কেউ চুরি করতে পারবে না
+        if not secure_hash:
+            return web.Response(status=403, text="Forbidden")
+
+        cached = thumb_cache.get(id)
+        if cached:
+            return web.Response(
+                body=cached[0],
+                content_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=604800"},
+            )
+
+        file = await WebavBot.get_messages(int(BIN_CHANNEL), int(id))
+        media = get_media_from_message(file)
+        if media is None:
+            return web.Response(status=404, text="No media")
+
+        uid = getattr(media, "file_unique_id", "")
+        if uid[:6] != secure_hash:
+            return web.Response(status=403, text="Forbidden")
+
+        thumbs = getattr(media, "thumbs", None) or []
+        if not thumbs:
+            return web.Response(status=404, text="No thumbnail")
+
+        # FloodWait হলে ২ বার পর্যন্ত অপেক্ষা করে আবার চেষ্টা
+        # ⚠️ শুধু thumbnail অবজেক্টটা ডাউনলোড হবে — পুরো ভিডিও নয় (ভুল হলে 1GB নামতো!)
+        bio = None
+        for attempt in range(3):
+            try:
+                bio = await WebavBot.download_media(thumbs[-1], in_memory=True)
+                break
+            except FloodWait as e:
+                if e.value > MAX_FLOODWAIT or attempt == 2:
+                    return web.Response(status=429, text="Busy")
+                await asyncio.sleep(e.value + 1)
+            except Exception:
+                return web.Response(status=404, text="No thumbnail")
+
+        if not bio:
+            return web.Response(status=404, text="No thumbnail")
+
+        data = bio.getvalue()
+        if not data:
+            return web.Response(status=404, text="No thumbnail")
+
+        # ছোট্ট মেমোরি ক্যাশ (থাম্বনেইল কখনো বদলায় না)
+        if len(thumb_cache) >= THUMB_CACHE_MAX:
+            thumb_cache.pop(next(iter(thumb_cache)))
+        thumb_cache[id] = (data, time.time())
+
+        return web.Response(
+            body=data,
+            content_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=604800"},
+        )
+    except FileNotFound:
+        return web.Response(status=404, text="No thumbnail")
+    except Exception as e:
+        logging.warning(f"Thumb route error for {request.path}: {e}")
+        return web.Response(status=404, text="No thumbnail")
 
 
 @routes.get(r"/{path:\S+}", allow_head=True)
