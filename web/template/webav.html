@@ -980,9 +980,14 @@
                     lg.finT = setTimeout(() => {
                         lgHide();
                         MBX.hold = false;
+                        /* 🔧 FIX: হোল্ড-পজ ফ্ল্যাগ এখানেই বন্ধ — আগে এটা কখনো পরিষ্কার হতো না,
+                           ফলে 'playing' ইভেন্ট চিরকাল আটকে থাকত → hasPlayed সেট হতো না,
+                           "Loading" ব্যাজ জমে থাকত আর মাঝপথের ফ্রিজ-রিকভারি ওয়াচডগ মরা থাকত */
+                        MBX.holding = false;
                         if (lg.wantPlay) {
                             lg.wantPlay = false;
                             MBX.prebuffer = false;
+                            MBX.userWantsPlay = true;
                             /* ১০০% হলেই সাথে সাথে সাউন্ডসহ প্লে */
                             const fp = video.play();
                             if (fp && fp.catch) fp.catch(() => {
@@ -1106,8 +1111,8 @@
                 poster.classList.remove('show');
                 document.getElementById('mbxPosterImg').classList.remove('show');
                 document.getElementById('mbxIdleChip').classList.remove('show');
-                // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
-                if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
+                // 🔧 START FIX আর্ম: প্রথম প্লে ডেটা না পেলে কিক দাও (গেম শেষ হলেই সক্রিয় হবে)
+                if (!MBX.hasPlayed) setTimeout(startKick, 2500);
             });
             video.addEventListener('pause', () => {
                 /* প্রি-বাফার ধরে রাখার পজ — গেম চলবে, কিছু বন্ধ হবে না */
@@ -1183,35 +1188,84 @@
             });
             video.addEventListener('error', () => {
                 lgHide();
-                poster.classList.remove('show');
+                /* 🔧 FIX (সিক-এর পরে ০-তে ফিরে যাওয়া): আগে এই হ্যান্ডলার video.load()
+                   করত পজিশন না রেখে + পোস্টার মুছে ফেলত। ফলে সিক করা অবস্থায়
+                   সার্ভার 504 দিলে মুভি হঠাৎ ০০:০০-তে ফিরে যেত, স্ক্রিন কালো হতে,
+                   আর প্লে-পারমিশন শেষ হয়ে গেলে আটকে যেত। এখন: আগের জায়গা মনে
+                   রেখে সেখান থেকেই রিকভারি — ০-তে আর ফিরে যাবে না। */
+                const pos = (MBX.hasPlayed && isFinite(video.currentTime)) ? video.currentTime : 0;
+                const keepPos = pos > 0.5;
                 MBX.posterPainted = false;
                 if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
                 MBX.errTries++;
-                /* 🤫 সাইলেন্ট রিট্রাই — ইউজার কিছু দেখবে না, নিজে নিজেই ঠিক হবে */
-                setTimeout(() => { try { lastReload = Date.now(); video.load(); video.play().catch(()=>{}); } catch(e){} }, 1500);
+                setStatus('load');
+                /* 🤫 সাইলেন্ট রিট্রাই — আগের জায়গা থেকেই, ইউজার কিছু দেখবে না */
+                setTimeout(() => {
+                    try {
+                        lastReload = Date.now();
+                        bootBufEnd = 0; bootRS = 0;
+                        video.load();
+                        if (keepPos) {
+                            video.addEventListener('loadedmetadata', function em(){
+                                video.removeEventListener('loadedmetadata', em);
+                                try { video.currentTime = pos; } catch(e){}
+                            });
+                        }
+                        video.addEventListener('canplay', function ec(){
+                            video.removeEventListener('canplay', ec);
+                            if (MBX.userWantsPlay && video.paused) {
+                                const rp = video.play();
+                                if (rp && rp.catch) rp.catch(() => {
+                                    /* প্লে-পারমিশন না পেলে মিউটেডে ঠিক জায়গা থেকেই চালু — ট্যাপে সাউন্ড */
+                                    MBX.autoMuted = true; video.muted = true; updateMuteIcon();
+                                    const rp2 = video.play();
+                                    if (rp2 && rp2.catch) rp2.then(() => { toast('🔇 ট্যাপ করলেই সাউন্ড চালু হবে', 4000); armUnmute(); }).catch(()=>{});
+                                });
+                            }
+                        });
+                    } catch(e){}
+                }, 1200);
             });
 
-            /* --- 🔧 START FIX: ০০:০০ ফ্রিজ কিক (প্রথম প্লেতে একবারই) --- */
+            /* --- 🔧 START FIX: ০০:০০ ফ্রিজ কিক (ভি২) ---
+               আগের বাগ: প্লে-চাপার ১.৮ সেকেন্ড পরে একবার চেষ্টা করত, তখন সাপ-গেম চলায়
+               ভিডিও পজ থাকে → সাথে সাথে ছেড়ে দিত → আর কখনো ফিরত না। ফলে গেম ১০০%
+               হওয়ার পরও সার্ভার ডেটা না দিলে ০০:০০-তে অনন্তকাল কালো থাকত
+               (+১০ স্কিপ নতুন কানেকশন খুলে বলে তখনই চলত)।
+               এখন: গেম শেষ না হলে অপেক্ষা করে, গেম শেষে ডেটা না এলে নাজ → ফ্রেশ
+               কানেকশনে রিলোড → সাথে সাথে প্লে — নিজে নিজেই চালু হয়ে যায়। */
+            let kickIv = null;
             function startKick(){
-                if (video.paused || video.ended) return;
+                if (kickIv) return;
                 let tries = 0;
-                const iv = setInterval(() => {
-                    if (video.paused || video.ended || video.currentTime > 0.6) { clearInterval(iv); return; }
+                kickIv = setInterval(() => {
+                    /* শেষ: অনেক এগিয়ে গেছে / প্লে হয়েছে / মুভি শেষ */
+                    if (video.currentTime > 0.6 || MBX.hasPlayed || video.ended) { clearInterval(kickIv); kickIv = null; return; }
+                    /* ইউজার নিজে পজ দিয়েছে (গেম চলছে না) → হাত দিও না */
+                    if (video.paused && !MBX.hold) { clearInterval(kickIv); kickIv = null; return; }
+                    /* সাপ-গেম এখনো চলছে → অপেক্ষা করো */
+                    if (lg.on && !lg.done) return;
                     tries++;
                     if (tries <= 3) {
-                        // মাইক্রো-নাজ: স্ট্রিমকে জোর করে সামান্য সামনে নাড়াও
+                        /* মাইক্রো-নাজ: স্ট্রিমকে সামান্য সামনে নাড়িয়ে ডিকোডার/বাফার জাগাও */
                         try { if (video.currentTime < 0.03) video.currentTime = 0.012 * tries; } catch(e){}
                         video.play().catch(()=>{});
                     } else {
-                        clearInterval(iv);
-                        const pos = Math.max(video.currentTime, 0.05);
+                        /* নাজেও ডেটা আসে না → মৃত কানেকশন → ফ্রেশ কানেকশনে রিলোড + প্লে */
+                        clearInterval(kickIv); kickIv = null;
                         lastReload = Date.now();
+                        bootBufEnd = 0; bootRS = 0;
                         try {
                             video.load();
-                            video.addEventListener('loadedmetadata', function m(){
-                                video.removeEventListener('loadedmetadata', m);
-                                try { video.currentTime = pos; } catch(e){}
-                                video.play().catch(()=>{});
+                            video.addEventListener('canplay', function km(){
+                                video.removeEventListener('canplay', km);
+                                if (MBX.userWantsPlay && video.paused) {
+                                    const kp = video.play();
+                                    if (kp && kp.catch) kp.catch(() => {
+                                        MBX.autoMuted = true; video.muted = true; updateMuteIcon();
+                                        video.play().then(() => { toast('🔇 ট্যাপ করলেই সাউন্ড চালু হবে', 4000); armUnmute(); }).catch(()=>{});
+                                    });
+                                }
                             });
                         } catch(e){}
                     }
@@ -1523,7 +1577,14 @@
                     if (wp) {
                         video.addEventListener('canplay', function bc(){
                             video.removeEventListener('canplay', bc);
-                            if (MBX.userWantsPlay && video.paused) video.play().catch(()=>{});
+                            if (MBX.userWantsPlay && video.paused) {
+                                const bp = video.play();
+                                if (bp && bp.catch) bp.catch(() => {
+                                    /* 🔧 FIX: পারমিশন শেষ হলে আর আটকে থাকবে না — মিউটেডে চালু + ট্যাপে সাউন্ড */
+                                    MBX.autoMuted = true; video.muted = true; updateMuteIcon();
+                                    video.play().then(() => { toast('🔇 ট্যাপ করলেই সাউন্ড চালু হবে', 4000); armUnmute(); }).catch(()=>{});
+                                });
+                            }
                         });
                     }
                 } catch(e){}
@@ -1547,6 +1608,17 @@
                         video.addEventListener('loadedmetadata', function sm(){
                             video.removeEventListener('loadedmetadata', sm);
                             try { video.currentTime = seekFPos; } catch(e){}
+                        });
+                        /* 🔧 FIX: আগে এখানে প্লে হতো না — সিক-হ্যাং থেকে ফেরা ধীর ছিল */
+                        video.addEventListener('canplay', function sc(){
+                            video.removeEventListener('canplay', sc);
+                            if (MBX.userWantsPlay && video.paused) {
+                                const sp = video.play();
+                                if (sp && sp.catch) sp.catch(() => {
+                                    MBX.autoMuted = true; video.muted = true; updateMuteIcon();
+                                    video.play().then(() => { toast('🔇 ট্যাপ করলেই সাউন্ড চালু হবে', 4000); armUnmute(); }).catch(()=>{});
+                                });
+                            }
                         });
                     } catch(e){}
                 }, 7000);
