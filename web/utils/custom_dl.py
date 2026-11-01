@@ -3,13 +3,33 @@ import time
 import logging
 from info import *
 from typing import Dict, Union
-from web.bot import work_loads
 from pyrogram import Client, utils, raw
 from .file_properties import get_file_ids
 from pyrogram.session import Session, Auth
-from pyrogram.errors import AuthBytesInvalid, FileReferenceExpired
+from pyrogram.errors import AuthBytesInvalid, FileReferenceExpired, FloodWait
 from web.server.exceptions import FileNotFound
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
+
+MAX_INLINE_FLOODWAIT = 30
+
+
+async def _send_getfile(media_session, location, offset, chunk_size):
+    """⚡ GetFile রিকোয়েস্টে ছোট FloodWait (≤30s) এলে স্ট্রিমের ভেতরেই
+    অপেক্ষা করে আবার চেষ্টা করে — স্ট্রিম বাঁচে, ইউজার কিছু টের পায় না।
+    বড় হলে ছেড়ে দেয়, ফলে routes-এর watchdog দ্রুত 504 দেয়।"""
+    while True:
+        try:
+            return await media_session.send(
+                raw.functions.upload.GetFile(
+                    location=location, offset=offset, limit=chunk_size
+                ),
+            )
+        except FloodWait as e:
+            if e.value > MAX_INLINE_FLOODWAIT:
+                raise
+            logging.warning(f"FloodWait {e.value}s inside GetFile — waiting inline")
+            await asyncio.sleep(e.value + 1)
+
 
 class ByteStreamer:
     def __init__(self, client: Client):
@@ -161,7 +181,8 @@ class ByteStreamer:
         msg_id: int = None,
     ) -> Union[str, None]:
         client = self.client
-        work_loads[index] += 1
+        # ⚡ load কাউন্টার এখন web/stream_routes.py সামলায় — ঝুলে-যাওয়া
+        # স্ট্রিমের কারণে কাউন্টার আটকে গেলে রাউটিং ভেঙে যায়।
         current_part = 1
 
         try:
@@ -171,11 +192,7 @@ class ByteStreamer:
                     media_session = await self.generate_media_session(client, file_id)
                     location = await self.get_location(file_id)
 
-                    r = await media_session.send(
-                        raw.functions.upload.GetFile(
-                            location=location, offset=offset, limit=chunk_size
-                        ),
-                    )
+                    r = await _send_getfile(media_session, location, offset, chunk_size)
                     if isinstance(r, raw.types.upload.File):
                         while True:
                             chunk = r.bytes
@@ -196,11 +213,7 @@ class ByteStreamer:
                             if current_part > part_count:
                                 break
 
-                            r = await media_session.send(
-                                raw.functions.upload.GetFile(
-                                    location=location, offset=offset, limit=chunk_size
-                                ),
-                            )
+                            r = await _send_getfile(media_session, location, offset, chunk_size)
                     return
                 except FileReferenceExpired:
                     logging.warning(f"FILE_REFERENCE_EXPIRED for msg {msg_id} (attempt {attempt + 1}) — refreshing...")
@@ -219,8 +232,6 @@ class ByteStreamer:
             logging.error(f"Error yielding file: {e}")
         except Exception as e:
             logging.error(f"Unexpected error in yield_file: {e}")
-        finally:
-            work_loads[index] -= 1
 
     async def clean_cache(self) -> None:
         while True:
