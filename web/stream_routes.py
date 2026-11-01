@@ -307,6 +307,9 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         "Content-Length": str(req_length),
         "Content-Disposition": f'{disposition}; filename="{file_name}"',
         "Accept-Ranges": "bytes",
+        # ✅ CORS: অন্য ডোমেইন থেকে (যেমন তোমার মেইন সাইট) ভিডিও চলবে এবং
+        # প্রথম সিনের পোস্টারও আঁকা যাবে (ভিডিওতে crossorigin=anonymous এর জন্য)
+        "Access-Control-Allow-Origin": "*",
     }
     # ✅ Content-Range শুধু Range request এ পাঠানো ঠিক
     if range_header:
