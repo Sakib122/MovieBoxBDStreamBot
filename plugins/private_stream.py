@@ -1,4 +1,6 @@
 import time
+import asyncio  # ✅ FIX: এটা ছিল না — তাই FloodWait এলেই "NameError" crash হতো
+import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait
@@ -55,18 +57,64 @@ async def private_receive_handler(c: Client, m: Message):
             quote=True
         )
 
-        await m.reply_text(
-            script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
-                 InlineKeyboardButton("• ᴅᴏᴡɴʟᴏᴀᴅ •", url=download)],
-                [InlineKeyboardButton("• ɢᴇᴛ ғɪʟᴇ •", url=file_link),
-                 InlineKeyboardButton("• ᴅᴇʟᴇᴛᴇ ғɪʟᴇ •", callback_data=f"deletefile_{forwarded.id}")],
-                [InlineKeyboardButton("• ᴄʟᴏꜱᴇ •", callback_data="close_data")]
-            ])
-        )
+        try:
+            await m.reply_text(
+                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                disable_web_page_preview=True,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
+                     InlineKeyboardButton("• ᴅᴏᴡɴʟᴏᴀᴅ •", url=download)],
+                    [InlineKeyboardButton("• ɢᴇᴛ ғɪʟᴇ •", url=file_link),
+                     InlineKeyboardButton("• ᴅᴇʟᴇᴛᴇ ғɪʟᴇ •", callback_data=f"deletefile_{forwarded.id}")],
+                    [InlineKeyboardButton("• ᴄʟᴏꜱᴇ •", callback_data="close_data")]
+                ])
+            )
+        except FloodWait as e:
+            # ✅ FIX: আগে এখানে শুধু ঘুমাতো, তারপর কিছুই করতো না —
+            # ইউজার লিংক পাতোই না। এখন অপেক্ষা করে আবার চেষ্টা করে।
+            logging.warning(f"FloodWait {e.value}s while replying to {user_id} — retrying")
+            await asyncio.sleep(e.value + 1)
+            await m.reply_text(
+                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                disable_web_page_preview=True,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
+                     InlineKeyboardButton("• ᴅᴏᴡɴʟᴏᴀᴅ •", url=download)],
+                    [InlineKeyboardButton("• ɢᴇᴛ ғɪʟᴇ •", url=file_link),
+                     InlineKeyboardButton("• ᴅᴇʟᴇᴛᴇ ғɪʟᴇ •", callback_data=f"deletefile_{forwarded.id}")],
+                    [InlineKeyboardButton("• ᴄʟᴏꜱᴇ •", callback_data="close_data")]
+                ])
+            )
 
     except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await c.send_message(BIN_CHANNEL, f"⚠️ FloodWait: {e.value}s from {m.from_user.first_name}")
+        # ✅ FIX: ফরওয়ার্ড করতে গিয়ে FloodWait এলে অপেক্ষা করে আবার চেষ্টা
+        logging.warning(f"FloodWait {e.value}s while forwarding file from {user_id} — retrying")
+        await asyncio.sleep(e.value + 1)
+        try:
+            forwarded = await m.forward(chat_id=BIN_CHANNEL)
+            hash_str = get_hash(forwarded)
+            stream = f"{URL}watch/{forwarded.id}/AV_File_{int(time.time())}.mkv?hash={hash_str}"
+            download = f"{URL}{forwarded.id}?hash={hash_str}"
+            file_link = f"https://t.me/{temp.U_NAME}?start=file_{forwarded.id}"
+            await db.files.insert_one({
+                "user_id": user_id,
+                "file_name": file_name,
+                "file_size": file_size,
+                "file_id": forwarded.id,
+                "hash": hash_str,
+                "timestamp": time.time()
+            })
+            await m.reply_text(
+                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                disable_web_page_preview=True,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
+                     InlineKeyboardButton("• ᴅᴏᴡɴʟᴏᴀᴅ •", url=download)],
+                    [InlineKeyboardButton("• ɢᴇᴛ ғɪʟᴇ •", url=file_link),
+                     InlineKeyboardButton("• ᴅᴇʟᴇᴛᴇ ғɪʟᴇ •", callback_data=f"deletefile_{forwarded.id}")],
+                    [InlineKeyboardButton("• ᴄʟᴏꜱᴇ •", callback_data="close_data")]
+                ])
+            )
+        except Exception as err:
+            logging.error(f"File forward failed after FloodWait retry: {err}")
+            await m.reply_text("⚠️ Telegram is busy right now. Please send the file again in a minute.")
