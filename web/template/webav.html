@@ -69,7 +69,8 @@
 
         /* ===== 🐍 SNAKE LOAD GAME — সাপ খাবার খাবে, % বাড়বে, ১০০% = প্লে ===== */
         .mbx-loadgame { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.74); backdrop-filter: blur(6px); cursor: pointer; }
-        .mbx-loadgame.show { display: flex; }
+        /* 🚫 সাপ-গেম বন্ধ: ইউজারের চাওয়া — কোনো লোডিং গেম দেখাবেই না */
+        .mbx-loadgame.show { display: none !important; }
         .lg-box { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
         .lg-arena { position: relative; }
         #lgSnake { width: 150px; height: 150px; display: block; filter: drop-shadow(0 0 16px rgba(34,211,238,.3)); }
@@ -930,21 +931,10 @@
                 }
             }
             function lgShow(targetSec, autoplayAfter){
-                clearTimeout(lg.finT);
-                lg.target = (typeof targetSec === 'number') ? targetSec : null;
-                lg.wantPlay = !!autoplayAfter;
-                if (lg.on) { lg.done = false; return; }
-                lg.on = true; lg.done = false; lg.startedAt = Date.now();
-                /* 🔧 FIX: সম্প্রতি লোডিং দেখালে ৪% থেকে আর শুরু হয় না —
-                   আগের অবস্থা থেকে চলে (৫৪%→৩৪% লাফানো বন্ধ) */
-                if (Date.now() - (lg.hiddenAt || 0) > 20000) lg.floor = 0;
-                lg.disp = Math.min(90, Math.max(4, lg.floor || 4));
-                lg.stuckAt = 0;
-                lg.pct.classList.remove('go');
-                lgSnakeReset();
-                lg.el.classList.add('show');
-                lg.last = 0;
-                lg.raf = requestAnimationFrame(lgTick);
+                /* 🚫 সাপ-গেম সম্পূর্ণ বাদ (ইউজারের চাওয়া): কোনো লোডিং গেম/কাউন্টার নেই।
+                   বাফারিং শেষ হলে সরাসরি প্লে ফিরে আসবে — ব্রাউজারের নিজস্ব
+                   স্পিনার আর উপরের "Loading" স্ট্যাটাসই যথেষ্ট */
+                if (autoplayAfter && video.paused) { video.play().catch(()=>{}); }
             }
             function lgHide(){
                 if (!lg.on) return;
@@ -1044,15 +1034,10 @@
             });
             video.addEventListener('pause', () => { MBX.userWantsPlay = false; setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
             video.addEventListener('waiting', () => {
-                /* 🔧 FIX: শুরুর দিকে বাফারিং আটকালে কালো স্ক্রিন নয় — পোস্টার দেখাও */
+                /* 🔧 বাফারিং আটকালে: শুরুর দিকে হলে পোস্টার + "Loading" স্ট্যাটাস —
+                   আর কোনো গেম নেই, ডেটা এলেই নিজে থেকে প্লে ফিরবে */
                 if (MBX.posterPainted && video.currentTime < 1) poster.classList.add('show');
-                if (!video.paused) {
-                    setStatus('load');
-                    clearTimeout(lg.pendT);
-                    lg.pendT = setTimeout(() => {
-                        if (!lg.on && !video.paused && video.readyState < 3) { lgShow(video.currentTime, true); wantPlayAfterSeek = false; }
-                    }, 600);
-                }
+                if (!video.paused) setStatus('load');
             });
             video.addEventListener('playing', () => { setStatus('play'); clearTimeout(lg.pendT); lgHide(); lg.floor = 0; MBX.hasPlayed = true; MBX.errTries = 0; });
 
@@ -1325,19 +1310,27 @@
                 document.addEventListener('touchstart', mark, { capture: true, once: true });
                 document.addEventListener('click', mark, { capture: true, once: true });
             }
-            function autoBoot(){
+            async function autoBoot(){
                 setStatus('load');
-                /* ⚡ ১০-সেকেন্ড প্রি-বাফার: আগে ~১০স ডেটা জমায়েত (সর্বোচ্চ ৮স অপেক্ষা),
-                   তারপর প্লে — তাই প্লে শুরুর পর আর বারবার লোডিংয়ে আটকায় না */
-                const t0 = Date.now();
-                const pb = setInterval(() => {
-                    let ahead = 0;
-                    try { const b = video.buffered; if (b.length) ahead = b.end(b.length - 1) - video.currentTime; } catch(e){}
-                    if (ahead >= 10 || (video.readyState >= 3 && ahead >= 4) || Date.now() - t0 > 8000) {
-                        clearInterval(pb);
-                        startAutoPlay();
+                /* ⚡ কোনো অপেক্ষা/গেম নেই — পেজ খুললেই সাথে সাথে প্লে (সাউন্ড
+                   ব্লক হলে মিউটেডে)। সার্ভার আটকে গেলে BOOT watchdog নিজেই
+                   নতুন কানেকশন নেবে।
+                   🖼️ শুধু ক্রস-ডোমেইন হলে HEAD প্রোব (সর্বোচ্চ ০.৯স): CORS পেলে
+                   CORS-মোডে লোড — তখন প্রথম সিনের ফটোও আঁকা যায়। সেম-ডোমেইনে
+                   (যেমন বটের watch page) কোনো প্রোব নেই — সরাসরি প্লে। */
+                let needReload = false;
+                try {
+                    const src = video.currentSrc || video.src;
+                    if (src && !video.crossOrigin && new URL(src, location.href).origin !== location.origin) {
+                        const ok = await Promise.race([
+                            fetch(src, { method: 'HEAD' }).then(r => !!r.ok),
+                            new Promise(res => setTimeout(() => res(false), 900))
+                        ]);
+                        if (ok) { video.crossOrigin = 'anonymous'; needReload = true; }
                     }
-                }, 250);
+                } catch(e){}
+                if (needReload) { try { video.load(); } catch(e){} }
+                startAutoPlay();
             }
             function startAutoPlay(){
                 const p = video.play();
@@ -1449,16 +1442,8 @@
             });
             video.addEventListener('seeked', () => { clearTimeout(seekFuseT); seekFKicks = 0; });
 
-            /* 🔧 সাপ-গেম ৫০ সেকেন্ডেও ডেটা ছাড়া ঘুরলে: সতর্কতা + বিকল্প প্লেয়ার বক্স
-               (রিকভারি চেষ্টা ব্যাকগ্রাউন্ডে চলতেই থাকে) */
-            setInterval(() => {
-                if (!lg.on || lg.done || BOOT.lgWarned) return;
-                if (Date.now() - (lg.startedAt || 0) > 50000 && lgRealPct() < 3) {
-                    BOOT.lgWarned = true;
-                    showFallbackBox();
-                    toast('⏳ নেটওয়ার্ক খুব স্লো — নিচে MX/VLC-তেও দেখতে পারেন', 4000);
-                }
-            }, 5000);
+            /* 🔧 সাপ-গেম বাদ হওয়ায় এই ওয়াচডগের দরকার নেই — বুট/সিক watchdog-ই
+               সার্ভার আটকে গেলে রিকভারি সামলায় */
 
             try {
                 const sv = parseFloat(localStorage.getItem('mbx_vol'));
