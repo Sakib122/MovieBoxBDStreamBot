@@ -41,16 +41,28 @@
         .ph-title { font-size: 16.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: #fff; }
         .status-badge { background: rgba(34,211,238,.1); color: var(--accent); border: 1px solid rgba(34,211,238,.3); padding: 5px 11px; border-radius: 9px; font-weight: 700; font-size: 11.5px; white-space: nowrap; }
         .status-badge.paused { background: rgba(255,255,255,.06); color: var(--dim); border-color: var(--border); }
-        .status-badge.loading { background: rgba(255,209,102,.08); color: #ffd166; border-color: rgba(255,209,102,.3); }
+        /* 🔧 FIX: .status-badge.loading সরানো হয়েছে — এখন আর কোনো 'Loading' ব্যাজ দেখাবে না */
 
         .mbx-player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; touch-action: none; user-select: none; }
         .mbx-player:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
         .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
-        .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+        .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: transparent; display: block; }
+        #mbxVideo { position: relative; z-index: 2; }
 
-        /* 🖼️ প্রথম ফ্রেম পোস্টার — কালো স্ক্রিন নয়, মুভির সিন দেখাবে */
-        .mbx-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 3; display: none; }
-        .mbx-poster.show { display: block; }
+        /* 🖼️ সিনেমাটিক পোস্টার সিস্টেম — পেজ খুললেই মুভির দৃশ্য দেখা যাবে, কালো স্ক্রিন কখনো না */
+        /* লেয়ার-১: ডিজাইন করা কভার — ডেটা আসার আগেও স্ক্রিন কালো দেখাবে না */
+        .mbx-cover { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; background: radial-gradient(130% 130% at 50% 0%, #12262f 0%, #0a1016 55%, #07090d 100%); pointer-events: none; padding: 16px; transition: opacity .45s ease; }
+        .mbx-cover.off { opacity: 0; }
+        .mbx-cover .c-ico { width: 72px; height: 72px; border-radius: 50%; background: rgba(34,211,238,.09); border: 1.5px solid rgba(34,211,238,.4); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 25px; box-shadow: 0 0 34px rgba(34,211,238,.18); }
+        .mbx-cover .c-t { max-width: 88%; font-size: 13px; font-weight: 700; color: #e2ecf3; text-align: center; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .mbx-cover .c-s { font-size: 11px; color: var(--dim); font-weight: 700; letter-spacing: .6px; }
+        /* লেয়ার-২: মুভির "ইন্টারেস্টিং ফ্রেম" — লুকানো প্রিভিউ ভিডিও সেক করে সরাসরি দেখায় (ক্যানভাস নেই → CORS সমস্যাই নেই) */
+        .mbx-prev { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; z-index: 4; opacity: 0; transition: opacity .5s ease; pointer-events: none; background: transparent; }
+        .mbx-prev.show { opacity: 1; }
+
+        /* ⏱️ ডিউরেশন ব্যাজ — পোস্টারের নিচে-ডানে মুভির মোট সময় (যেমন 2:20:13) */
+        .mbx-durbadge { position: absolute; right: 10px; bottom: 13px; z-index: 7; background: rgba(4,8,11,.8); border: 1px solid rgba(255,255,255,.16); color: #fff; font-size: 12.5px; font-weight: 800; padding: 4px 10px; border-radius: 8px; font-variant-numeric: tabular-nums; letter-spacing: .4px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+        .mbx-durbadge.show { opacity: 1; }
 
         .mbx-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .25s; }
         .mbx-player.ui-on .mbx-overlay { opacity: 1; }
@@ -68,17 +80,7 @@
         .mbx-skip small { font-size: 8.5px; font-weight: 800; color: var(--accent); line-height: 1; margin-top: 2px; }
         .mbx-skip:active { transform: scale(.88); background: rgba(34,211,238,.28); }
 
-        /* ===== 🐍 SNAKE LOAD GAME — সাপ খাবার খাবে, % বাড়বে, ১০০% = প্লে ===== */
-        .mbx-loadgame { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.74); backdrop-filter: blur(6px); cursor: pointer; }
-        .mbx-loadgame.show { display: flex; }
-        .lg-box { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
-        .lg-arena { position: relative; }
-        #lgSnake { width: 150px; height: 150px; display: block; filter: drop-shadow(0 0 16px rgba(34,211,238,.3)); }
-        .lg-pct { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -55%); font-size: 27px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px rgba(34,211,238,.65); pointer-events: none; }
-        .lg-pct.go { animation: lgPop .45s ease; color: var(--accent); }
-        @keyframes lgPop { 0% { transform: translate(-50%,-55%) scale(1); } 50% { transform: translate(-50%,-55%) scale(1.18); } 100% { transform: translate(-50%,-55%) scale(1); } }
-        .lg-tip { color: var(--dim); font-size: 10.5px; max-width: 230px; text-align: center; line-height: 1.5; }
-        .lg-tip b { color: var(--accent); }
+        /* 🔧 FIX: 🐍 SNAKE LOAD GAME পুরোপুরি সরানো হয়েছে — ইউজার আর কোনো 25% / লোডিং স্পিনার দেখবে না */
 
         .mbx-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 24px 8px 6px; background: linear-gradient(transparent, rgba(0,0,0,.82)); opacity: 0; pointer-events: none; transition: opacity .25s; }
         .mbx-player.ui-on .mbx-controls { opacity: 1; pointer-events: auto; }
@@ -112,8 +114,6 @@
             .mbx-skip { width: 40px; height: 40px; font-size: 11.5px; }
             .mbx-skip small { font-size: 7.5px; }
             .mbx-center-row { gap: 16px; }
-            #lgSnake { width: 118px; height: 118px; }
-            .lg-pct { font-size: 21px; }
         }
 
         .mbx-menu { position: absolute; right: 8px; bottom: 52px; z-index: 8; background: rgba(13,15,19,.97); border: 1px solid var(--border); border-radius: 13px; padding: 10px 12px; min-width: 235px; display: none; backdrop-filter: blur(12px); box-shadow: 0 12px 34px rgba(0,0,0,.55); }
@@ -189,8 +189,16 @@
             </div>
 
             <div class="mbx-player" id="mbxPlayer">
-                <video id="mbxVideo" playsinline webkit-playsinline preload="auto" crossorigin="anonymous"></video>
-                <canvas id="mbxPoster" class="mbx-poster"></canvas>
+                <!-- 🔧 FIX: crossorigin বাদ — ফাইল সার্ভার CORS হেডার না দিলেও ভিডিও + পোস্টার কাজ করবে -->
+                <video id="mbxVideo" playsinline webkit-playsinline preload="auto"></video>
+                <!-- লেয়ার-১: কভার (ডেটা আসার আগের ডিজাইন করা স্ক্রিন — কালো নয়) -->
+                <div class="mbx-cover" id="mbxCover">
+                    <div class="c-ico"><i class="fa-solid fa-clapperboard"></i></div>
+                    <div class="c-t" id="coverTitle">{{ file_name }}</div>
+                    <div class="c-s">▶ ট্যাপ করে প্লে করুন</div>
+                </div>
+                <!-- লেয়ার-২: মুভির ইন্টারেস্টিং ফ্রেম (লুকানো প্রিভিউ ভিডিও থেকে) -->
+                <video id="mbxPrev" class="mbx-prev" muted playsinline preload="metadata" disablepictureinpicture></video>
 
                 <div class="mbx-overlay">
                     <div class="v-badges" id="mbxBadges"></div>
@@ -201,16 +209,8 @@
                     </div>
                 </div>
 
-                <div class="mbx-loadgame" id="mbxLoadGame">
-                    <div class="lg-box">
-                        <div class="lg-arena">
-                            <canvas id="lgSnake" width="150" height="150"></canvas>
-                            <div class="lg-pct" id="lgPct">4%</div>
-                        </div>
-                        <div class="lg-tip">💡 টিপস: বড় ফাইলে <b>GET FILE</b> = টেলিগ্রাম ফুল স্পিড ডাউনলোড</div>
-                    </div>
-                </div>
 
+                <div class="mbx-durbadge" id="mbxDurBadge">--:--</div>
                 <div class="mbx-toast" id="mbxToast"></div>
 
                 <div class="mbx-controls" id="mbxControls">
@@ -585,10 +585,10 @@
 
         /* ============================================================
                         CUSTOM PLAYER ENGINE
-           ⏸️ NO AUTOPLAY: প্রথম ফ্রেম পোস্টারের মতো থাকবে,
-           ইউজার প্লে চাপলে সাউন্ডসহ ন্যাচারালি চলবে
+           🖼️ পেজ খুললেই: মুভির দৃশ্য + মোট ডিউরেশন দেখা যাবে
+           ⏸️ NO AUTOPLAY: প্লে চাপলে সাথে সাথে চলবে — কোনো লোডিং স্ক্রিন নেই
         ============================================================ */
-        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, posterPainted: false };
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, prevStarted: false };
         let toastTimer = null;
 
         function toast(msg, ms){
@@ -613,21 +613,65 @@
             const playedEl = document.getElementById('mbxPlayed');
             const buffEl = document.getElementById('mbxBuffered');
             const tipEl = document.getElementById('mbxSeekTip');
-            const poster = document.getElementById('mbxPoster');
+            const prevV = document.getElementById('mbxPrev');
+            const durBadge = document.getElementById('mbxDurBadge');
+            const coverEl = document.getElementById('mbxCover');
+            try { document.getElementById('coverTitle').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i,''); } catch(e){}
 
-            /* --- 🖼️ প্রথম ফ্রেম পোস্টার: কালো স্ক্রিন নয়, মুভির প্রথম সিন দেখাও --- */
-            function paintPoster(){
-                if (MBX.hasPlayed || MBX.posterPainted) return;
-                try {
-                    if (!video.videoWidth || !video.videoHeight) return;
-                    poster.width = video.videoWidth; poster.height = video.videoHeight;
-                    poster.getContext('2d').drawImage(video, 0, 0, poster.width, poster.height);
-                    poster.classList.add('show');
-                    MBX.posterPainted = true;
-                } catch(e){}
+            /* --- 🖼️ নতুন পোস্টার সিস্টেম (ক্যানভাস নেই → CORS-এ আটকায় না) ---
+               ১) পেজ খুলতেই: ডিজাইন করা কভার দেখা যায় (কালো স্ক্রিন নয়)
+               ২) মেটাডেটা এলেই: ডিউরেশন ব্যাজে মোট সময় (যেমন 2:20:13)
+               ৩) লুকানো প্রিভিউ ভিডিও নীরবে মুভির ৮% পয়েন্টে গিয়ে একটা সুন্দর দৃশ্য দেখায়
+               ৪) প্লে চাপলে: ভিডিও সত্যি চলা শুরু না হওয়া পর্যন্ত ('playing') পোস্টার থেকে যায়
+                  → শুরুর বাফারিং ইউজার দেখতেই পায় না, তাই লোডিং স্পিনারের দরকারই নেই */
+            function setDurationUI(d){
+                if (!isFinite(d) || d <= 0) return;
+                document.getElementById('tDur').textContent = fmtTime(d);
+                durBadge.textContent = fmtTime(d);
+                durBadge.classList.add('show');
             }
-            video.addEventListener('loadeddata', () => setTimeout(paintPoster, 80));
-            video.addEventListener('canplay', () => setTimeout(paintPoster, 80));
+            function hidePoster(){
+                prevV.classList.remove('show');
+                durBadge.classList.remove('show');
+            }
+            function killPreview(){
+                prevV.classList.remove('show');
+                try { prevV.removeAttribute('src'); prevV.load(); } catch(e){}
+                prevV.style.display = 'none';
+            }
+            function pickPosterTime(d){
+                if (d <= 90) return Math.max(1, d * 0.25);
+                return Math.min(Math.max(d * 0.08, 45), 480);
+            }
+            function startPreviewPipeline(){
+                if (MBX.hasPlayed || MBX.prevStarted) return;
+                MBX.prevStarted = true;
+                let metaFixed = false;
+                prevV.src = video.src;
+                prevV.addEventListener('loadedmetadata', () => {
+                    const d = prevV.duration;
+                    if (isFinite(d) && d > 0) { setDurationUI(d); goFrame(pickPosterTime(d)); }
+                    else { try { prevV.currentTime = 1e7; } catch(e){} }   // MKV duration=Infinity হলে প্রোব হ্যাক
+                });
+                prevV.addEventListener('seeked', () => {
+                    const d = prevV.duration;
+                    if (!metaFixed && isFinite(d) && d > 0) { metaFixed = true; setDurationUI(d); goFrame(pickPosterTime(d)); return; }
+                    if (!MBX.hasPlayed) {
+                        prevV.classList.add('show');       // সুন্দর দৃশ্য পেল → পোস্টার দেখাও
+                        coverEl.classList.add('off');
+                        durBadge.classList.add('show');
+                    }
+                });
+                prevV.addEventListener('error', () => {
+                    // প্রিভিউ ফেল করলে ফলব্যাক: মেইন ভিডিওর নিজের প্রথম ফ্রেম দেখাও
+                    prevV.style.display = 'none';
+                    if (!MBX.hasPlayed) coverEl.classList.add('off');
+                });
+                prevV.load();
+                function goFrame(t){ try { prevV.currentTime = Math.max(0, t); } catch(e){} }
+                // সেফটি: ৮ সেকেন্ডেও প্রিভিউ ফ্রেম না এলে কভার সরিয়ে মেইন ভিডিওর ফ্রেম দেখাও
+                setTimeout(() => { if (!MBX.hasPlayed) coverEl.classList.add('off'); }, 8000);
+            }
 
             buildMenu();
 
@@ -655,10 +699,10 @@
                 btnPlay.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
             }
+            /* 🔧 FIX: 'Loading' স্টেট পুরো বাদ — এখন শুধু Playing/Paused দেখাবে, কোনো স্পিনার নেই */
             function setStatus(state){
-                statusEl.className = 'status-badge' + (state==='play' ? '' : state==='load' ? ' loading' : ' paused');
+                statusEl.className = 'status-badge' + (state==='play' ? '' : ' paused');
                 statusEl.innerHTML = state==='play' ? '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'
-                    : state==='load' ? '<i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading'
                     : '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused';
             }
 
@@ -740,193 +784,25 @@
             }));
 
             /* ============================================================
-               ⚡ FAST SEEK + 🎮 LOAD GAME ENGINE
-               বড় সিক = গেমের মতো % (1% → 100%), ১০০% হলেই ভিডিও প্লে
+               ⚡ FAST SEEK — লোডিং গেম/স্পিনার সম্পূর্ণ বাদ (🔧 FIX)
+               সিক বা বাফারিংয়ের সময় স্ক্রিনে শেষ দেখা ফ্রেমটাই থাকে;
+               কোনো % বা স্পিনার ইউজার দেখতে পায় না।
             ============================================================ */
             let wantPlayAfterSeek = false;
-            /* 🐍 সাপ + খাবার: খাবার খাবে তো % বাড়বে — কখনো ০% এ আটকে থাকবে না,
-               ডেটা স্লো হলেও ফাস্ট মোডে বাড়ে, ১০০% হলেই ভিডিও প্লে */
-            const lg = {
-                el: document.getElementById('mbxLoadGame'),
-                cvs: document.getElementById('lgSnake'),
-                pct: document.getElementById('lgPct'),
-                on: false, done: false, disp: 4, target: null, wantPlay: false,
-                raf: 0, pendT: null, finT: null,
-                headAng: -Math.PI / 2, trail: [], foodAng: null, eats: 0, parts: [], last: 0
-            };
-            const lgCtx = lg.cvs.getContext('2d');
-            function lgResize(){
-                const dpr = Math.min(window.devicePixelRatio || 1, 2);
-                lg.cvs.width = 150 * dpr; lg.cvs.height = 150 * dpr;
-                lgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            }
-            function bufferedAheadOf(t){
-                try {
-                    const b = video.buffered;
-                    for (let i = 0; i < b.length; i++) {
-                        if (t >= b.start(i) - 0.4 && t <= b.end(i) + 0.4) return b.end(i);
-                    }
-                } catch(e){}
-                return 0;
-            }
-            function lgRealPct(){
-                if (video.readyState >= 3) return 100;
-                const T = (lg.target != null) ? lg.target : video.currentTime;
-                const end = bufferedAheadOf(T);
-                if (end <= T) return 0;
-                return Math.max(0, Math.min(100, ((end - T) / 15) * 100));
-            }
-            function lgSnakeReset(){
-                lgResize();
-                lg.headAng = -Math.PI / 2;
-                lg.trail = []; lg.parts = []; lg.eats = 0;
-                lg.foodAng = lg.headAng + 0.9;
-            }
-            function lgDraw(dt, now){
-                const ctx = lgCtx, C = 75, R = 58, TAU = Math.PI * 2;
-                ctx.clearRect(0, 0, 150, 150);
-                // ট্র্যাক সার্কেল
-                ctx.beginPath(); ctx.arc(C, C, R, 0, TAU);
-                ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2.5; ctx.stroke();
-                // প্রগ্রেস আর্ক
-                if (lg.disp > 0.5) {
-                    ctx.beginPath(); ctx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + (Math.min(lg.disp, 100) / 100) * TAU);
-                    ctx.strokeStyle = 'rgba(34,211,238,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
-                }
-                // হেড মুভ (গেমের মতো সবসময় চলতেই থাকে)
-                const spd = 2.3;
-                lg.headAng += spd * dt;
-                const hx = C + Math.cos(lg.headAng) * R, hy = C + Math.sin(lg.headAng) * R;
-                lg.trail.push({ x: hx, y: hy });
-                const maxSeg = 12 + Math.min(lg.eats * 2, 30);
-                while (lg.trail.length > maxSeg) lg.trail.shift();
-                // 🍎 খাবার খাওয়া: মুখ ছুঁলেই % লাফ দেয় + পার্টিকেল বিস্ফোরণ
-                if (lg.foodAng == null || lg.headAng >= lg.foodAng) {
-                    if (lg.foodAng != null) {
-                        lg.eats++;
-                        const fx = C + Math.cos(lg.foodAng) * R, fy = C + Math.sin(lg.foodAng) * R;
-                        for (let i = 0; i < 7; i++) {
-                            const a = Math.random() * TAU, s = 14 + Math.random() * 26;
-                            lg.parts.push({ x: fx, y: fy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.45 });
-                        }
-                        if (lg.disp < 97) lg.disp = Math.min(97, lg.disp + 0.9);
-                        else if (lg.disp < 98.9) lg.disp += 0.25;
-                    }
-                    lg.foodAng = lg.headAng + 1.1 + Math.random() * 1.6;
-                }
-                // খাবার আঁকা (পালস করে)
-                const fx2 = C + Math.cos(lg.foodAng) * R, fy2 = C + Math.sin(lg.foodAng) * R;
-                const pulse = 3.2 + Math.sin(now / 130) * 1.1;
-                ctx.beginPath(); ctx.arc(fx2, fy2, pulse + 2.5, 0, TAU);
-                ctx.fillStyle = 'rgba(255,93,93,.18)'; ctx.fill();
-                ctx.beginPath(); ctx.arc(fx2, fy2, pulse, 0, TAU);
-                ctx.fillStyle = '#ff5d5d'; ctx.shadowColor = '#ff5d5d'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
-                // সাপের বডি (লেজ → মাথা)
-                for (let i = 0; i < lg.trail.length; i++) {
-                    const p = lg.trail[i], k = i / lg.trail.length;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 1.2 + k * 3.4, 0, TAU);
-                    ctx.fillStyle = 'rgba(45,212,191,' + (0.25 + k * 0.6).toFixed(2) + ')';
-                    ctx.fill();
-                }
-                // সাপের মাথা + চোখ
-                ctx.beginPath(); ctx.arc(hx, hy, 5.2, 0, TAU);
-                ctx.fillStyle = '#22d3ee'; ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
-                const ea = lg.headAng + Math.PI / 2;
-                ctx.beginPath();
-                ctx.arc(hx + Math.cos(ea) * 2.2, hy + Math.sin(ea) * 2.2, 1.1, 0, TAU);
-                ctx.arc(hx - Math.cos(ea) * 2.2, hy - Math.sin(ea) * 2.2, 1.1, 0, TAU);
-                ctx.fillStyle = '#062028'; ctx.fill();
-                // খাওয়ার পার্টিকেল
-                for (let i = lg.parts.length - 1; i >= 0; i--) {
-                    const p = lg.parts[i];
-                    p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
-                    if (p.life <= 0) { lg.parts.splice(i, 1); continue; }
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, TAU);
-                    ctx.fillStyle = 'rgba(255,180,80,' + (p.life / 0.45).toFixed(2) + ')'; ctx.fill();
-                }
-            }
-            function lgTick(now){
-                if (!lg.on) return;
-                lg.raf = requestAnimationFrame(lgTick);
-                if (!lg.last) lg.last = now;
-                const dt = Math.min((now - lg.last) / 1000, 0.05);
-                lg.last = now;
-                const real = lgRealPct();
-                if (real >= 100) {
-                    // রেডি → স্প্রিন্ট: দ্রুত ১০০-তে উঠে প্লে
-                    lg.disp = Math.min(100, lg.disp + 34 * dt + (100 - lg.disp) * 0.12);
-                } else if (lg.disp < 97) {
-                    // ⚡ ফাস্ট মোড: ডেটা আসুক বা না আসুক ন্যূনতম ৭%/সেকেন্ডে বাড়বে —
-                    // ডেটা এগোলে আরও দ্রুত ফলো করবে — কখনো ০% এ আটকে থাকবে না
-                    const follow = Math.max(0, real - lg.disp) * 1.4;
-                    lg.disp = Math.min(97, lg.disp + Math.max(7, follow) * dt);
-                }
-                lgDraw(dt, now);
-                lg.pct.textContent = Math.floor(lg.disp) + '%';
-                if (lg.disp >= 100 && real >= 100 && !lg.done) {
-                    lg.done = true;
-                    lg.pct.textContent = 'GO!';
-                    lg.pct.classList.add('go');
-                    lg.finT = setTimeout(() => {
-                        lgHide();
-                        if (lg.wantPlay) { lg.wantPlay = false; video.play().catch(()=>{}); }
-                    }, 500);
-                }
-            }
-            function lgShow(targetSec, autoplayAfter){
-                clearTimeout(lg.finT);
-                lg.target = (typeof targetSec === 'number') ? targetSec : null;
-                lg.wantPlay = !!autoplayAfter;
-                if (lg.on) { lg.done = false; return; }
-                lg.on = true; lg.done = false; lg.disp = 4;
-                lg.pct.classList.remove('go');
-                lgSnakeReset();
-                lg.el.classList.add('show');
-                lg.last = 0;
-                lg.raf = requestAnimationFrame(lgTick);
-            }
-            function lgHide(){
-                if (!lg.on) return;
-                lg.on = false;
-                cancelAnimationFrame(lg.raf);
-                clearTimeout(lg.finT);
-                lg.el.classList.remove('show');
-                lg.target = null;
-            }
-            // লোডিং স্ক্রিনে ট্যাপ = বন্ধ করে থামাও
-            lg.el.addEventListener('click', () => {
-                if (!lg.on || lg.done) return;
-                lgHide();
-                wantPlayAfterSeek = false;
-                try { video.pause(); } catch(e){}
-            });
-            function lgQueue(target, from){
-                clearTimeout(lg.pendT);
-                const far = Math.abs(target - from) > 20;
-                lg.pendT = setTimeout(() => {
-                    if (lg.on || video.paused) return;
-                    if (video.readyState >= 3 && !video.seeking) return;
-                    lgShow(target, wantPlayAfterSeek);
-                    wantPlayAfterSeek = false;
-                }, far ? 180 : 420);
-            }
             function doSeek(t){
-                const from = video.currentTime;
-                poster.classList.remove('show');
+                hidePoster();
                 t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
                 try {
                     if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
                     else { video.currentTime = t; }
                 } catch(e){ try { video.currentTime = t; } catch(e2){} }
-                if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); lgQueue(t, from); }
+                if (!video.paused) wantPlayAfterSeek = true;
             }
             video.addEventListener('canplay', () => {
-                clearTimeout(lg.pendT);
-                if (wantPlayAfterSeek && !lg.on) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+                if (wantPlayAfterSeek) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
             });
             video.addEventListener('seeked', () => {
-                if (wantPlayAfterSeek && !lg.on && video.readyState >= 2) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+                if (wantPlayAfterSeek && video.readyState >= 2) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
             });
 
             function seekBy(sec){
@@ -974,21 +850,18 @@
             /* --- Video events --- */
             video.addEventListener('play', () => {
                 setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake();
-                poster.classList.remove('show');
+                /* 🔧 FIX: প্লে চাপার সাথে সাথে পোস্টার সরানো হয় না — ভিডিও সত্যিই চলা শুরু করলে ('playing') তবেই সরবে।
+                   ফলে শুরুর বাফারিংয়ে ইউজার কালো স্ক্রিন বা লোডিং দেখে না, পোস্টারই দেখতে থাকে */
                 // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
                 if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
             });
-            video.addEventListener('pause', () => { setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
-            video.addEventListener('waiting', () => {
-                if (!video.paused) {
-                    setStatus('load');
-                    clearTimeout(lg.pendT);
-                    lg.pendT = setTimeout(() => {
-                        if (!lg.on && !video.paused && video.readyState < 3) { lgShow(video.currentTime, true); wantPlayAfterSeek = false; }
-                    }, 600);
-                }
+            video.addEventListener('pause', () => { setPlayIcons(false); setStatus('paused'); relWake(); });
+            /* 🔧 FIX: 'waiting'-এ আর কোনো লোডিং স্ক্রিন/স্পিনার দেখানো হয় না —
+               স্ক্রিনে শেষ দেখা ফ্রেমটাই থেকে যায় (বাফার হলে নিজে থেকেই আবার চলবে) */
+            video.addEventListener('playing', () => {
+                setStatus('play'); MBX.errTries = 0;
+                if (!MBX.hasPlayed) { MBX.hasPlayed = true; hidePoster(); killPreview(); coverEl.classList.add('off'); }
             });
-            video.addEventListener('playing', () => { setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; });
 
             video.addEventListener('timeupdate', () => {
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
@@ -996,9 +869,8 @@
             });
 
             video.addEventListener('loadedmetadata', () => {
-                document.getElementById('tDur').textContent = fmtTime(video.duration);
-                // 🖼️ প্রথম ফ্রেম পোস্টার: মাইক্রো-সিক দিয়ে ফ্রেম-১ আঁকা (অটো-প্লে ছাড়াই)
-                try { if (video.currentTime === 0) video.currentTime = 0.001; } catch(e){}
+                setDurationUI(video.duration);   // ⏱️ মেটাডেটা এলেই ডিউরেশন ব্যাজে মোট সময় (০০:০০ আর নয়)
+                startPreviewPipeline();          // 🖼️ পোস্টার ফ্রেম আনার পাইপলাইন শুরু
             });
             video.addEventListener('progress', updateBuffered);
             video.addEventListener('timeupdate', updateBuffered);
@@ -1013,7 +885,7 @@
             }
             /* 🎬 মুভি শেষ: অটোমেটিক ফুলস্ক্রিন ছোট + জমা অ্যাড ফ্লাশের প্রস্তুতি */
             video.addEventListener('ended', () => {
-                setPlayIcons(false); setStatus('paused'); showUI(false); lgHide();
+                setPlayIcons(false); setStatus('paused'); showUI(false);
                 const wasFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
                 if (wasFs) {
                     try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch(e){}
@@ -1021,9 +893,7 @@
                 if (pendingAds > 0) armFlush();
             });
             video.addEventListener('error', () => {
-                lgHide();
-                poster.classList.remove('show');
-                MBX.posterPainted = false;
+                hidePoster();
                 if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
                 MBX.errTries++;
                 toast('🔁 আবার চেষ্টা করছি (' + MBX.errTries + '/3)...');
@@ -1057,7 +927,7 @@
             }
 
             /* --- জেসচার --- */
-            const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center') || t.closest('.mbx-skip') || t.closest('.mbx-loadgame')));
+            const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center') || t.closest('.mbx-skip')));
             function showRipple(side){
                 const r = document.createElement('div');
                 r.className = 'tap-ripple ' + side;
@@ -1256,7 +1126,7 @@
                 const box = document.createElement('div');
                 if (isBig) {
                     box.className = 'smart-notice';
-                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে উপরের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলে সাপ-গেম লোডিং দেখাবে 🐍 — ১০০% হলেই প্লে হবে। 🙏';
+                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে উপরের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলেও কোনো লোডিং স্ক্রিন দেখবেন না। 🙏';
                 } else {
                     box.className = 'smart-notice good';
                     box.innerHTML = '✅ <b>এই ফাইলটি আরামসে স্ট্রিম করা যাবে!</b><br>চাইলে <b>⚡ HIGH SPEED DOWNLOAD</b> দিয়ে সরাসরি ডাউনলোডও করতে পারেন। 🎬';
