@@ -789,6 +789,9 @@
             btnMute.addEventListener('click', e => {
                 e.stopPropagation();
                 video.muted = !video.muted;
+                /* 🔧 FIX: অডিও-বুস্ট চালু থাকলে মিউট আইকন থেকে সাউন্ড অন করলেও
+                   AudioContext সাসপেন্ডেড থাকলে আওয়াজ আসত না — এখন রিজিউম হয় */
+                try { if (MBX.actx && MBX.actx.state === 'suspended') MBX.actx.resume(); } catch(err){}
                 if (!video.muted && video.volume === 0) video.volume = 0.7;
                 updateMuteIcon(); showUI(true);
             });
@@ -1047,7 +1050,10 @@
                 const from = video.currentTime;
                 poster.classList.remove('show');
                 posterImg.classList.remove('show');
-                t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
+                /* 🔧 FIX: ডিউরেশন লোড হওয়ার আগে video.duration=0 থাকে — আগের লাইন
+                   তখন t কে -1 বানিয়ে দিত, ফলে ±১০ স্কিপ/সিকবার চুপচাপ কাজ করত না */
+                t = Math.max(t, 0);
+                if (isFinite(video.duration) && video.duration > 1) t = Math.min(t, video.duration - 1);
                 try {
                     if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
                     else { video.currentTime = t; }
