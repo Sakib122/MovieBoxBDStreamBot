@@ -646,16 +646,21 @@
             function startPreviewPipeline(){
                 if (MBX.hasPlayed || MBX.prevStarted) return;
                 MBX.prevStarted = true;
-                let metaFixed = false;
+                let probed = false;   /* 🔧 FIX: duration=Infinity প্রোব-সিক ট্র্যাক করার ফ্ল্যাগ */
                 prevV.src = video.src;
                 prevV.addEventListener('loadedmetadata', () => {
                     const d = prevV.duration;
                     if (isFinite(d) && d > 0) { setDurationUI(d); goFrame(pickPosterTime(d)); }
-                    else { try { prevV.currentTime = 1e7; } catch(e){} }   // MKV duration=Infinity হলে প্রোব হ্যাক
+                    else { probed = true; try { prevV.currentTime = 1e7; } catch(e){} }   // MKV duration=Infinity হলে প্রোব হ্যাক
                 });
                 prevV.addEventListener('seeked', () => {
                     const d = prevV.duration;
-                    if (!metaFixed && isFinite(d) && d > 0) { metaFixed = true; setDurationUI(d); goFrame(pickPosterTime(d)); return; }
+                    /* 🔧 FIX: প্রোব-সিক হলে — এখন ডিউরেশন এলে সঠিক ফ্রেমে যাও;
+                       না এলে কভারই থাকুক (খালি/কালো ফ্রেম কখনো দেখাবে না) */
+                    if (probed) {
+                        if (isFinite(d) && d > 0) { probed = false; setDurationUI(d); goFrame(pickPosterTime(d)); }
+                        return;
+                    }
                     if (!MBX.hasPlayed) {
                         prevV.classList.add('show');       // সুন্দর দৃশ্য পেল → পোস্টার দেখাও
                         coverEl.classList.add('off');
@@ -712,7 +717,13 @@
                     // 🔊 প্রথম প্লে = ইউজারের নিজের ক্লিক → সাউন্ড অন (ন্যাচারাল)
                     if (!MBX.firstPlay) { MBX.firstPlay = true; video.muted = false; }
                     fireStreamAd();
-                    video.play().catch(()=>{});
+                    /* 🔧 FIX: play() ব্রাউজার পলিসিতে আটকালে মিউটেড করে হলেও
+                       সাথে সাথে চালু করো — চুপচাপ ব্যর্থ হতে দেওয়া হবে না */
+                    video.play().catch(() => {
+                        video.muted = true;
+                        const p2 = video.play(); if (p2 && p2.catch) p2.catch(()=>{});
+                        updateMuteIcon();
+                    });
                     tryBoost();
                 } else video.pause();
             }
