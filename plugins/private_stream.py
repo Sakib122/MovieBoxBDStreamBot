@@ -1,12 +1,16 @@
 import time
+import os
+import re
+import html
 import asyncio  # ✅ FIX: এটা ছিল না — তাই FloodWait এলেই "NameError" crash হতো
 import logging
+from urllib.parse import quote
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait
 from info import URL, BIN_CHANNEL, CHANNEL, FSUB, MAX_FILES
 from database.users_db import db
-from web.utils.file_properties import get_hash
+from web.utils.file_properties import get_hash, display_name_from, url_name_from
 from utils import temp, get_size
 from plugins.utils import is_user_allowed, is_user_joined
 from Script import script
@@ -35,16 +39,26 @@ async def private_receive_handler(c: Client, m: Message):
     file_id = m.document or m.video or m.audio
     file_name = file_id.file_name if file_id.file_name else f"AV_File_{int(time.time())}.mkv"
     file_size = get_size(file_id.file_size)
+
+    # ⚡⚡ তোমার দেওয়া নাম: মুভি স্ক্যান করার সময় যে নাম/ক্যাপশন লেখো,
+    # সেটাই সব জায়গায় (পেজ, লিংক মেসেজ) দেখাবে —
+    # টেকনিক্যাল .mkv নাম আর ইউজারের চোখে পড়বে না।
+    display_name = display_name_from(m.caption, file_name)
+    name_for_url = url_name_from(display_name, file_name, 0)
+
+    # HTML মেসেজে বসানোর জন্য escape (নামে ' বা < থাকলেও মেসেজ ভাঙবে না)
+    display_html = html.escape(display_name)
     try:
         forwarded = await m.forward(chat_id=BIN_CHANNEL)
         hash_str = get_hash(forwarded)
-        stream = f"{URL}watch/{forwarded.id}/AV_File_{int(time.time())}.mkv?hash={hash_str}"
-        download = f"{URL}{forwarded.id}?hash={hash_str}"
+        stream = f"{URL}watch/{forwarded.id}/{name_for_url}?hash={hash_str}"
+        download = f"{URL}{forwarded.id}/{name_for_url}?hash={hash_str}"
         file_link = f"https://t.me/{temp.U_NAME}?start=file_{forwarded.id}"
         share_link = f"https://t.me/share/url?url={file_link}"
         await db.files.insert_one({
             "user_id": user_id,
             "file_name": file_name,
+            "display_name": display_name,
             "file_size": file_size,
             "file_id": forwarded.id,
             "hash": hash_str,
@@ -59,7 +73,7 @@ async def private_receive_handler(c: Client, m: Message):
 
         try:
             await m.reply_text(
-                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                script.CAPTION_TXT.format(CHANNEL, display_html, file_size, stream, download),
                 disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
@@ -75,7 +89,7 @@ async def private_receive_handler(c: Client, m: Message):
             logging.warning(f"FloodWait {e.value}s while replying to {user_id} — retrying")
             await asyncio.sleep(e.value + 1)
             await m.reply_text(
-                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                script.CAPTION_TXT.format(CHANNEL, display_html, file_size, stream, download),
                 disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
@@ -93,19 +107,20 @@ async def private_receive_handler(c: Client, m: Message):
         try:
             forwarded = await m.forward(chat_id=BIN_CHANNEL)
             hash_str = get_hash(forwarded)
-            stream = f"{URL}watch/{forwarded.id}/AV_File_{int(time.time())}.mkv?hash={hash_str}"
-            download = f"{URL}{forwarded.id}?hash={hash_str}"
+            stream = f"{URL}watch/{forwarded.id}/{name_for_url}?hash={hash_str}"
+            download = f"{URL}{forwarded.id}/{name_for_url}?hash={hash_str}"
             file_link = f"https://t.me/{temp.U_NAME}?start=file_{forwarded.id}"
             await db.files.insert_one({
                 "user_id": user_id,
                 "file_name": file_name,
+                "display_name": display_name,
                 "file_size": file_size,
                 "file_id": forwarded.id,
                 "hash": hash_str,
                 "timestamp": time.time()
             })
             await m.reply_text(
-                script.CAPTION_TXT.format(CHANNEL, file_name, file_size, stream, download),
+                script.CAPTION_TXT.format(CHANNEL, display_html, file_size, stream, download),
                 disable_web_page_preview=True,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("• ꜱᴛʀᴇᴀᴍ •", url=stream),
