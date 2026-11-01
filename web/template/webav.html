@@ -38,35 +38,30 @@
         .player-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px 11px; }
         .ph-label { font-size: 10.5px; letter-spacing: 2.5px; font-weight: 800; color: var(--accent); }
         .ph-title { font-size: 16.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: #fff; }
-        .status-badge { background: rgba(34,211,238,.1); color: var(--accent); border: 1px solid rgba(34,211,238,.3); padding: 5px 11px; border-radius: 9px; font-weight: 700; font-size: 11.5px; white-space: nowrap; transition: opacity 0.4s ease; }
+        .status-badge { background: rgba(34,211,238,.1); color: var(--accent); border: 1px solid rgba(34,211,238,.3); padding: 5px 11px; border-radius: 9px; font-weight: 700; font-size: 11.5px; white-space: nowrap; }
         .status-badge.paused { background: rgba(255,255,255,.06); color: var(--dim); border-color: var(--border); }
         .status-badge.loading { background: rgba(255,209,102,.08); color: #ffd166; border-color: rgba(255,209,102,.3); }
-        .status-badge.ready { background: rgba(45,212,191,.1); color: var(--accent2); border-color: rgba(45,212,191,.3); }
-        .status-badge.smooth-hidden { opacity: 0; }
+        .status-badge.ready { background: rgba(45,212,191,.1); color: var(--accent2); border-color: rgba(45,212,191,.35); }
+        .mbx-center.ready { animation: readyPulse 1.8s ease-in-out infinite; }
+        @keyframes readyPulse { 0%,100% { box-shadow: 0 4px 24px rgba(0,0,0,.45), 0 0 0 0 rgba(34,211,238,.4); } 50% { box-shadow: 0 4px 24px rgba(0,0,0,.45), 0 0 0 10px rgba(34,211,238,0); } }
 
         .mbx-player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; touch-action: none; user-select: none; }
         .mbx-player:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
         .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
         .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
 
+        /* 🖼️ প্রথম ফ্রেম পোস্টার — কালো স্ক্রিন নয়, মুভির সিন দেখাবে */
         .mbx-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 3; display: none; }
         .mbx-poster.show { display: block; }
 
-        .mbx-placeholder { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(ellipse at center, #1a1f26 0%, #0b0d10 100%); color: var(--dim); transition: opacity 0.4s; }
-        .mbx-placeholder i { font-size: 52px; color: var(--accent); opacity: 0.65; animation: phPulse 2.5s ease-in-out infinite; }
-        .mbx-placeholder span { font-size: 12px; font-weight: 800; letter-spacing: 2.5px; opacity: 0.7; }
-        .mbx-placeholder.hidden { opacity: 0; pointer-events: none; }
-        @keyframes phPulse { 0%,100% { transform: scale(1); opacity: 0.55; } 50% { transform: scale(1.08); opacity: 0.85; } }
-
         .mbx-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .25s; }
         .mbx-player.ui-on .mbx-overlay { opacity: 1; }
-        .mbx-player.poster-mode .mbx-overlay { opacity: 1; }
-        .mbx-player.poster-mode .mbx-controls { opacity: 0 !important; pointer-events: none !important; }
 
         .v-badges { position: absolute; top: 9px; left: 9px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 92%; }
         .v-badge { background: rgba(12,14,18,.72); backdrop-filter: blur(6px); border: 1px solid var(--border); color: #fff; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
         .v-badge i { color: var(--accent); font-size: 10px; }
 
+        /* ===== সেন্টার রো: ⏪10 — PLAY — 10⏩ (প্লে বাটনের দুই পাশে স্কিপ) ===== */
         .mbx-center-row { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 26px; z-index: 6; pointer-events: none; }
         .mbx-center { width: 64px; height: 64px; border-radius: 50%; background: rgba(10,12,16,.55); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s, background .2s; box-shadow: 0 4px 24px rgba(0,0,0,.45); }
         .mbx-center:active { transform: scale(.9); background: rgba(34,211,238,.25); }
@@ -74,8 +69,8 @@
         .mbx-skip { width: 46px; height: 46px; border-radius: 50%; background: rgba(10,12,16,.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.16); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; font-size: 13.5px; transition: transform .15s, background .2s; box-shadow: 0 4px 18px rgba(0,0,0,.4); }
         .mbx-skip small { font-size: 8.5px; font-weight: 800; color: var(--accent); line-height: 1; margin-top: 2px; }
         .mbx-skip:active { transform: scale(.88); background: rgba(34,211,238,.28); }
-        .mbx-player.poster-mode .mbx-skip { opacity: 0.4; pointer-events: none; }
 
+        /* ===== 🐍 SNAKE LOAD GAME — সাপ খাবার খাবে, % বাড়বে, ১০০% = প্লে ===== */
         .mbx-loadgame { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.74); backdrop-filter: blur(6px); cursor: pointer; }
         .mbx-loadgame.show { display: flex; }
         .lg-box { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
@@ -146,6 +141,7 @@
         .mm-hint { background: rgba(34,211,238,.07); border: 1px solid rgba(34,211,238,.25); color: #a5e8f5; border-radius: 10px; padding: 8px 11px; font-size: 11.5px; line-height: 1.55; margin-top: 7px; }
 
         #watchBtn { width: 100%; padding: 60px 20px; border: 2px dashed var(--accent); border-radius: 15px; text-align: center; cursor: pointer; background: rgba(34,211,238,.04); }
+        /* 📢 অ্যাড ব্যানার স্লট (উপরে + নিচে) — প্লেয়ার/বাটন কিছুই ঢাকে না */
         .ad-slot { display: flex; justify-content: center; align-items: flex-start; margin: 0 auto 14px; max-width: 100%; overflow: hidden; }
         .ad-frame { flex: 0 0 auto; transform-origin: top center; }
         .ad-frame iframe { display: block; border: 0; }
@@ -189,6 +185,7 @@
 
     <div class="main-container">
 
+        <!-- 📢 অ্যাড ব্যানার ১ (উপরে): Adsterra 468x60 -->
         <div class="ad-slot" id="adTopSlot"><div class="ad-frame" style="width:468px;height:60px;">
             <script type="text/javascript">
                 atOptions = {
@@ -211,14 +208,9 @@
                 <span class="status-badge loading" id="mbxStatus"><i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading</span>
             </div>
 
-            <div class="mbx-player poster-mode" id="mbxPlayer">
+            <div class="mbx-player" id="mbxPlayer">
                 <video id="mbxVideo" playsinline webkit-playsinline preload="auto"></video>
                 <canvas id="mbxPoster" class="mbx-poster"></canvas>
-
-                <div class="mbx-placeholder" id="mbxPlaceholder">
-                    <i class="fa-solid fa-film"></i>
-                    <span>TAP TO PLAY</span>
-                </div>
 
                 <div class="mbx-overlay">
                     <div class="v-badges" id="mbxBadges"></div>
@@ -284,6 +276,7 @@
             <div class="movie-meta" id="mbxMeta"></div>
         </div>
 
+        <!-- 📢 অ্যাড ব্যানার ২ (নিচে): Adsterra 320x50 -->
         <div class="ad-slot" id="adBottomSlot"><div class="ad-frame" style="width:320px;height:50px;">
             <script type="text/javascript">
                 atOptions = {
@@ -370,11 +363,17 @@
     <script>
         const CONFIG = {
             notice: "⚡ প্লে চাপলেই HD স্ট্রিম | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox",
+            // ▶️ AUTOPLAY: true = পেজে ঢুকেই মিউটেডে চলবে | false = পোস্টার + আগাম বাফার, ট্যাপে সাথে সাথে সাউন্ডসহ প্লে
+            autoplay: false,
+            // ⚡ PRELOAD SECONDS: প্লে চাপার আগেই এত সেকেন্ডের ভিডিও আগে থেকে বাফার হবে → ট্যাপেই ইনস্ট্যান্ট প্লে
+            preloadSeconds: 10,
             directAds: [
                 "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
             ],
             popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
+            // 💰 STREAM AD: কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
             streamAdCooldown: 60,
+            // 🎯 স্মার্ট নোটিস: বন্ধ করতে false
             smartNotice: true,
             soundText: {
                 bn: "সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧",
@@ -418,6 +417,15 @@
             if (callback) callback();
         }
 
+        /* ============================================================
+           💰 STREAM AD ENGINE v6 — লস-প্রুফ (কিউ ব্রাউজারে সেভ থাকে)
+           - ফুলস্ক্রিনে সিক: অ্যাড কিউতে জমে (মুভি নিরবচ্ছিন্ন, ফুলস্ক্রিন অটুট)
+           - কিউ localStorage-এ সেভ: ব্রাউজার বন্ধ করেও অ্যাড হারায় না 💾
+           - ⛶ বাটনে বের হলে: ওই জেস্চারেই জমা অ্যাড খোলা শুরু
+           - পরে যেকোনো সময় পেজে ফিরলে: প্রথম টাচে বাকি অ্যাড খোলে
+           - মুভি শেষ: অটো-ছোট স্ক্রিন + ফ্লাশ প্রস্তুতি
+           - Adsterra Direct Link (শুধু একটাই নেটওয়ার্ক)
+        ============================================================ */
         let lastStreamAd = 0;
         let pendingAds = 0;
         let flushArmed = false;
@@ -462,12 +470,14 @@
             lastStreamAd = now;
 
             if (isFs) {
+                // 🎬 ফুলস্ক্রিনে: অ্যাড খোলা যাবে না (ফুলস্ক্রিন ভাঙবে) — কিউতে জমাও (সেভসহ)
                 if (pendingAds < 3) { pendingAds++; saveQueue(); }
                 return;
             }
             tryOpenAd();
         }
 
+        // ফুলস্ক্রিন থেকে বের হলে: জেস্চার থাকায় সরাসরি অ্যাড খোলা শুরু
         ['fullscreenchange','webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
             const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
             if (!fs && pendingAds > 0) {
@@ -484,6 +494,7 @@
             return h > 0 ? h+':'+mm+':'+ss : mm+':'+ss;
         }
 
+        /* ===== ফাইল ইনফো পার্স ===== */
         function parseFileInfo(){
             const lower = ("{{ file_name }}").toLowerCase();
             const qm = lower.match(/(2160p|1440p|1080p|720p|480p|360p)/);
@@ -521,6 +532,7 @@
         }
         buildFileInfoUI();
 
+        /* 📢 ছোট স্ক্রিনে 468px ব্যানার স্ক্রিনের মধ্যে অটো-স্কেল হয় (কাটা পড়ে না) */
         function fitAdBanners(){
             document.querySelectorAll('.ad-slot').forEach(slot => {
                 const fr = slot.querySelector('.ad-frame');
@@ -543,6 +555,7 @@
         setTimeout(fitAdBanners, 200);
         setTimeout(fitAdBanners, 1200);
 
+        /* ===== Settings menu ===== */
         function buildMenu(){
             const info = parseFileInfo();
             document.getElementById('menuQuality').innerHTML = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
@@ -570,6 +583,7 @@
             document.querySelectorAll('#menuSpeed .pill').forEach(p => p.classList.toggle('active', parseFloat(p.dataset.speed) === MBX.video.playbackRate));
         }
 
+        /* ===== Subtitle ===== */
         function srtToVtt(srt){
             return 'WEBVTT\n\n' + srt.replace(/\r+/g,'').replace(/^\uFEFF/,'').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
         }
@@ -601,8 +615,10 @@
         }
 
         function showFallbackBox(){
+            /* 🔧 FIX: আগে d.id সেট করা হতো না — তাই বক্স ২-৩ বার ডুপ্লিকেট আসত। এখন একবারই আসবে। */
             if (document.getElementById('mbx-fallback')) return;
             const d = document.createElement('div');
+            d.id = 'mbx-fallback';
             d.className = 'big-file-warning';
             d.innerHTML = '❌ <b>ব্রাউজারে প্লে করা যাচ্ছে না!</b><br>এক্সটার্নাল প্লেয়ারে দেখুন 👇';
             const b1 = document.createElement('button'); b1.textContent = '▶ MX Player';
@@ -611,12 +627,20 @@
             const b2 = document.createElement('button'); b2.textContent = '▶ VLC';
             b2.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:#ff8c00;color:#fff;font-weight:800;cursor:pointer;';
             b2.onclick = () => play_intent('org.videolan.vlc');
-            d.appendChild(b1); d.appendChild(b2);
+            const b3 = document.createElement('button'); b3.textContent = '🔄 আবার ট্রাই';
+            b3.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:#2dd4bf;color:#04141a;font-weight:800;cursor:pointer;';
+            b3.onclick = () => location.reload();
+            d.appendChild(b1); d.appendChild(b2); d.appendChild(b3);
             const sec = document.getElementById('player-section');
             if (sec) sec.insertAdjacentElement('afterend', d);
         }
 
-        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, posterPainted: false, autoMuted: false, gestureSeen: false, actx: null, unmuteAt: 0, preloaded: false, silentLoading: false };
+        /* ============================================================
+                        CUSTOM PLAYER ENGINE
+           ▶️ AUTOPLAY: পেজে ঢুকলেই ভিডিও অটো চালু —
+           সাউন্ড ব্লক করলে মিউটেডে চলবে, ১ ট্যাপেই সাউন্ড
+        ============================================================ */
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, posterPainted: false, autoMuted: false, gestureSeen: false, actx: null, unmuteAt: 0, pumping: false, pumpStart: 0 };
         let toastTimer = null;
 
         function toast(msg, ms){
@@ -629,8 +653,8 @@
         function initPlayer(){
             const player = document.getElementById('mbxPlayer');
             const video = document.getElementById('mbxVideo');
-            const placeholder = document.getElementById('mbxPlaceholder');
             MBX.video = video;
+            /* ⚡ ফাইল-সার্ভারের সাথে আগে থেকেই কানেকশন খুলে রাখো — দ্রুত স্টার্ট */
             try {
                 const fu = new URL('{{ file_url }}'.replace("http://", "https://"));
                 const pc = document.createElement('link');
@@ -638,7 +662,9 @@
                 document.head.appendChild(pc);
             } catch(e){}
             video.src = '{{ file_url }}'.replace("http://", "https://");
-            try { video.load(); } catch(e){}
+
+            /* 💾 RESUME KEY: এই ফাইলের শেষ দেখা পজিশন এখানে সেভ হয় (ইউটিউবের মতো) */
+            const POSKEY = 'mbx_pos_' + (function(s){ let h = 5381; for (let i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); })('{{ file_url }}');
 
             const btnPlay = document.getElementById('btnPlay');
             const btnMute = document.getElementById('btnMute');
@@ -651,6 +677,7 @@
             const tipEl = document.getElementById('mbxSeekTip');
             const poster = document.getElementById('mbxPoster');
 
+            /* --- 🖼️ প্রথম ফ্রেম পোস্টার: কালো স্ক্রিন নয়, মুভির প্রথম সিন দেখাও --- */
             function paintPoster(){
                 if (MBX.hasPlayed || MBX.posterPainted) return;
                 try {
@@ -658,16 +685,15 @@
                     poster.width = video.videoWidth; poster.height = video.videoHeight;
                     poster.getContext('2d').drawImage(video, 0, 0, poster.width, poster.height);
                     poster.classList.add('show');
-                    placeholder.classList.add('hidden');
                     MBX.posterPainted = true;
                 } catch(e){}
             }
-            video.addEventListener('loadeddata', () => { setTimeout(paintPoster, 80); setTimeout(paintPoster, 300); });
-            video.addEventListener('canplay', () => { setTimeout(paintPoster, 80); setTimeout(paintPoster, 400); });
-            video.addEventListener('seeked', () => { if (!MBX.hasPlayed) paintPoster(); });
+            video.addEventListener('loadeddata', () => setTimeout(paintPoster, 80));
+            video.addEventListener('canplay', () => setTimeout(paintPoster, 80));
 
             buildMenu();
 
+            /* --- UI show/hide --- */
             let hideTimer = null;
             function showUI(autoHide){
                 player.classList.add('ui-on');
@@ -675,7 +701,7 @@
                 if (autoHide && !video.paused) hideTimer = setTimeout(hideUI, 3000);
             }
             function hideUI(){
-                if (video.paused) return;
+                if (video.paused || !MBX.hasPlayed) return; /* প্রথম প্লের আগে UI লুকাবে না */
                 clearTimeout(hideTimer);
                 player.classList.remove('ui-on');
                 menu.classList.remove('open');
@@ -691,39 +717,37 @@
                 btnPlay.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
                 centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
             }
-            setPlayIcons(false);
-
-            let smoothHideTimer = null;
-            function hideStatusSmooth(){
-                clearTimeout(smoothHideTimer);
-                smoothHideTimer = setTimeout(() => { statusEl.classList.add('smooth-hidden'); }, 2000);
-            }
-            function showStatusNow(){
-                statusEl.classList.remove('smooth-hidden');
-                clearTimeout(smoothHideTimer);
-            }
             function setStatus(state){
-                showStatusNow();
-                statusEl.className = 'status-badge' + (state==='play' ? '' : state==='load' ? ' loading' : state==='ready' ? ' ready' : ' paused');
+                statusEl.className = 'status-badge' + (state==='play' ? '' : state==='ready' ? ' ready' : state==='load' ? ' loading' : ' paused');
                 statusEl.innerHTML = state==='play' ? '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'
-                    : state==='load' ? '<i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading'
                     : state==='ready' ? '<i class="fa-solid fa-circle-check" style="font-size:9px;"></i> Ready'
+                    : state==='load' ? '<i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading'
                     : '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused';
             }
 
+            /* --- Controls --- */
             function togglePlay(){
+                // ⚡ আগাম বাফার (pump) চলছে? → এই ট্যাপই রিয়েল প্লে: সাউন্ডসহ সাথে সাথে শুরু
+                if (MBX.pumping) {
+                    stopPump(false);
+                    MBX.firstPlay = true;
+                    fireStreamAd();
+                    video.muted = false; MBX.autoMuted = false; updateMuteIcon();
+                    video.play().catch(()=>{});
+                    tryBoost();
+                    return;
+                }
                 if (video.paused) {
+                    // 🔊 প্রথম প্লে = ইউজারের নিজের ক্লিক → সাউন্ড অন (ন্যাচারাল)
                     if (!MBX.firstPlay) { MBX.firstPlay = true; video.muted = false; MBX.autoMuted = false; updateMuteIcon(); }
                     fireStreamAd();
-                    player.classList.remove('poster-mode');
-                    placeholder.classList.add('hidden');
-                    poster.classList.remove('show');
-                    /* 🚀 প্রিলোডেড হলে সাথে সাথে প্লে — কোনো সাপ-গেম নয় */
                     video.play().catch(()=>{});
                     tryBoost();
                 } else if (video.muted && MBX.autoMuted) {
+                    // ▶️ অটো-প্লে মিউটেডে চলছে → প্লে বাটন ট্যাপ = সাউন্ড চালু (পজ নয়)
                     unmuteNow();
                 } else if (Date.now() - (MBX.unmuteAt || 0) < 600) {
+                    // 🔊 এই ট্যাপেই তো সাউন্ড খুলেছে — এখন পজ করলে খারাপ লাগবে, চলতে দাও
                 } else video.pause();
             }
             btnPlay.addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
@@ -747,6 +771,7 @@
                 document.getElementById('volRange').value = off ? 0 : video.volume;
             }
             video.addEventListener('volumechange', () => {
+                if (MBX.pumping) return; /* ⚡ আগাম বাফারের মিউট ইউজারের ভলিউম সেভ নষ্ট করবে না */
                 updateMuteIcon();
                 try { localStorage.setItem('mbx_vol', video.muted ? 0 : video.volume); } catch(e){}
             });
@@ -756,6 +781,7 @@
             });
             document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target.id !== 'btnSettings') menu.classList.remove('open'); });
 
+            /* --- Fullscreen + অটো-রোটেট --- */
             const btnFull = document.getElementById('btnFull');
             function isFs(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
             async function lockLandscape(){
@@ -781,7 +807,13 @@
                 showUI(true);
             }));
 
+            /* ============================================================
+               ⚡ FAST SEEK + 🎮 LOAD GAME ENGINE
+               বড় সিক = গেমের মতো % (1% → 100%), ১০০% হলেই ভিডিও প্লে
+            ============================================================ */
             let wantPlayAfterSeek = false;
+            /* 🐍 সাপ + খাবার: খাবার খাবে তো % বাড়বে — কখনো ০% এ আটকে থাকবে না,
+               ডেটা স্লো হলেও ফাস্ট মোডে বাড়ে, ১০০% হলেই ভিডিও প্লে */
             const lg = {
                 el: document.getElementById('mbxLoadGame'),
                 cvs: document.getElementById('lgSnake'),
@@ -821,18 +853,22 @@
             function lgDraw(dt, now){
                 const ctx = lgCtx, C = 75, R = 58, TAU = Math.PI * 2;
                 ctx.clearRect(0, 0, 150, 150);
+                // ট্র্যাক সার্কেল
                 ctx.beginPath(); ctx.arc(C, C, R, 0, TAU);
                 ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2.5; ctx.stroke();
+                // প্রগ্রেস আর্ক
                 if (lg.disp > 0.5) {
                     ctx.beginPath(); ctx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + (Math.min(lg.disp, 100) / 100) * TAU);
                     ctx.strokeStyle = 'rgba(34,211,238,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
                 }
+                // হেড মুভ (গেমের মতো সবসময় চলতেই থাকে)
                 const spd = 2.3;
                 lg.headAng += spd * dt;
                 const hx = C + Math.cos(lg.headAng) * R, hy = C + Math.sin(lg.headAng) * R;
                 lg.trail.push({ x: hx, y: hy });
                 const maxSeg = 12 + Math.min(lg.eats * 2, 30);
                 while (lg.trail.length > maxSeg) lg.trail.shift();
+                // 🍎 খাবার খাওয়া: মুখ ছুঁলেই % লাফ দেয় + পার্টিকেল বিস্ফোরণ
                 if (lg.foodAng == null || lg.headAng >= lg.foodAng) {
                     if (lg.foodAng != null) {
                         lg.eats++;
@@ -846,12 +882,14 @@
                     }
                     lg.foodAng = lg.headAng + 1.1 + Math.random() * 1.6;
                 }
+                // খাবার আঁকা (পালস করে)
                 const fx2 = C + Math.cos(lg.foodAng) * R, fy2 = C + Math.sin(lg.foodAng) * R;
                 const pulse = 3.2 + Math.sin(now / 130) * 1.1;
                 ctx.beginPath(); ctx.arc(fx2, fy2, pulse + 2.5, 0, TAU);
                 ctx.fillStyle = 'rgba(255,93,93,.18)'; ctx.fill();
                 ctx.beginPath(); ctx.arc(fx2, fy2, pulse, 0, TAU);
                 ctx.fillStyle = '#ff5d5d'; ctx.shadowColor = '#ff5d5d'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+                // সাপের বডি (লেজ → মাথা)
                 for (let i = 0; i < lg.trail.length; i++) {
                     const p = lg.trail[i], k = i / lg.trail.length;
                     ctx.beginPath();
@@ -859,6 +897,7 @@
                     ctx.fillStyle = 'rgba(45,212,191,' + (0.25 + k * 0.6).toFixed(2) + ')';
                     ctx.fill();
                 }
+                // সাপের মাথা + চোখ
                 ctx.beginPath(); ctx.arc(hx, hy, 5.2, 0, TAU);
                 ctx.fillStyle = '#22d3ee'; ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
                 const ea = lg.headAng + Math.PI / 2;
@@ -866,6 +905,7 @@
                 ctx.arc(hx + Math.cos(ea) * 2.2, hy + Math.sin(ea) * 2.2, 1.1, 0, TAU);
                 ctx.arc(hx - Math.cos(ea) * 2.2, hy - Math.sin(ea) * 2.2, 1.1, 0, TAU);
                 ctx.fillStyle = '#062028'; ctx.fill();
+                // খাওয়ার পার্টিকেল
                 for (let i = lg.parts.length - 1; i >= 0; i--) {
                     const p = lg.parts[i];
                     p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
@@ -882,8 +922,11 @@
                 lg.last = now;
                 const real = lgRealPct();
                 if (real >= 100) {
+                    // রেডি → স্প্রিন্ট: দ্রুত ১০০-তে উঠে প্লে
                     lg.disp = Math.min(100, lg.disp + 34 * dt + (100 - lg.disp) * 0.12);
                 } else if (lg.disp < 97) {
+                    // ⚡ ফাস্ট মোড: ডেটা আসুক বা না আসুক ন্যূনতম ৭%/সেকেন্ডে বাড়বে —
+                    // ডেটা এগোলে আরও দ্রুত ফলো করবে — কখনো ০% এ আটকে থাকবে না
                     const follow = Math.max(0, real - lg.disp) * 1.4;
                     lg.disp = Math.min(97, lg.disp + Math.max(7, follow) * dt);
                 }
@@ -919,6 +962,7 @@
                 lg.el.classList.remove('show');
                 lg.target = null;
             }
+            // লোডিং স্ক্রিনে ট্যাপ = বন্ধ করে থামাও
             lg.el.addEventListener('click', () => {
                 if (!lg.on || lg.done) return;
                 lgHide();
@@ -935,16 +979,22 @@
                     wantPlayAfterSeek = false;
                 }, far ? 180 : 420);
             }
+            function clampT(t){
+                /* 🔧 FIX: Infinity duration (স্ট্রিম) হলে আগের ক্ল্যাম্প সিক ভেঙে দিত — এখন নিরাপদ */
+                const dur = video.duration;
+                const maxT = (isFinite(dur) && dur > 1) ? dur - 1 : Number.MAX_SAFE_INTEGER;
+                return Math.min(Math.max(t, 0), maxT);
+            }
             function doSeek(t){
                 const from = video.currentTime;
                 poster.classList.remove('show');
-                placeholder.classList.add('hidden');
-                t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
+                if (!MBX.hasPlayed) MBX.posterPainted = false; /* প্লের আগে সিক করলে নতুন ফ্রেমে পোস্টার আঁকা হবে */
+                t = clampT(t);
                 try {
                     if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
                     else { video.currentTime = t; }
                 } catch(e){ try { video.currentTime = t; } catch(e2){} }
-                if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); showStatusNow(); lgQueue(t, from); }
+                if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); lgQueue(t, from); }
             }
             video.addEventListener('canplay', () => {
                 clearTimeout(lg.pendT);
@@ -962,6 +1012,7 @@
                 showUI(true);
             }
 
+            /* --- Seek bar --- */
             let seeking = false;
             function seekPos(e){
                 const r = seek.querySelector('.mbx-track').getBoundingClientRect();
@@ -995,24 +1046,20 @@
             seek.addEventListener('pointerup', endSeek);
             seek.addEventListener('pointercancel', () => { seeking = false; seek.classList.remove('dragging'); });
 
+            /* --- Video events --- */
             video.addEventListener('play', () => {
-                /* সাইলেন্ট প্রিলোড চলাকালীন play ইভেন্ট এড়িয়ে যাও */
-                if (MBX.silentLoading) return;
+                if (MBX.pumping) return; /* ⚡ আগাম বাফার চলছে — এখনো UI/পোস্টার বদলাবে না */
                 setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake();
                 MBX.userWantsPlay = true;
                 poster.classList.remove('show');
-                placeholder.classList.add('hidden');
-                player.classList.remove('poster-mode');
+                centerBtn.classList.remove('ready');
+                // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
                 if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
             });
-            video.addEventListener('pause', () => {
-                if (MBX.silentLoading) return;
-                MBX.userWantsPlay = false; setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake();
-            });
+            video.addEventListener('pause', () => { if (MBX.pumping) return; MBX.userWantsPlay = false; setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
             video.addEventListener('waiting', () => {
-                if (MBX.silentLoading) return;
+                if (MBX.pumping) return;
                 if (!video.paused) {
-                    showStatusNow();
                     setStatus('load');
                     clearTimeout(lg.pendT);
                     lg.pendT = setTimeout(() => {
@@ -1020,17 +1067,23 @@
                     }, 600);
                 }
             });
-            video.addEventListener('playing', () => {
-                if (MBX.silentLoading) return;
-                setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; hideStatusSmooth();
-            });
+            video.addEventListener('playing', () => { if (MBX.pumping) return; setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; });
 
+            let lastPosSave = 0;
             video.addEventListener('timeupdate', () => {
-                if (MBX.silentLoading) return;
                 document.getElementById('tCur').textContent = fmtTime(video.currentTime);
                 if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
+                /* 💾 RESUME SAVE: প্রতি ৪ সেকেন্ডে পজিশন সেভ — পরে ফিরে এলে যেখানে ছিলেন সেখান থেকেই চলবে */
+                if (!MBX.pumping && MBX.hasPlayed && !video.ended && video.currentTime > 5) {
+                    const nw = Date.now();
+                    if (nw - lastPosSave > 4000) {
+                        lastPosSave = nw;
+                        try { localStorage.setItem(POSKEY, String(video.currentTime)); } catch(e){}
+                    }
+                }
             });
 
+            /* ⏱️ ডিউরেশন অটো: মেটাডেটা এলেই সেকেন্ড বসে যায়; স্ট্রিমে Infinity হলে seekable থেকে */
             function syncDuration(){
                 let d = video.duration;
                 if (!isFinite(d) || d <= 0) {
@@ -1040,11 +1093,21 @@
             }
             video.addEventListener('loadedmetadata', () => {
                 syncDuration();
-                try { if (video.currentTime === 0) video.currentTime = 0.1; } catch(e){}
-                setTimeout(paintPoster, 100);
-                setTimeout(paintPoster, 500);
-                setTimeout(paintPoster, 1500);
-                setTimeout(paintPoster, 3000);
+                // 💾 RESUME RESTORE: আগে যতটুকু দেখেছেন সেখান থেকেই শুরু হবে (ইউটিউবের মতো)
+                let rp = 0;
+                try {
+                    const sp = parseFloat(localStorage.getItem(POSKEY) || '0') || 0;
+                    if (sp > 8 && isFinite(video.duration) && sp < video.duration - 15) rp = sp;
+                    else if (sp > 0) localStorage.removeItem(POSKEY);
+                } catch(e){}
+                if (rp > 0) {
+                    try { video.currentTime = rp; } catch(e){}
+                    MBX.pumpStart = rp;
+                    setTimeout(() => { if (!MBX.hasPlayed) toast('⏯️ আগের জায়গা থেকে চলবে: ' + fmtTime(rp), 2200); }, 700);
+                } else {
+                    // 🖼️ প্রথম ফ্রেম পোস্টার: মাইক্রো-সিক দিয়ে ফ্রেম-১ আঁকা
+                    try { if (video.currentTime === 0) video.currentTime = 0.001; } catch(e){}
+                }
             });
             video.addEventListener('durationchange', syncDuration);
             video.addEventListener('progress', updateBuffered);
@@ -1053,13 +1116,21 @@
                 try {
                     const b = video.buffered;
                     if (b.length && video.duration) {
-                        const end = b.end(b.length - 1);
+                        /* 🔧 FIX: যে রেঞ্জে এখন দেখছেন সেটার বাফার দেখাও — সিকের পরেও ঠিক থাকবে */
+                        let end = 0;
+                        for (let i = 0; i < b.length; i++) {
+                            if (b.start(i) <= video.currentTime + 0.3 && b.end(i) > video.currentTime) { end = b.end(i); break; }
+                            if (b.start(i) >= video.currentTime) end = Math.max(end, b.end(i));
+                        }
+                        if (!end) end = b.end(b.length - 1);
                         buffEl.style.width = (end / video.duration * 100) + '%';
                     }
                 } catch(e){}
             }
+            /* 🎬 মুভি শেষ: অটোমেটিক ফুলস্ক্রিন ছোট + জমা অ্যাড ফ্লাশের প্রস্তুতি */
             video.addEventListener('ended', () => {
                 setPlayIcons(false); setStatus('paused'); showUI(false); lgHide();
+                try { localStorage.removeItem(POSKEY); } catch(e){} /* মুভি শেষ → পুরনো পজিশন মুছে যাবে */
                 const wasFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
                 if (wasFs) {
                     try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch(e){}
@@ -1068,13 +1139,18 @@
             });
             video.addEventListener('error', () => {
                 lgHide();
+                stopPump(false);
                 poster.classList.remove('show');
                 MBX.posterPainted = false;
+                /* 🔧 কোডেক/কন্টেইনার সাপোর্টেড না হলে (code 4) বারবার ট্রাই নয় — ১ বার রিকানেক্টের পর বিকল্প দেখাও */
+                if (video.error && video.error.code === 4 && MBX.errTries >= 1) { setStatus('paused'); showFallbackBox(); return; }
                 if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
                 MBX.errTries++;
+                /* 🤫 সাইলেন্ট রিট্রাই — ইউজার কিছু দেখবে না, নিজে নিজেই ঠিক হবে */
                 setTimeout(() => { try { lastReload = Date.now(); video.load(); video.play().catch(()=>{}); } catch(e){} }, 1500);
             });
 
+            /* --- 🔧 START FIX: ০০:০০ ফ্রিজ কিক (প্রথম প্লেতে একবারই) --- */
             function startKick(){
                 if (video.paused || video.ended) return;
                 let tries = 0;
@@ -1082,6 +1158,7 @@
                     if (video.paused || video.ended || video.currentTime > 0.6) { clearInterval(iv); return; }
                     tries++;
                     if (tries <= 3) {
+                        // মাইক্রো-নাজ: স্ট্রিমকে জোর করে সামান্য সামনে নাড়াও
                         try { if (video.currentTime < 0.03) video.currentTime = 0.012 * tries; } catch(e){}
                         video.play().catch(()=>{});
                     } else {
@@ -1100,6 +1177,7 @@
                 }, 1900);
             }
 
+            /* --- জেসচার --- */
             const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center') || t.closest('.mbx-skip') || t.closest('.mbx-loadgame')));
             function showRipple(side){
                 const r = document.createElement('div');
@@ -1139,7 +1217,7 @@
                 }
                 if (gMode === 'h') {
                     const secs = Math.round(dx / 10);
-                    const tgt = Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1);
+                    const tgt = clampT(gTime + secs);
                     toast((secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(tgt), 30000);
                 } else if (gMode === 'bright') {
                     const nb = Math.min(Math.max(gBright + dy/800, 0.35), 2);
@@ -1158,7 +1236,7 @@
                     const secs = Math.round(dx / 10);
                     fireStreamAd();
                     doSeek(gTime + secs);
-                    toast('⏭️ ' + fmtTime(Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1)));
+                    toast('⏭️ ' + fmtTime(clampT(gTime + secs)));
                     gMode = null; setTimeout(() => gMoved = false, 80);
                     return;
                 }
@@ -1188,6 +1266,7 @@
                 toggleUI();
             });
 
+            /* PC: কীবোর্ড */
             document.addEventListener('keydown', e => {
                 if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
                 if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -1197,11 +1276,13 @@
                 else if (e.key.toLowerCase() === 'm') { video.muted = !video.muted; updateMuteIcon(); }
             });
 
+            /* --- Wake Lock --- */
             let wakeLock = null;
             async function reqWake(){ try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
             function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
             document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
 
+            /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => {
                     const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (innerWidth > innerHeight);
@@ -1209,6 +1290,7 @@
                 }, 300);
             });
 
+            /* --- স্মার্ট ওয়াচডগ (ফ্রিজ রিকভারি) --- */
             function hasBufferAhead(t){
                 try { const b = video.buffered;
                     for (let i=0;i<b.length;i++){ if (t >= b.start(i)-0.5 && t < b.end(i)-0.5) return true; }
@@ -1240,6 +1322,7 @@
                         }
                     }
                 } else if (video.readyState < 3) {
+                    // 🔧 ফ্রিজ + বাফারও নেই = মৃত কানেকশন → ফ্রেশ কানেকশনে কিক
                     stuck++;
                     if (stuck >= 3 && Date.now() - lastReload > 25000) {
                         stuck = 0;
@@ -1258,11 +1341,18 @@
                 } else { stuck = 0; }
             }, 2000);
 
+            /* ============================================================
+               ▶️ AUTOPLAY ENGINE — ঢুকেই প্লে + ১ ট্যাপে সাউন্ড
+               ১) আগে সাউন্ডসহ ট্রাই (ডেস্কটপে অনেক সময় চলে)
+               ২) ব্লক হলে মিউটেডে অটো-প্লে (সব ব্রাউজারে চলে)
+               ৩) ইউজার স্ক্রিনে যেকোনো জায়গায় ১ ট্যাপ → সাউন্ড চালু
+            ============================================================ */
             function unmuteNow(){
                 if (!MBX.autoMuted) { video.muted = false; updateMuteIcon(); return; }
                 MBX.autoMuted = false;
                 MBX.unmuteAt = Date.now();
                 video.muted = false;
+                /* বিরল ক্ষেত্রে ব্রাউজার আনমিউটে পজ করে দিলে নিজে নিজেই আবার চালু */
                 if (video.paused && !video.ended) video.play().catch(()=>{});
                 if (!video.volume || video.volume <= 0) video.volume = 0.9;
                 updateMuteIcon();
@@ -1270,88 +1360,87 @@
                 tryBoost();
                 toast('🔊 সাউন্ড চালু', 1200);
             }
-
-            /* ============================================================
-               🚀 SILENT PRELOAD ENGINE — আসল ফিক্স
-               পেজ লোড হলেই সাইলেন্টলি play() (মিউটেডে, প্লেসহোল্ডারের পেছনে)
-               ব্রাউজার জোরে বাফার করবে। ১০ সেকেন্ড হলে পজ + ০-তে রিসেট।
-               ইউজার প্লে চাপলে সাথে সাথে স্মুথলি চলে — কারণ আগেই তৈরি।
-            ============================================================ */
-            function startBackgroundPreload(){
-                showStatusNow();
+            function armUnmute(){
+                const fire = () => { if (MBX.autoMuted) unmuteNow(); };
+                document.addEventListener('touchstart', fire, { capture: true });
+                document.addEventListener('click', fire, { capture: true });
+            }
+            function armGestureMark(){
+                const mark = () => { MBX.gestureSeen = true; };
+                document.addEventListener('touchstart', mark, { capture: true, once: true });
+                document.addEventListener('click', mark, { capture: true, once: true });
+            }
+            function autoBoot(){
                 setStatus('load');
-                MBX.silentLoading = true;
-
-                const userMuted = video.muted;
-                let finished = false;
-
-                function finishPreload(){
-                    if (finished) return;
-                    finished = true;
-                    try { video.pause(); } catch(e){}
-                    try { video.currentTime = 0; } catch(e){}
-                    video.muted = userMuted;
-                    MBX.silentLoading = false;
-                    MBX.preloaded = true;
-                    if (!MBX.hasPlayed) {
-                        setStatus('ready');
-                        setTimeout(() => { if (!MBX.hasPlayed) hideStatusSmooth(); }, 2500);
-                    }
-                }
-
-                /* চেষ্টা ১: সাইলেন্ট প্লে (মিউটেড) — সবচেয়ে কার্যকর */
-                try {
+                const p = video.play();
+                if (p && p.catch) p.catch(() => {
+                    /* মোবাইল ব্রাউজার সাউন্ডসহ অটো-প্লে আটকায় → মিউটেডে চালু */
+                    MBX.autoMuted = true;
                     video.muted = true;
-                    const p = video.play();
-                    if (p && p.then) {
-                        p.then(() => {
-                            /* প্লে শুরু! এখন বাফার হচ্ছে। ১০ সেকেন্ড হলে থামাও */
-                            const check = setInterval(() => {
-                                let end = 0;
-                                try { if (video.buffered.length) end = video.buffered.end(video.buffered.length-1); } catch(e){}
-                                if (end >= 10 || video.currentTime > 6) {
-                                    clearInterval(check);
-                                    finishPreload();
-                                }
-                            }, 300);
-                            setTimeout(() => clearInterval(check), 25000);
-                        }).catch(() => {
-                            /* অটোপ্লে ব্লকড — ন্যাচারাল প্রিলোডে ফলব্যাক */
-                            video.muted = userMuted;
-                            MBX.silentLoading = false;
-                            naturalPreload();
-                        });
-                    } else {
-                        video.muted = userMuted;
-                        MBX.silentLoading = false;
-                        naturalPreload();
-                    }
-                } catch(e){
-                    video.muted = userMuted;
-                    MBX.silentLoading = false;
-                    naturalPreload();
-                }
-
-                /* চেষ্টা ২: ন্যাচারাল প্রিলোড (অটোপ্লে ব্লকড হলে) */
-                function naturalPreload(){
-                    let count = 0;
-                    const check = setInterval(() => {
-                        count++;
-                        let end = 0;
-                        try { if (video.buffered.length) end = video.buffered.end(video.buffered.length-1); } catch(e){}
-                        if (end >= 10 || video.readyState >= 4 || count > 40) {
-                            clearInterval(check);
-                            MBX.preloaded = true;
-                            if (!MBX.hasPlayed) {
-                                setStatus('ready');
-                                setTimeout(() => { if (!MBX.hasPlayed) hideStatusSmooth(); }, 2500);
-                            }
-                        }
-                        if (count > 120) clearInterval(check);
-                    }, 500);
-                }
+                    updateMuteIcon();
+                    const mp = video.play();
+                    if (mp && mp.catch) mp.then(() => {
+                        toast('🔇 ট্যাপ করলেই সাউন্ড চালু হবে', 5000);
+                        armUnmute();
+                    }).catch(() => {
+                        /* একদম ব্লকড (খুবই রেয়ার) → প্লে বাটন চাপলেই সাউন্ডসহ চলবে */
+                        MBX.autoMuted = false;
+                        video.muted = false;
+                        updateMuteIcon();
+                    });
+                });
             }
 
+            /* ============================================================
+               ⚡ PRELOAD PUMP ENGINE — পোস্টারের নিচেই আগাম বাফার
+               পেজ খুললেই মিউটেডে কয়েক সেকেন্ড চালিয়ে CONFIG.preloadSeconds
+               (ডিফল্ট ১০ সেকেন্ড) বাফার জমিয়ে ফেলা হয় → ইউজার প্লে চাপলে
+               সাথে সাথেই সাউন্ডসহ প্লে হয়, কোনো লোডিং দেখতে হয় না।
+               CONFIG.autoplay = true হলে এই ইঞ্জিন অফ হয় (পুরনো অটোপ্লে)।
+            ============================================================ */
+            function preloadTarget(){
+                const d = video.duration;
+                if (!isFinite(d) || d <= 0) return CONFIG.preloadSeconds;
+                return Math.min(CONFIG.preloadSeconds, Math.max(4, d * 0.1));
+            }
+            function markReady(){
+                if (MBX.hasPlayed || MBX.pumping) return;
+                setStatus('ready');
+                centerBtn.classList.add('ready');
+                toast('✅ রেডি — প্লে চাপুন', 1800);
+            }
+            let pumpT = null;
+            function startPump(){
+                if (CONFIG.autoplay || MBX.hasPlayed || MBX.pumping || video.ended) return;
+                if (video.readyState < 1) { setTimeout(startPump, 500); return; }
+                if (video.readyState >= 3 && bufferedAheadOf(video.currentTime) >= preloadTarget()) { markReady(); return; }
+                MBX.pumping = true;
+                try { video.muted = true; } catch(e){}
+                const p = video.play();
+                if (p && p.catch) p.catch(() => { MBX.pumping = false; });
+                pumpT = setInterval(() => {
+                    if (MBX.hasPlayed || video.ended) { MBX.pumping = false; clearInterval(pumpT); pumpT = null; return; }
+                    if (video.readyState >= 3 && bufferedAheadOf(video.currentTime) >= preloadTarget()) { stopPump(true); return; }
+                    if (video.paused && !video.ended) { const q = video.play(); if (q && q.catch) q.catch(()=>{}); }
+                }, 900);
+            }
+            function stopPump(toReady){
+                if (pumpT) { clearInterval(pumpT); pumpT = null; }
+                if (!MBX.pumping) return;
+                MBX.pumping = false;
+                try { video.pause(); } catch(e){}
+                /* পাম্প যেখান থেকে শুরু হয়েছিল সেখানে ফিরে যাও — ইউজার কোনো সিন মিস করবে না */
+                try { if (Math.abs(video.currentTime - MBX.pumpStart) > 1.2) video.currentTime = MBX.pumpStart; } catch(e){}
+                if (toReady) setTimeout(markReady, 200);
+            }
+
+            /* ============================================================
+               🔧 BOOT WATCHDOG — শুরুর ০০:০০ লোডিং ফ্রিজের ফিক্স
+               সমস্যা: স্লো/মৃত CDN কানেকশনে মেটাডেটাই আসে না → ০০:০০-তে
+               মিনিটের পর মিনিট বসে থাকতে হয় (কিছুই লোড হয় না)।
+               সমাধান: ১০-১৫ সেকেন্ডে কোনো ডেটা/মেটাডেটা না এলে নতুন
+               ফ্রেশ কানেকশনে অটো-রিকানেক্ট (সর্বোচ্চ ৬ বার)।
+            ============================================================ */
             const BOOT = { tries: 0, max: 6, lastAct: Date.now(), warned: false, lgWarned: false, seekKicks: 0 };
             window.MBXBoot = BOOT;
             let bootBufEnd = 0, bootRS = 0;
@@ -1367,8 +1456,11 @@
                 if (video.ended) return;
                 bootTouch();
                 if (MBX.hasPlayed && video.currentTime > 5) BOOT.tries = 0;
+                // স্বাভাবিক প্লে চলছে → কিছু করার নেই (মিড-প্লে আলাদা ওয়াচডগ দেখে)
                 if (MBX.hasPlayed && !video.paused && video.readyState >= 3 && video.currentTime > 0.6) return;
+                // ইউজার নিজে পজ করে রেখেছে (ডেটা ঠিক আছে) → হাত দিচ্ছি না
                 if (video.paused && video.currentTime > 0.6 && video.readyState >= 2) return;
+                // প্রি-লোড ঠিকমতো হচ্ছে (মেটাডেটা + প্রথম ফ্রেম এসেছে) → অপেক্ষা করো
                 if (!MBX.hasPlayed && video.paused && video.readyState >= 2) return;
                 if (!MBX.hasPlayed && !video.paused && video.readyState >= 3) return;
 
@@ -1380,6 +1472,7 @@
                 if (BOOT.tries > BOOT.max) {
                     if (!BOOT.warned) {
                         BOOT.warned = true;
+                        stopPump(false);
                         showFallbackBox();
                         toast('❌ সার্ভার খুব স্লো — নিচের MX/VLC প্লেয়ারে ট্রাই করুন', 4000);
                     }
@@ -1387,9 +1480,11 @@
                 }
                 BOOT.lastAct = Date.now();
                 lastReload = Date.now();
+                if (!MBX.hasPlayed) toast('🔁 নতুন কানেকশন নিচ্ছি…', 1300);
                 bootBufEnd = 0; bootRS = 0;
-                const keepPos = (isFinite(video.duration) && video.duration > 0) ? video.currentTime : 0;
+                const keepPos = MBX.pumping ? (MBX.pumpStart || 0) : ((isFinite(video.duration) && video.duration > 0) ? video.currentTime : 0);
                 const wp = !!MBX.userWantsPlay;
+                /* 🤫 সাইলেন্ট রিকানেক্ট: নতুন কানেকশন নিচ্ছি — ইউজার কিছুই দেখবে না */
                 try {
                     video.load();
                     if (keepPos > 0.5) {
@@ -1407,6 +1502,8 @@
                 } catch(e){}
             }, 2500);
 
+            /* 🔧 SEEK FUSE — সিক ৭ সেকেন্ডেও ডেটা না এলে ফ্রেশ কানেকশনে কিক
+               (আগে: সিক হ্যাং করলে সাপ-গেম অন্তকাল ঘুরত, কিক কেউ দিত না) */
             let seekFuseT = null, seekFPos = 0, seekFKicks = 0;
             video.addEventListener('seeking', () => {
                 seekFPos = video.currentTime;
@@ -1429,9 +1526,11 @@
             });
             video.addEventListener('seeked', () => { clearTimeout(seekFuseT); seekFKicks = 0; });
 
+            /* 🔧 সাপ-গেম ৫০ সেকেন্ডেও ডেটা ছাড়া ঘুরলে: সতর্কতা + বিকল্প প্লেয়ার বক্স
+               (রিকভারি চেষ্টা ব্যাকগ্রাউন্ডে চলতেই থাকে) */
             setInterval(() => {
                 if (!lg.on || lg.done || BOOT.lgWarned) return;
-                if (Date.now() - (lg.startedAt || 0) > 50000 && lgRealPct() < 3) {
+                if (Date.now() - (lg.startedAt || 0) > 30000 && lgRealPct() < 3) {
                     BOOT.lgWarned = true;
                     showFallbackBox();
                     toast('⏳ নেটওয়ার্ক খুব স্লো — নিচে MX/VLC-তেও দেখতে পারেন', 4000);
@@ -1445,14 +1544,22 @@
             } catch(e){ video.volume = 0.9; }
             video.muted = false;
             updateMuteIcon();
-            setPlayIcons(false);
+            showUI(true);
 
-            /* 🚀 সাইলেন্ট প্রিলোড চালু — পেজ লোড হলেই বাফার শুরু */
-            startBackgroundPreload();
+            /* ▶️ পেজে ঢুকেই: পোস্টার + আগাম ১০ সেকেন্ড বাফার → Ready → ১ ট্যাপে সাউন্ডসহ প্লে
+               (CONFIG.autoplay = true করলে আগের মতো ঢুকেই মিউটেড অটোপ্লে হবে) */
+            armGestureMark();
+            if (CONFIG.autoplay) { autoBoot(); } else { setTimeout(startPump, 400); }
+
+            /* 📴 পেজ ছাড়ার মুহূর্তেও পজিশন সেভ */
+            window.addEventListener('pagehide', () => {
+                if (MBX.hasPlayed && video.currentTime > 5) { try { localStorage.setItem(POSKEY, String(video.currentTime)); } catch(e){} }
+            });
 
             function tryBoost(){
                 if (window.audioBoosted || video.muted) return;
-                if (!MBX.gestureSeen && !MBX.firstPlay) return;
+                /* ইউজারের ট্যাপের আগে অডিও-কনটেক্সট সাসপেন্ডেড থাকে — তখন বুস্ট করলে সাউন্ডই মুছে যেত */
+                if (!MBX.gestureSeen) return;
                 try {
                     const AC = window.AudioContext || window.webkitAudioContext;
                     const ctx = new AC();
@@ -1465,12 +1572,11 @@
                     window.audioBoosted = true;
                 } catch(e){}
             }
-
-            const markGesture = () => { MBX.gestureSeen = true; };
-            document.addEventListener('touchstart', markGesture, { capture: true, once: true });
-            document.addEventListener('click', markGesture, { capture: true, once: true });
         }
 
+        /* ============================================================
+           🎯 স্মার্ট নোটিস — সাইজ দেখে ইউজারকে সঠিক পথ দেখাও
+        ============================================================ */
         (function(){
             if (CONFIG.smartNotice === false) return;
             try {
@@ -1509,6 +1615,12 @@
 
         try { initPlayer(); } catch(e) { console.log("Player init error:", e); }
 
+        /* ============================================================
+           🎯 ADSTERRA INTERSTITIAL GUARD
+           - ৬ ঘণ্টা কুলডাউন (localStorage: mbx_intl_time)
+           - পেজ লোডের ১০ সেকেন্ড পর
+           - ভিডিও চলার সময় কখনো না (v.paused চেক)
+        ============================================================ */
         (function(){
             try {
                 const KEY = 'mbx_intl_time', CD = 6 * 60 * 60 * 1000;
