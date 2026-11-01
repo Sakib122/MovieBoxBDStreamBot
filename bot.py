@@ -149,7 +149,11 @@ async def Webav_start():
                 pass
 
         # 9. Start Web Server
-        app = web.AppRunner(await web_server())
+        # 🔧 FIX: handler_cancellation=True — ইউজার স্ট্রিম ছেড়ে চলে গেলে
+        # (সিক দিলে/ট্যাব বন্ধ করলে) পুরনো রিকোয়েস্ট সাথে সাথে বন্ধ হয়।
+        # আগে ওগুলো জম্বি হয়ে 1GB পর্যন্ত টেনে নিত — কাউন্টার আটকে থাকত,
+        # সার্ভারের ব্যান্ডউইডথ শেষ হয়ে অন্য স্ট্রিম ঝুলে যেত।
+        app = web.AppRunner(await web_server(), handler_cancellation=True)
         await app.setup()
         bind_address = "0.0.0.0"
         await web.TCPSite(app, bind_address, PORT).start()
