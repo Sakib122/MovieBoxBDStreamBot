@@ -429,15 +429,25 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
 
+    # 🔧 FIX: ব্রাউজার মুভির ডিউরেশন/সিক-ম্যাপ পড়তে "bytes=-N" (ফাইলের
+    # শেষের N বাইট) চায় — আগের কোড এতে ক্র্যাশ (500) করত।
     if range_header:
-        from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
-        from_bytes = int(from_bytes)
-        until_bytes = int(until_bytes) if until_bytes else file_size - 1
+        rm = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", str(range_header).strip())
+        if rm and (rm.group(1) or rm.group(2)):
+            if rm.group(1) == "":
+                n = min(int(rm.group(2)), file_size)
+                from_bytes = file_size - n
+                until_bytes = file_size - 1
+            else:
+                from_bytes = int(rm.group(1))
+                until_bytes = int(rm.group(2)) if rm.group(2) else file_size - 1
+        else:
+            from_bytes, until_bytes = 0, file_size - 1
     else:
         from_bytes = request.http_range.start or 0
         until_bytes = (request.http_range.stop or file_size) - 1
 
-    if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+    if from_bytes < 0 or from_bytes >= file_size:
         return web.Response(
             status=416,
             body="416: Range not satisfiable",
