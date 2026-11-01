@@ -429,12 +429,15 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
 
-    # 🔧 FIX: ব্রাউজার মুভির ডিউরেশন/সিক-ম্যাপ পড়তে "bytes=-N" (ফাইলের
-    # শেষের N বাইট) চায় — আগের কোড এতে ক্র্যাশ (500) করত।
+    # 🔧 FIX (ডিউরেশন ০০:০০ + সিকে জিরো থেকে প্লে + বড় সিকে ফ্রিজ):
+    # ব্রাউজার মুভির ইনডেক্স/ডিউরেশন পড়তে "bytes=-N" (ফাইলের শেষের N বাইট)
+    # রিকোয়েস্ট পাঠায়। আগের কোড এতে int('') দিয়ে ক্র্যাশ করত → HTTP 500 →
+    # ব্রাউজার ইনডেক্স পায় না → ডিউরেশন ০, সিক দিলে ০ থেকে রিস্টার্ট।
     if range_header:
         rm = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", str(range_header).strip())
         if rm and (rm.group(1) or rm.group(2)):
             if rm.group(1) == "":
+                # suffix: "bytes=-N" = শেষের N বাইট
                 n = min(int(rm.group(2)), file_size)
                 from_bytes = file_size - n
                 until_bytes = file_size - 1
@@ -526,6 +529,15 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         # CORS: অন্য ডোমেইন থেকে (যেমন মেইন সাইট) ভিডিও চলবে এবং
         # প্রথম সিনের পোস্টারও আঁকা যাবে
         "Access-Control-Allow-Origin": "*",
+        # 🔧 CRITICAL FIX (স্ট্রিম ঝুলে-যাওয়া / সিকে জিরো / লোডিং আটকে থাকা):
+        # Koyeb-এর সামনের Cloudflare এজ ভিডিও রেসপন্স ক্যাশে রাখার সময় পুরো
+        # বডি বাফার করে — তখন লাইভ ইউজার মিনিটের পর মিনিট ০ বাইট পেয়ে ঝুলে
+        # থাকে (লাইভ টেস্টে প্রমাণিত: MISS = ১০০ সেকেন্ডে ০ বাইট, HIT = সাথে সাথে)।
+        # no-store দিলে এজ ক্যাশ ছাড়াই সরাসরি পাস-থ্রু করে → স্ট্রিম লাইভ চলে।
+        "Cache-Control": "no-store, no-cache, must-revalidate, private",
+        "Pragma": "no-cache",
+        "CDN-Cache-Control": "no-store",
+        "Cloudflare-CDN-Cache-Control": "no-store",
     }
     # Content-Range শুধু Range request এ পাঠানো ঠিক
     if range_header:
