@@ -168,7 +168,10 @@ async def protected_verify(request: web.Request):
             content_type="text/html"
         )
 
-@routes.get(r"/watch/{path:\S+}", allow_head=True)
+# ⚠️ FIX: {path:.+} — আগে \S+ ছিল। নতুন aiohttp-এ লিংকের নামে স্পেস (%20)
+# থাকলে রাউট ম্যাচই করত না → সব স্ট্রিম/ডাউনলোড "404: Not Found" দিত।
+# মুভির নামে স্পেস/বাংলা যা-ই থাকুক, এখন সব লিংক কাজ করবে।
+@routes.get(r"/watch/{path:.+}", allow_head=True)
 async def watch_handler(request: web.Request):
     try:
         path = request.match_info["path"]
@@ -203,7 +206,7 @@ thumb_cache: dict = {}          # msg_id -> (jpeg_bytes, ts)
 THUMB_CACHE_MAX = 800
 
 
-@routes.get(r"/thumb/{path:\S+}", allow_head=True)
+@routes.get(r"/thumb/{path:.+}", allow_head=True)
 async def thumb_handler(request: web.Request):
     try:
         path = request.match_info["path"]
@@ -278,7 +281,7 @@ async def thumb_handler(request: web.Request):
         return web.Response(status=404, text="No thumbnail")
 
 
-@routes.get(r"/{path:\S+}", allow_head=True)
+@routes.get(r"/{path:.+}", allow_head=True)
 async def stream_handler(request: web.Request):
     try:
         path = request.match_info["path"]
