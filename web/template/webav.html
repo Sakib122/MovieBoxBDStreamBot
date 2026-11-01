@@ -1,504 +1,1273 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-<title>MOVIE BOX BD STREAM | {{ file_name }}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="icon" href="https://img.sanishtech.com/u/62e636411ff87f8ccbdd9eb50eb18279.png" type="image/x-icon">
-<script id="popunder-main-script" src="https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-<style>
-:root{--accent:#22d3ee;--accent2:#2dd4bf;--bg:#0b0d10;--card:#14171c;--card2:#181c22;--border:rgba(255,255,255,.08);--txt:#e8eaed;--dim:#9aa0a6}
-*{-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--txt);font-family:'Outfit',sans-serif;margin:0;overflow-x:hidden}
-.notice-bar{background:linear-gradient(90deg,#22d3ee,#2dd4bf);color:#04141a;padding:9px;font-weight:800;text-align:center;font-size:12.5px}
-.navbar{padding:13px 18px;background:rgba(15,17,21,.7);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1000}
-.control-btn{border:1px solid var(--border);width:38px;height:38px;border-radius:11px;background:var(--card);color:#fff;display:flex;align-items:center;justify-content:center}
-.main-container{max-width:620px;margin:0 auto;padding:14px 14px 24px}
-.ad-slot{display:flex;justify-content:center;margin:0 auto 14px;max-width:100%;overflow:hidden}
-.ad-frame{flex:0 0 auto;transform-origin:top center}.ad-frame iframe{display:block;border:0}
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <title>MOVIE BOX BD STREAM | {{ file_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="https://img.sanishtech.com/u/62e636411ff87f8ccbdd9eb50eb18279.png" type="image/x-icon">
 
-#player-section{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px}
-.player-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 15px 11px}
-.ph-label{font-size:10.5px;letter-spacing:2.5px;font-weight:800;color:var(--accent)}
-.ph-title{font-size:16.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
-.status-badge{background:rgba(34,211,238,.1);color:var(--accent);border:1px solid rgba(34,211,238,.3);padding:5px 11px;border-radius:9px;font-weight:700;font-size:11.5px;white-space:nowrap}
-.status-badge.paused{background:rgba(255,255,255,.06);color:var(--dim);border-color:var(--border)}
-.status-badge.loading{background:rgba(255,209,102,.08);color:#ffd166;border-color:rgba(255,209,102,.3)}
+    <script id="popunder-main-script" src="https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js"></script>
 
-.stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;user-select:none;touch-action:manipulation}
-.stage:fullscreen{width:100vw;height:100vh;aspect-ratio:auto}
-.stage:-webkit-full-screen{width:100vw;height:100vh;aspect-ratio:auto}
-.stage video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
-.overlay{position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;transition:opacity .25s}
-.stage.ui-on .overlay{opacity:1}
-.crow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:24px}
-.cbtn{width:46px;height:46px;border-radius:50%;background:rgba(10,12,16,.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;font-size:14px}
-.cbtn.big{width:64px;height:64px;font-size:22px}.cbtn small{font-size:8px;font-weight:800;color:var(--accent);line-height:1}
-.cbtn:active{transform:scale(.9)}
-.stage.ui-on:not(.paused) .overlay{opacity:1}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
 
-.spin{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;background:rgba(5,7,10,.55);pointer-events:none}
-.spin.show{display:flex}
-.ring{position:relative;width:92px;height:92px}
-.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
-.ring circle{fill:none;stroke-width:5}
-.ring .bg{stroke:rgba(255,255,255,.12)}.ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .3s}
-.ring.idle svg{animation:rot 1s linear infinite}@keyframes rot{to{transform:rotate(270deg)}}
-.ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800}
+    <style>
+        :root {
+            --accent: #22d3ee;
+            --accent2: #2dd4bf;
+            --bg: #0b0d10;
+            --card: #14171c;
+            --card2: #181c22;
+            --border: rgba(255,255,255,0.08);
+            --txt: #e8eaed;
+            --dim: #9aa0a6;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg); color: var(--txt); font-family: 'Outfit', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
 
-.ctl{position:absolute;left:0;right:0;bottom:0;z-index:6;padding:24px 8px 6px;background:linear-gradient(transparent,rgba(0,0,0,.82));opacity:0;pointer-events:none;transition:opacity .25s}
-.stage.ui-on .ctl{opacity:1;pointer-events:auto}
-.seek{position:relative;height:20px;display:flex;align-items:center;cursor:pointer;margin:0 6px 2px;touch-action:none}
-.track{position:relative;width:100%;height:4px;border-radius:4px;background:rgba(255,255,255,.16)}
-.buf,.played{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:4px}
-.buf{background:rgba(255,255,255,.3)}.played{background:linear-gradient(90deg,var(--accent),var(--accent2))}
-.thumb{position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(34,211,238,.35)}
-.tip{position:absolute;bottom:18px;transform:translateX(-50%);background:rgba(10,12,16,.92);border:1px solid var(--border);font-size:11px;font-weight:700;padding:3px 8px;border-radius:7px;opacity:0;pointer-events:none}
-.seek.drag .tip{opacity:1}
-.bar,.bl,.br{display:flex;align-items:center}.bar{justify-content:space-between}
-.mb{background:none;border:none;color:#fff;width:34px;height:34px;border-radius:9px;font-size:14px;cursor:pointer}
-.mb:active{background:rgba(255,255,255,.14)}
-.mt{font-size:11.5px;color:var(--dim);padding:0 5px;white-space:nowrap;font-variant-numeric:tabular-nums}.mt b{color:#fff;font-weight:600}
-#vol{width:54px;accent-color:var(--accent)}
-@media(max-width:520px){#vol{display:none}.cbtn.big{width:56px;height:56px}.crow{gap:16px}.mt{font-size:10.5px}}
-.menu{position:absolute;right:8px;bottom:56px;z-index:9;background:rgba(13,15,19,.97);border:1px solid var(--border);border-radius:13px;padding:10px 12px;min-width:210px;display:none}
-.menu.open{display:block}
-.mh{font-size:10px;font-weight:800;letter-spacing:2px;color:var(--dim);margin:8px 0 6px}.mh:first-child{margin-top:0}
-.pills{display:flex;flex-wrap:wrap;gap:6px}
-.pill{padding:5px 12px;border-radius:16px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);font-size:12px;font-weight:700;cursor:pointer}
-.pill.active{border-color:var(--accent);color:var(--accent)}
-.toast{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(10,12,16,.88);border:1px solid var(--border);padding:7px 15px;border-radius:20px;font-size:12px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
-.toast.show{opacity:1}
+        .notice-bar { background: linear-gradient(90deg, #22d3ee, #2dd4bf); color: #04141a; padding: 9px; font-weight: 800; text-align: center; font-size: 12.5px; position: relative; z-index: 1001; }
+        .navbar { padding: 13px 18px; background: rgba(15,17,21,.7); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1000; }
+        .control-btn { border: 1px solid var(--border); width: 38px; height: 38px; border-radius: 11px; background: var(--card); color: #fff; display: flex; align-items: center; justify-content: center; }
 
-.meta{padding:12px 15px 14px;background:var(--card2);border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:7px}
-.chip{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);color:#a5e8f5;border-radius:9px;padding:4px 10px;font-size:12px;font-weight:700}
-.glass-card{background:var(--card);padding:15px;border-radius:13px;margin-bottom:14px;border:1px solid var(--border)}
-.btn-glass{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:11px;font-weight:700;margin-bottom:8px;cursor:pointer;border:1px solid var(--border);color:#fff;text-decoration:none!important;background:rgba(255,255,255,.04)}
-.btn-getfile{background:linear-gradient(45deg,#0088cc,#22d3ee)!important;color:#06141c!important;border:none;font-size:1.05rem;font-weight:800;padding:16px 12px;box-shadow:0 6px 20px rgba(0,136,204,.35)}
-.btn-sm2{padding:10px 8px;font-size:12.3px;margin-bottom:0}
-.tg-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
-.tg-btn{background:#0088cc;color:#fff!important;padding:12px;border-radius:10px;font-weight:700;font-size:12.5px;text-align:center;text-decoration:none!important}
-.sound-fix-box{border:1.5px solid rgba(34,211,238,.4);padding:11px;text-align:center;margin-top:14px;border-radius:12px;background:rgba(34,211,238,.04);font-size:12.5px;font-weight:600}
-.warn{border:1.5px solid rgba(255,77,77,.5);background:rgba(255,77,77,.07);color:#ffd6d6;padding:12px;border-radius:12px;text-align:center;margin-bottom:14px;font-weight:600;font-size:12.5px;line-height:1.6}
-.warn button{margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;font-weight:800;cursor:pointer}
-.smart-notice{border:1.5px solid rgba(255,209,102,.5);background:rgba(255,209,102,.07);color:#ffe9b3;padding:12px;border-radius:12px;text-align:center;margin-bottom:14px;font-weight:600;font-size:12.5px;line-height:1.65}
-.smart-notice.good{border-color:rgba(45,212,191,.5);background:rgba(45,212,191,.06);color:#b8f0e8}
-#eyeCareOverlay{position:fixed;inset:0;background:rgba(255,165,0,.12);pointer-events:none;z-index:9999;display:none}
-</style>
+        .main-container { max-width: 620px; margin: 0 auto; padding: 14px 14px 24px 14px; }
+
+        #player-section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; z-index: 2100; }
+
+        .player-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px 11px; }
+        .ph-label { font-size: 10.5px; letter-spacing: 2.5px; font-weight: 800; color: var(--accent); }
+        .ph-title { font-size: 16.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: #fff; }
+        .status-badge { background: rgba(34,211,238,.1); color: var(--accent); border: 1px solid rgba(34,211,238,.3); padding: 5px 11px; border-radius: 9px; font-weight: 700; font-size: 11.5px; white-space: nowrap; }
+        .status-badge.paused { background: rgba(255,255,255,.06); color: var(--dim); border-color: var(--border); }
+        .status-badge.loading { background: rgba(255,209,102,.08); color: #ffd166; border-color: rgba(255,209,102,.3); }
+
+        .mbx-player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; touch-action: none; user-select: none; }
+        .mbx-player:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
+        .mbx-player:-webkit-full-screen { width: 100vw; height: 100vh; aspect-ratio: auto; border-radius: 0; }
+        .mbx-player video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+
+        /* 🖼️ প্রথম ফ্রেম পোস্টার — কালো স্ক্রিন নয়, মুভির সিন দেখাবে */
+        .mbx-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 3; display: none; }
+        .mbx-poster.show { display: block; }
+
+        .mbx-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .25s; }
+        .mbx-player.ui-on .mbx-overlay { opacity: 1; }
+
+        .v-badges { position: absolute; top: 9px; left: 9px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 92%; }
+        .v-badge { background: rgba(12,14,18,.72); backdrop-filter: blur(6px); border: 1px solid var(--border); color: #fff; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+        .v-badge i { color: var(--accent); font-size: 10px; }
+
+        /* ===== সেন্টার রো: ⏪10 — PLAY — 10⏩ (প্লে বাটনের দুই পাশে স্কিপ) ===== */
+        .mbx-center-row { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 26px; z-index: 6; pointer-events: none; }
+        .mbx-center { width: 64px; height: 64px; border-radius: 50%; background: rgba(10,12,16,.55); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.18); color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; transition: transform .15s, background .2s; box-shadow: 0 4px 24px rgba(0,0,0,.45); }
+        .mbx-center:active { transform: scale(.9); background: rgba(34,211,238,.25); }
+        .mbx-center .fa-play { margin-left: 4px; }
+        .mbx-skip { width: 46px; height: 46px; border-radius: 50%; background: rgba(10,12,16,.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.16); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; font-size: 13.5px; transition: transform .15s, background .2s; box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+        .mbx-skip small { font-size: 8.5px; font-weight: 800; color: var(--accent); line-height: 1; margin-top: 2px; }
+        .mbx-skip:active { transform: scale(.88); background: rgba(34,211,238,.28); }
+
+        /* ===== 🐍 SNAKE LOAD GAME — সাপ খাবার খাবে, % বাড়বে, ১০০% = প্লে ===== */
+        .mbx-loadgame { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(5,7,10,.74); backdrop-filter: blur(6px); cursor: pointer; }
+        .mbx-loadgame.show { display: flex; }
+        .lg-box { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
+        .lg-arena { position: relative; }
+        #lgSnake { width: 150px; height: 150px; display: block; filter: drop-shadow(0 0 16px rgba(34,211,238,.3)); }
+        .lg-pct { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -55%); font-size: 27px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px rgba(34,211,238,.65); pointer-events: none; }
+        .lg-pct.go { animation: lgPop .45s ease; color: var(--accent); }
+        @keyframes lgPop { 0% { transform: translate(-50%,-55%) scale(1); } 50% { transform: translate(-50%,-55%) scale(1.18); } 100% { transform: translate(-50%,-55%) scale(1); } }
+        .lg-tip { color: var(--dim); font-size: 10.5px; max-width: 230px; text-align: center; line-height: 1.5; }
+        .lg-tip b { color: var(--accent); }
+
+        .mbx-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 24px 8px 6px; background: linear-gradient(transparent, rgba(0,0,0,.82)); opacity: 0; pointer-events: none; transition: opacity .25s; }
+        .mbx-player.ui-on .mbx-controls { opacity: 1; pointer-events: auto; }
+
+        .mbx-seek { position: relative; height: 18px; display: flex; align-items: center; cursor: pointer; margin: 0 6px 2px; touch-action: none; }
+        .mbx-track { position: relative; width: 100%; height: 4px; border-radius: 4px; background: rgba(255,255,255,.16); }
+        .mbx-buffered { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,255,255,.28); border-radius: 4px; }
+        .mbx-played { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
+        .mbx-thumb { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(34,211,238,.35); }
+        .mbx-seek-tip { position: absolute; bottom: 16px; transform: translateX(-50%); background: rgba(10,12,16,.92); border: 1px solid var(--border); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 7px; opacity: 0; pointer-events: none; white-space: nowrap; transition: opacity .15s; }
+        .mbx-seek.dragging .mbx-seek-tip { opacity: 1; }
+
+        .mbx-bar { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+        .mbx-left, .mbx-right { display: flex; align-items: center; gap: 1px; }
+        .mbx-btn { position: relative; background: none; border: none; color: #fff; width: 33px; height: 33px; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: background .15s; font-size: 14.5px; }
+        .mbx-btn:active { background: rgba(255,255,255,.14); }
+        .mbx-btn small { font-size: 7.5px; font-weight: 800; line-height: 1; margin-top: 1px; opacity: .85; }
+        .mbx-time { font-size: 11.5px; color: var(--dim); padding: 0 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .mbx-time b { color: #fff; font-weight: 600; }
+        .mbx-vol { display: flex; align-items: center; }
+        #volRange { width: 54px; accent-color: var(--accent); cursor: pointer; height: 3px; }
+
+        @media (max-width: 520px) {
+            #volRange { display: none; }
+            .mbx-btn { width: 30px; height: 30px; font-size: 13px; }
+            .mbx-btn small { font-size: 7px; }
+            .mbx-time { font-size: 10.5px; padding: 0 3px; }
+            .mbx-left, .mbx-right { gap: 0; }
+            .mbx-controls { padding: 20px 4px 5px; }
+            .mbx-center { width: 56px; height: 56px; font-size: 19px; }
+            .mbx-skip { width: 40px; height: 40px; font-size: 11.5px; }
+            .mbx-skip small { font-size: 7.5px; }
+            .mbx-center-row { gap: 16px; }
+            #lgSnake { width: 118px; height: 118px; }
+            .lg-pct { font-size: 21px; }
+        }
+
+        .mbx-menu { position: absolute; right: 8px; bottom: 52px; z-index: 8; background: rgba(13,15,19,.97); border: 1px solid var(--border); border-radius: 13px; padding: 10px 12px; min-width: 235px; display: none; backdrop-filter: blur(12px); box-shadow: 0 12px 34px rgba(0,0,0,.55); }
+        .mbx-menu.open { display: block; }
+        .mm-head { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--dim); margin: 8px 0 6px; }
+        .mm-head:first-child { margin-top: 0; }
+        .mm-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pill { padding: 5px 13px; border-radius: 16px; border: 1.5px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); color: #fff; font-size: 12px; font-weight: 700; cursor: default; }
+        .pill.active { border-color: var(--accent); color: var(--accent); background: rgba(34,211,238,.08); }
+        .pill.clickable { cursor: pointer; }
+
+        .mbx-toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; background: rgba(10,12,16,.88); border: 1px solid var(--border); color: #fff; padding: 7px 15px; border-radius: 20px; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+        .mbx-toast.show { opacity: 1; }
+
+        .tap-ripple { position: absolute; top: 50%; transform: translateY(-50%); width: 68px; height: 68px; border-radius: 50%; background: rgba(34,211,238,.22); border: 1px solid rgba(34,211,238,.4); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 18px; z-index: 4; animation: rip .5s ease-out forwards; pointer-events: none; }
+        .tap-ripple.left { left: 8%; } .tap-ripple.right { right: 8%; }
+        @keyframes rip { from { opacity: 1; transform: translateY(-50%) scale(.6); } to { opacity: 0; transform: translateY(-50%) scale(1.35); } }
+
+        .movie-meta { padding: 12px 15px 14px; background: var(--card2); border-top: 1px solid var(--border); }
+        .mm-title { font-weight: 800; font-size: 14.5px; margin-bottom: 9px; color: #fff; }
+        .mm-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+        .mm-label { font-size: 10.5px; font-weight: 800; letter-spacing: 1.5px; color: var(--dim); padding-top: 7px; min-width: 58px; }
+        .mm-hint { background: rgba(34,211,238,.07); border: 1px solid rgba(34,211,238,.25); color: #a5e8f5; border-radius: 10px; padding: 8px 11px; font-size: 11.5px; line-height: 1.55; margin-top: 7px; }
+
+        #watchBtn { width: 100%; padding: 60px 20px; border: 2px dashed var(--accent); border-radius: 15px; text-align: center; cursor: pointer; background: rgba(34,211,238,.04); }
+
+        .glass-card { background: var(--card); padding: 15px; border-radius: 13px; margin-bottom: 14px; border: 1px solid var(--border); }
+        .btn-glass { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 11px; font-weight: 700; margin-bottom: 8px; transition: .2s; cursor: pointer; border: 1px solid var(--border); color: #fff; text-decoration: none !important; background: rgba(255,255,255,.04); }
+        .btn-main { background: linear-gradient(45deg, var(--accent), var(--accent2)) !important; color: #04141a !important; border: none; font-size: 1.05rem; }
+        .btn-tg { background: #0088cc !important; color: #fff !important; border: none; }
+        .btn-getfile { background: linear-gradient(45deg, #0088cc, #22d3ee) !important; color: #06141c !important; border: none; font-size: 1.08rem; font-weight: 800; padding: 16px 12px; letter-spacing: .4px; box-shadow: 0 6px 20px rgba(0,136,204,.35); margin-bottom: 10px; }
+        .btn-sm2 { padding: 10px 8px; font-size: 12.3px; margin-bottom: 0; }
+        .tg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+        .tg-btn { background: #0088cc; color: #fff !important; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 12.5px; text-align: center; text-decoration: none !important; }
+        .sound-fix-box { border: 1.5px solid rgba(34,211,238,.4); padding: 11px; text-align: center; margin-top: 14px; border-radius: 12px; background: rgba(34,211,238,.04); }
+        .lang-switch { display: flex; justify-content: center; gap: 7px; margin-bottom: 9px; }
+        .lang-btn { background: rgba(255,255,255,.06); border: 1px solid rgba(34,211,238,.4); color: var(--accent); padding: 4px 12px; border-radius: 18px; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+        .lang-btn.active { background: var(--accent); color: #04141a; }
+        #instruction-text { font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--txt); }
+        .big-file-warning { border: 1.5px solid rgba(255,77,77,.5); background: rgba(255,77,77,.07); color: #ffd6d6; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.6; }
+
+        .smart-notice { border: 1.5px solid rgba(255,209,102,.5); background: rgba(255,209,102,.07); color: #ffe9b3; padding: 12px; border-radius: 12px; text-align: center; margin-bottom: 14px; font-weight: 600; font-size: 12.5px; line-height: 1.65; }
+        .smart-notice.good { border-color: rgba(45,212,191,.5); background: rgba(45,212,191,.06); color: #b8f0e8; }
+        .smart-notice b { font-weight: 800; }
+
+        #popunder-trigger { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; display: block; background: transparent; }
+        #eyeCareOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,165,0,.12); pointer-events: none; z-index: 9999; display: none; }
+    </style>
 </head>
 <body>
-<!-- ডেটা এখানে একবারই বসে: ফাইলের নামে " বা ' থাকলেও JS ভাঙবে না -->
-<div id="cfg" hidden data-name="{{ file_name }}" data-size="{{ file_size }}" data-url="{{ file_url }}" data-get="{{ file_get }}"></div>
-<div id="eyeCareOverlay"></div>
 
-<div class="notice-bar"><marquee scrollamount="6">⚡ প্লে চাপলেই HD স্ট্রিম | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox</marquee></div>
+    <div id="popunder-trigger" onclick="handlePopunder('global_trigger')"></div>
+    <div id="eyeCareOverlay"></div>
 
-<nav class="navbar d-flex justify-content-between align-items-center">
-  <div class="fw-bold fs-5"><i class="fa-solid fa-robot" style="color:var(--accent)"></i> MOVIE BOX BD STREAM</div>
-  <button class="control-btn" onclick="toggleEyeCare()"><i class="fa-solid fa-eye"></i></button>
-</nav>
-
-<div class="main-container">
-  <div class="ad-slot" id="adTopSlot"><div class="ad-frame" style="width:468px;height:60px;">
-    <script type="text/javascript">atOptions={'key':'e29a2af548bd3c9fa5512bd423e484a5','format':'iframe','height':60,'width':468,'params':{}};</script>
-    <script type="text/javascript" src="https://bicea.org/22/e29a2af548bd3c9fa5512bd423e484a5"></script>
-  </div></div>
-
-  <div id="player-section">
-    <div class="player-head">
-      <div style="min-width:0"><div class="ph-label">WATCH ONLINE</div><div class="ph-title" id="phTitle"></div></div>
-      <span class="status-badge paused" id="status">Paused</span>
+    <div class="notice-bar" id="notice-container">
+        <marquee scrollamount="6" id="marquee-element">⚡ প্লে চাপলেই HD স্ট্রিম | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox</marquee>
     </div>
 
-    <div class="stage paused" id="stage">
-      <!-- preload=metadata + #t=0.1 : ব্রাউজার নিজেই প্রথম ফ্রেম দেখায়, JS সিক/ক্যানভাস লাগে না -->
-      <video id="v" playsinline webkit-playsinline preload="metadata"></video>
+    <nav class="navbar d-flex justify-content-between align-items-center">
+        <div class="fw-bold fs-5"><i class="fa-solid fa-robot" style="color:var(--accent)"></i> MOVIE BOX BD STREAM</div>
+        <button class="control-btn" onclick="toggleEyeCare()"><i class="fa-solid fa-eye"></i></button>
+    </nav>
 
-      <div class="overlay"><div class="crow">
-        <div class="cbtn" id="bBack"><i class="fa-solid fa-rotate-left"></i><small>10</small></div>
-        <div class="cbtn big" id="bCenter"><i class="fa-solid fa-play"></i></div>
-        <div class="cbtn" id="bFwd"><i class="fa-solid fa-rotate-right"></i><small>10</small></div>
-      </div></div>
+    <div class="main-container">
 
-      <div class="spin" id="spin"><div class="ring idle" id="ring">
-        <svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="44"/><circle class="fg" id="fg" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="276.5"/></svg>
-        <b id="spinPct"></b></div></div>
+        <div id="player-section">
+            <div class="player-head">
+                <div style="min-width:0;">
+                    <div class="ph-label">WATCH ONLINE</div>
+                    <div class="ph-title" id="phTitle">{{ file_name }}</div>
+                </div>
+                <span class="status-badge paused" id="mbxStatus"><i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused</span>
+            </div>
 
-      <div class="toast" id="toast"></div>
+            <div class="mbx-player" id="mbxPlayer">
+                <video id="mbxVideo" playsinline webkit-playsinline preload="auto" crossorigin="anonymous"></video>
+                <canvas id="mbxPoster" class="mbx-poster"></canvas>
 
-      <div class="ctl">
-        <div class="seek" id="seek"><div class="track"><div class="buf" id="buf"></div><div class="played" id="played"><div class="thumb"></div></div></div><div class="tip" id="tip">00:00</div></div>
-        <div class="bar">
-          <div class="bl">
-            <button class="mb" id="bPlay"><i class="fa-solid fa-play"></i></button>
-            <button class="mb" id="bMute"><i class="fa-solid fa-volume-high"></i></button>
-            <input type="range" id="vol" min="0" max="1" step="0.05" value="1">
-            <div class="mt"><b id="tCur">00:00</b> / <span id="tDur">00:00</span></div>
-          </div>
-          <div class="br">
-            <button class="mb" id="bSet"><i class="fa-solid fa-gear"></i></button>
-            <button class="mb" id="bFull"><i class="fa-solid fa-expand"></i></button>
-          </div>
+                <div class="mbx-overlay">
+                    <div class="v-badges" id="mbxBadges"></div>
+                    <div class="mbx-center-row">
+                        <div class="mbx-skip" id="btnBack10"><i class="fa-solid fa-rotate-left"></i><small>10</small></div>
+                        <div class="mbx-center" id="mbxCenter"><i class="fa-solid fa-play"></i></div>
+                        <div class="mbx-skip" id="btnFwd10"><i class="fa-solid fa-rotate-right"></i><small>10</small></div>
+                    </div>
+                </div>
+
+                <div class="mbx-loadgame" id="mbxLoadGame">
+                    <div class="lg-box">
+                        <div class="lg-arena">
+                            <canvas id="lgSnake" width="150" height="150"></canvas>
+                            <div class="lg-pct" id="lgPct">4%</div>
+                        </div>
+                        <div class="lg-tip">💡 টিপস: বড় ফাইলে <b>GET FILE</b> = টেলিগ্রাম ফুল স্পিড ডাউনলোড</div>
+                    </div>
+                </div>
+
+                <div class="mbx-toast" id="mbxToast"></div>
+
+                <div class="mbx-controls" id="mbxControls">
+                    <div class="mbx-seek" id="mbxSeek">
+                        <div class="mbx-track">
+                            <div class="mbx-buffered" id="mbxBuffered"></div>
+                            <div class="mbx-played" id="mbxPlayed"><div class="mbx-thumb"></div></div>
+                        </div>
+                        <div class="mbx-seek-tip" id="mbxSeekTip">00:00</div>
+                    </div>
+                    <div class="mbx-bar">
+                        <div class="mbx-left">
+                            <button class="mbx-btn" id="btnPlay"><i class="fa-solid fa-play"></i></button>
+                            <div class="mbx-vol">
+                                <button class="mbx-btn" id="btnMute"><i class="fa-solid fa-volume-high"></i></button>
+                                <input type="range" id="volRange" min="0" max="1" step="0.05" value="1">
+                            </div>
+                            <div class="mbx-time"><b id="tCur">00:00</b> / <span id="tDur">00:00</span></div>
+                        </div>
+                        <div class="mbx-right">
+                            <button class="mbx-btn" id="btnCC"><i class="fa-solid fa-closed-captioning"></i></button>
+                            <button class="mbx-btn" id="btnSettings"><i class="fa-solid fa-gear"></i></button>
+                            <button class="mbx-btn" id="btnFull"><i class="fa-solid fa-expand"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mbx-menu" id="mbxMenu">
+                    <div class="mm-head">QUALITY</div>
+                    <div class="mm-pills" id="menuQuality"></div>
+                    <div class="mm-head">AUDIO</div>
+                    <div class="mm-pills" id="menuAudio"></div>
+                    <div class="mm-head">SPEED</div>
+                    <div class="mm-pills" id="menuSpeed"></div>
+                    <div class="mm-head">SUBTITLE</div>
+                    <div class="mm-pills">
+                        <span class="pill active" id="subOff">✓ Off</span>
+                        <span class="pill clickable" id="subLoad"><i class="fa-solid fa-upload"></i> Load .srt/.vtt</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="movie-meta" id="mbxMeta"></div>
         </div>
-      </div>
 
-      <div class="menu" id="menu">
-        <div class="mh">SPEED</div><div class="pills" id="speeds"></div>
-        <div class="mh">SUBTITLE</div>
-        <div class="pills"><span class="pill active" id="subOff">Off</span><span class="pill" id="subLoad"><i class="fa-solid fa-upload"></i> .srt / .vtt</span></div>
-      </div>
+        <div class="glass-card text-center">
+            <div class="fw-bold text-truncate">{{ file_name }}</div>
+            <div class="small mt-1" style="color:var(--dim)">Size: {{ file_size }}</div>
+        </div>
+
+        <div class="glass-card">
+            <a href="javascript:void(0)" onclick="handlePopunder('tg_get_file', () => window.open('{{ file_get }}', '_blank'))" class="btn-glass btn-getfile">
+                <i class="fa-brands fa-telegram"></i> GET FILE — DOWNLOAD AND WATCH
+            </a>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div onclick="handlePopunder('high_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass btn-sm2">
+                        <i class="fa-solid fa-bolt"></i> HIGH SPEED DOWNLOAD
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div onclick="handlePopunder('normal_dl', () => forceDownload('{{ file_url }}'))" class="btn-glass btn-sm2">
+                        <i class="fa-solid fa-download"></i> DOWNLOAD
+                    </div>
+                </div>
+            </div>
+
+            <div class="sound-fix-box">
+                <div class="lang-switch">
+                    <button class="lang-btn active" id="bn-btn" onclick="setLanguage('bn')">বাংলা</button>
+                    <button class="lang-btn" id="hi-btn" onclick="setLanguage('hi')">হিন্দি</button>
+                    <button class="lang-btn" id="en-btn" onclick="setLanguage('en')">English</button>
+                </div>
+                <div id="instruction-text">
+                    <i class="fa-solid fa-volume-high" style="color:var(--accent)"></i> সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">EXTERNAL PLAYERS (ডুয়াল অডিও বদলাতে এখানে ওপেন করুন)</div>
+            <div class="row g-2">
+                <div class="col-4"><div onclick="handlePopunder('mx', () => play_intent('com.mxtech.videoplayer.ad'))" class="btn-glass small px-1"><i class="fas fa-play"></i> MX Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('vlc', () => play_intent('org.videolan.vlc'))" class="btn-glass small px-1"><i class="fas fa-video"></i> VLC Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('playit', () => play_intent('com.playit.videoplayer'))" class="btn-glass small px-1"><i class="fas fa-play-circle"></i> PlayIt</div></div>
+            </div>
+            <div class="row g-2 mt-1">
+                <div class="col-4"><div onclick="handlePopunder('system_p', () => play_system())" class="btn-glass small px-1"><i class="fas fa-desktop"></i> System</div></div>
+                <div class="col-4"><div onclick="handlePopunder('kmp', () => play_intent('com.kmplayer'))" class="btn-glass small px-1"><i class="fas fa-film"></i> KM Player</div></div>
+                <div class="col-4"><div onclick="handlePopunder('kodi', () => play_intent('org.xbmc.kodi'))" class="btn-glass small px-1"><i class="fas fa-border-all"></i> Kodi</div></div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">SHARE LINKS</div>
+            <div class="row g-2">
+                <div class="col-4"><div onclick="handlePopunder('sh_vid', () => shareAPI('Video Link', window.location.href))" class="btn-glass small px-1"><i class="fa-solid fa-share-nodes"></i> Video</div></div>
+                <div class="col-4"><div onclick="handlePopunder('sh_file', () => shareAPI('Download Link', '{{ file_url }}'))" class="btn-glass small px-1"><i class="fa-solid fa-link"></i> File</div></div>
+                <div class="col-4"><div onclick="handlePopunder('sh_tg', () => shareAPI('TG Get File Link', '{{ file_get }}'))" class="btn-glass small px-1"><i class="fa-brands fa-telegram"></i> TG Get</div></div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="fw-bold mb-2"><i class="fa-brands fa-telegram text-info"></i> Join Our Channels</div>
+            <div class="tg-grid">
+                <a href="https://t.me/SakibMovieBox" target="_blank" onclick="handlePopunder('tg_c1')" class="tg-btn"><i class="fa-solid fa-bullhorn"></i> MOVIE BOX BD</a>
+                <a href="https://t.me/requestmoviebox" target="_blank" onclick="handlePopunder('tg_c2')" class="tg-btn"><i class="fa-solid fa-film"></i> MOVIE BOX CHAT</a>
+                <a href="https://t.me/addlist/MwbWNafSFK4yZjhl" target="_blank" onclick="handlePopunder('tg_c3')" class="tg-btn"><i class="fa-solid fa-headset"></i> All Channel</a>
+                <a href="https://www.movieboxbd.xyz" target="_blank" onclick="handlePopunder('tg_c4')" class="tg-btn"><i class="fa-solid fa-database"></i> Website</a>
+            </div>
+        </div>
+
+        <footer class="text-center small py-2" style="color:var(--dim)">MOVIE BOX BD © 2026</footer>
     </div>
-    <div class="meta" id="meta"></div>
-  </div>
 
-  <div class="ad-slot" id="adBottomSlot"><div class="ad-frame" style="width:320px;height:50px;">
-    <script type="text/javascript">atOptions={'key':'a19161feecb13d6d32cfa3a7f599f5a2','format':'iframe','height':50,'width':320,'params':{}};</script>
-    <script type="text/javascript" src="https://bicea.org/22/a19161feecb13d6d32cfa3a7f599f5a2"></script>
-  </div></div>
+    <script>
+        const CONFIG = {
+            notice: "⚡ প্লে চাপলেই HD স্ট্রিম | বড় ফাইলে GET FILE = ফুল স্পিড ডাউনলোড | Join @SakibMovieBox",
+            directAds: [
+                "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba",
+            ],
+            popunderJS: "https://pl21423250.profitableratecpmnetwork.com/1d/c3/f8/1dc3f8acdb14ff956d47dfdf409aaeeb.js",
+            // 💰 STREAM AD: কুলডাউন সেকেন্ডে (ফুলস্ক্রিনে ৯০s, বাইরে ৬০s)
+            streamAdCooldown: 60,
+            // 🎯 স্মার্ট নোটিস: বন্ধ করতে false
+            smartNotice: true,
+            soundText: {
+                bn: "সাউন্ড না আসলে নিচের VLC/MX Player-এ ওপেন করুন — সমস্যা ঠিক হয়ে যাবে 📱🎧",
+                hi: "यदि आवाज़ नहीं आ रही है, तो नीचे दिए गए VLC/MX Player में स्ट्रीम देखें। 📱🎧",
+                en: "If there is no sound, open the stream in VLC/MX Player below. 📱🎧"
+            }
+        };
 
-  <div class="glass-card text-center" id="fileCard">
-    <div class="fw-bold text-truncate" id="fName"></div>
-    <div class="small mt-1" style="color:var(--dim)">Size: <span id="fSize"></span></div>
-  </div>
+        function deleteNotice(){ document.getElementById('notice-container').style.display='none'; }
+        function deleteSoundBox(){ document.querySelector('.sound-fix-box').style.display='none'; }
+        if(CONFIG.notice === ""){ deleteNotice(); } else { document.getElementById('marquee-element').innerText = CONFIG.notice; }
+        document.getElementById('popunder-main-script').src = CONFIG.popunderJS;
 
-  <div class="glass-card">
-    <a href="javascript:void(0)" id="aGet" class="btn-glass btn-getfile"><i class="fa-brands fa-telegram"></i> GET FILE — DOWNLOAD AND WATCH</a>
-    <div class="row g-2">
-      <div class="col-6"><div class="btn-glass btn-sm2" data-dl><i class="fa-solid fa-bolt"></i> HIGH SPEED DOWNLOAD</div></div>
-      <div class="col-6"><div class="btn-glass btn-sm2" data-dl><i class="fa-solid fa-download"></i> DOWNLOAD</div></div>
-    </div>
-    <div class="sound-fix-box"><i class="fa-solid fa-volume-high" style="color:var(--accent)"></i> সাউন্ড না আসলে বা ডুয়াল অডিও বদলাতে নিচের VLC / MX Player-এ ওপেন করুন 📱🎧</div>
-  </div>
+        function setLanguage(lang){
+            const t = document.getElementById('instruction-text');
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(lang+'-btn').classList.add('active');
+            t.innerHTML = '<i class="fa-solid fa-volume-high" style="color:var(--accent)"></i> ' + CONFIG.soundText[lang];
+        }
+        setLanguage('bn');
 
-  <div class="glass-card">
-    <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">EXTERNAL PLAYERS</div>
-    <div class="row g-2">
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg="com.mxtech.videoplayer.ad"><i class="fas fa-play"></i> MX Player</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg="org.videolan.vlc"><i class="fas fa-video"></i> VLC</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg="com.playit.videoplayer"><i class="fas fa-play-circle"></i> PlayIt</div></div>
-    </div>
-    <div class="row g-2 mt-1">
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg=""><i class="fas fa-desktop"></i> System</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg="com.kmplayer"><i class="fas fa-film"></i> KM Player</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-pkg="org.xbmc.kodi"><i class="fas fa-border-all"></i> Kodi</div></div>
-    </div>
-  </div>
+        function forceDownload(url){
+            const link = document.createElement('a');
+            link.href = url.replace("http://","https://");
+            link.setAttribute('download',''); link.setAttribute('target','_blank'); link.setAttribute('rel','noopener noreferrer');
+            document.body.appendChild(link); link.click(); link.remove();
+            setTimeout(()=>{ alert("Download Starting..."); }, 500);
+        }
+        async function shareAPI(title, link){
+            if (navigator.share) { try { await navigator.share({title, url: link}); } catch(e){} }
+            else { navigator.clipboard.writeText(link); alert("Link Copied!"); }
+        }
+        let linkIndex = 0; const cooldowns = {};
+        function handlePopunder(btnId, callback){
+            const now = Date.now(), cd = 1800000;
+            if (CONFIG.directAds.length > 0 && (!cooldowns[btnId] || (now - cooldowns[btnId] > cd))) {
+                window.open(CONFIG.directAds[linkIndex % CONFIG.directAds.length], '_blank');
+                linkIndex++; cooldowns[btnId] = now;
+                if (btnId === 'global_trigger') { document.getElementById('popunder-trigger').style.display = 'none'; }
+            }
+            if (callback) callback();
+        }
 
-  <div class="glass-card">
-    <div class="small fw-bold mb-2 text-center" style="color:var(--dim)">SHARE LINKS</div>
-    <div class="row g-2">
-      <div class="col-4"><div class="btn-glass small px-1" data-share="page"><i class="fa-solid fa-share-nodes"></i> Video</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-share="file"><i class="fa-solid fa-link"></i> File</div></div>
-      <div class="col-4"><div class="btn-glass small px-1" data-share="get"><i class="fa-brands fa-telegram"></i> TG Get</div></div>
-    </div>
-  </div>
+        /* ============================================================
+           💰 STREAM AD ENGINE v6 — লস-প্রুফ (কিউ ব্রাউজারে সেভ থাকে)
+           - ফুলস্ক্রিনে সিক: অ্যাড কিউতে জমে (মুভি নিরবচ্ছিন্ন, ফুলস্ক্রিন অটুট)
+           - কিউ localStorage-এ সেভ: ব্রাউজার বন্ধ করেও অ্যাড হারায় না 💾
+           - ⛶ বাটনে বের হলে: ওই জেস্চারেই জমা অ্যাড খোলা শুরু
+           - পরে যেকোনো সময় পেজে ফিরলে: প্রথম টাচে বাকি অ্যাড খোলে
+           - মুভি শেষ: অটো-ছোট স্ক্রিন + ফ্লাশ প্রস্তুতি
+           - Adsterra Direct Link (শুধু একটাই নেটওয়ার্ক)
+        ============================================================ */
+        let lastStreamAd = 0;
+        let pendingAds = 0;
+        let flushArmed = false;
+        try { pendingAds = parseInt(localStorage.getItem('mbx_adq') || '0') || 0; if (pendingAds > 3) pendingAds = 3; } catch(e){}
+        function saveQueue(){ try { localStorage.setItem('mbx_adq', String(pendingAds)); } catch(e){} }
 
-  <div class="glass-card">
-    <div class="fw-bold mb-2"><i class="fa-brands fa-telegram text-info"></i> Join Our Channels</div>
-    <div class="tg-grid">
-      <a href="https://t.me/SakibMovieBox" target="_blank" class="tg-btn"><i class="fa-solid fa-bullhorn"></i> MOVIE BOX BD</a>
-      <a href="https://t.me/requestmoviebox" target="_blank" class="tg-btn"><i class="fa-solid fa-film"></i> MOVIE BOX CHAT</a>
-      <a href="https://t.me/addlist/MwbWNafSFK4yZjhl" target="_blank" class="tg-btn"><i class="fa-solid fa-headset"></i> All Channel</a>
-      <a href="https://www.movieboxbd.xyz" target="_blank" class="tg-btn"><i class="fa-solid fa-database"></i> Website</a>
-    </div>
-  </div>
-  <footer class="text-center small py-2" style="color:var(--dim)">MOVIE BOX BD © 2026</footer>
-</div>
+        function tryOpenAd(){
+            if (!CONFIG.directAds.length) return false;
+            const adUrl = CONFIG.directAds[linkIndex % CONFIG.directAds.length];
+            linkIndex++;
+            let w = null;
+            try { w = window.open(adUrl, '_blank'); } catch(e){}
+            saveQueue();
+            return !!w;
+        }
 
-<script>
-const $ = id => document.getElementById(id);
-const C = $('cfg').dataset;
-const NAME = C.name, SIZE = C.size, GET = C.get;
-const URL_ = (C.url || '').replace('http://', 'https://');
-const DIRECT_AD = "https://www.profitableratecpmnetwork.com/wtybxutcsy?key=7ef304669bcfc15f3404e1a5e5dcf1ba";
+        function armFlush(){
+            if (flushArmed || pendingAds <= 0) return;
+            flushArmed = true;
+            const flush = () => {
+                document.removeEventListener('touchend', flush, true);
+                document.removeEventListener('click', flush, true);
+                flushArmed = false;
+                if (pendingAds > 0) {
+                    if (tryOpenAd()) pendingAds--;
+                    saveQueue();
+                    if (pendingAds > 0) armFlush();
+                }
+            };
+            setTimeout(() => {
+                document.addEventListener('touchend', flush, true);
+                document.addEventListener('click', flush, true);
+            }, 250);
+        }
 
-/* ---------- ছোট হেল্পার ---------- */
-const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0, x = s % 60, p = n => String(n).padStart(2, '0'); return h ? h + ':' + p(m) + ':' + p(x) : p(m) + ':' + p(x); };
-const clamp = (n, a, b) => Math.min(Math.max(n, a), b);
-let toastT;
-function toast(msg, ms) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms || 1500); }
-function toggleEyeCare() { const o = $('eyeCareOverlay'); o.style.display = o.style.display === 'block' ? 'none' : 'block'; }
+        function fireStreamAd(){
+            if (!CONFIG.directAds.length) return;
+            const now = Date.now();
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            const cd = (isFs ? 90 : 60) * 1000;
+            if (now - lastStreamAd < cd) return;
+            lastStreamAd = now;
 
-/* ---------- পেজের লেখা, ব্যাজ, নোটিস ---------- */
-$('phTitle').textContent = NAME.replace(/\.(mkv|mp4|avi|webm)$/i, '');
-$('fName').textContent = NAME; $('fSize').textContent = SIZE;
-(function () {
-  const l = NAME.toLowerCase(), q = l.match(/(2160p|1440p|1080p|720p|480p|360p)/);
-  const map = [['bangla', 'বাংলা'], ['bengali', 'বাংলা'], ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['telugu', 'Telugu'], ['malayalam', 'Malayalam'], ['kannada', 'Kannada'], ['urdu', 'Urdu']];
-  const langs = [...new Set(map.filter(([k]) => l.includes(k)).map(x => x[1]).concat(/\benglish\b|\beng\b/.test(l) ? ['English'] : []))];
-  let h = '<span class="chip">🎬 ' + (q ? q[1].toUpperCase() : 'Original') + (/hevc|x265|h\.265/.test(l) ? ' HEVC' : '') + '</span>';
-  langs.forEach(x => h += '<span class="chip">🎧 ' + x + '</span>');
-  if (/\besub\b|\bengsub\b|\bsub\b/.test(l)) h += '<span class="chip">CC Sub</span>';
-  if (langs.length > 1) h += '<div style="width:100%;font-size:11.5px;color:#a5e8f5">ডুয়াল অডিও: অডিও বদলাতে নিচের MX Player / VLC-তে ওপেন করুন।</div>';
-  $('meta').innerHTML = h;
-  const m = SIZE.match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
-  if (m) {
-    const big = (/GB/i.test(m[2]) && parseFloat(m[1]) >= 2) || /TB/i.test(m[2]);
-    const b = document.createElement('div');
-    b.className = 'smart-notice' + (big ? '' : ' good');
-    b.innerHTML = big ? '⚠️ <b>বড় ফাইল (2GB+)!</b> স্মুথ দেখতে <b>GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে ফুল স্পিড।' : '✅ <b>এই ফাইলটি আরামসে স্ট্রিম করা যাবে!</b>';
-    $('fileCard').insertAdjacentElement('afterend', b);
-  }
-})();
+            if (isFs) {
+                // 🎬 ফুলস্ক্রিনে: অ্যাড খোলা যাবে না (ফুলস্ক্রিন ভাঙবে) — কিউতে জমাও (সেভসহ)
+                if (pendingAds < 3) { pendingAds++; saveQueue(); }
+                return;
+            }
+            tryOpenAd();
+        }
 
-/* ---------- বাটন: বিজ্ঞাপন (৩০ মিনিটে একবার, ভিডিও চলার সময় কখনো না) ---------- */
-let lastAd = 0;
-function withAd(cb) {
-  const v = $('v');
-  if (Date.now() - lastAd > 1800000 && v.paused) { lastAd = Date.now(); try { window.open(DIRECT_AD, '_blank'); } catch (e) {} }
-  cb && cb();
-}
-function download() {
-  const a = document.createElement('a'); a.href = URL_; a.setAttribute('download', ''); a.target = '_blank'; a.rel = 'noopener noreferrer';
-  document.body.appendChild(a); a.click(); a.remove(); toast('Download Starting...');
-}
-function intentPlay(pkg) {
-  const p = pkg ? 'package=' + pkg + ';' : 'action=android.intent.action.VIEW;';
-  location.href = 'intent:' + URL_ + '#Intent;' + p + 'type=video/*;end';
-}
-async function share(title, link) {
-  if (navigator.share) { try { await navigator.share({ title, url: link }); } catch (e) {} }
-  else { try { await navigator.clipboard.writeText(link); } catch (e) {} toast('Link Copied!'); }
-}
-$('aGet').onclick = () => withAd(() => window.open(GET, '_blank'));
-document.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => withAd(download));
-document.querySelectorAll('[data-pkg]').forEach(b => b.onclick = () => withAd(() => intentPlay(b.dataset.pkg)));
-document.querySelectorAll('[data-share]').forEach(b => b.onclick = () => {
-  const k = b.dataset.share;
-  share(k === 'page' ? 'Video Link' : k === 'file' ? 'Download Link' : 'TG Get Link', k === 'page' ? location.href : k === 'file' ? URL_ : GET);
-});
+        // ফুলস্ক্রিন থেকে বের হলে: জেস্চার থাকায় সরাসরি অ্যাড খোলা শুরু
+        ['fullscreenchange','webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+            const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            if (!fs && pendingAds > 0) {
+                if (tryOpenAd()) pendingAds--;
+                saveQueue();
+                if (pendingAds > 0) armFlush();
+            }
+        }));
 
-/* ---------- ব্যানার অটো-স্কেল ---------- */
-function fitAds() {
-  document.querySelectorAll('.ad-slot').forEach(s => {
-    const f = s.querySelector('.ad-frame'); if (!f) return;
-    const fw = parseFloat(f.style.width), fh = parseFloat(f.style.height), w = s.clientWidth;
-    if (fw && w && w < fw) { f.style.transform = 'scale(' + (w / fw) + ')'; s.style.height = Math.round(fh * w / fw) + 'px'; }
-    else { f.style.transform = ''; s.style.height = ''; }
-  });
-}
-addEventListener('resize', fitAds); setTimeout(fitAds, 300); setTimeout(fitAds, 1500);
+        function fmtTime(sec){
+            sec = Math.max(0, Math.floor(sec||0));
+            const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+            const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+            return h > 0 ? h+':'+mm+':'+ss : mm+':'+ss;
+        }
 
-/* ============================================================
-   PLAYER
-   মূল নিয়ম: ব্রাউজারের নিজের লোডিং-এ হাত কম দেওয়া।
-   - preload=metadata + #t=0.1 => প্রথম ফ্রেম দ্রুত আসে
-   - সিক = শুধু currentTime বসানো (একটাই নতুন Range রিকোয়েস্ট)
-   - video.load() শুধু সত্যিকারের আটকে যাওয়ায়, সর্বোচ্চ ২ বার
-   ============================================================ */
-const v = $('v'), stage = $('stage');
-let wantPlay = false, hideT, dur = 0;
-v.src = URL_ + '#t=0.1';
-try { const sv = parseFloat(localStorage.getItem('mbx_vol')); v.volume = sv > 0 ? Math.min(sv, 1) : 0.9; } catch (e) { v.volume = 0.9; }
+        /* ===== ফাইল ইনফো পার্স ===== */
+        function parseFileInfo(){
+            const lower = ("{{ file_name }}").toLowerCase();
+            const qm = lower.match(/(2160p|1440p|1080p|720p|480p|360p)/);
+            const isHEVC = /hevc|x265|h\.265/.test(lower);
+            const map = [['bangla','বাংলা'],['bengali','বাংলা'],['bangali','বাংলা'],['hindi','Hindi'],['tamil','Tamil'],['telugu','Telugu'],['malayalam','Malayalam'],['kannada','Kannada'],['punjabi','Punjabi'],['urdu','Urdu']];
+            const langs = [];
+            for (const [k,v] of map) { if (lower.includes(k)) langs.push(v); }
+            if (/\benglish\b|\beng\b/.test(lower)) langs.push('English');
+            const uniq = [...new Set(langs)];
+            return { quality: qm ? qm[1].toUpperCase() : null, isHEVC, langs: uniq, hasSub: /\besub\b|\bengsub\b|\bsub\b|\bsrt\b/.test(lower), dual: uniq.length > 1 };
+        }
 
-function setStatus(s) {
-  const e = $('status'); e.className = 'status-badge' + (s === 'load' ? ' loading' : s === 'play' ? '' : ' paused');
-  e.innerHTML = s === 'load' ? '<i class="fa-solid fa-spinner fa-spin"></i> Loading' : s === 'play' ? '<i class="fa-solid fa-circle" style="font-size:8px"></i> Playing' : '<i class="fa-solid fa-pause" style="font-size:8px"></i> Paused';
-}
-function icons() { const i = v.paused ? 'play' : 'pause'; $('bPlay').innerHTML = $('bCenter').innerHTML = '<i class="fa-solid fa-' + i + '"></i>'; stage.classList.toggle('paused', v.paused); }
-function showUI(auto) { stage.classList.add('ui-on'); clearTimeout(hideT); if (auto && !v.paused) hideT = setTimeout(() => { if (!v.paused) { stage.classList.remove('ui-on'); $('menu').classList.remove('open'); } }, 3000); }
-function toggleUI() { stage.classList.contains('ui-on') && !v.paused ? (stage.classList.remove('ui-on'), $('menu').classList.remove('open')) : showUI(true); }
+        function buildFileInfoUI(){
+            const info = parseFileInfo();
+            try { document.getElementById('phTitle').textContent = "{{ file_name }}".replace(/\.(mkv|mp4|avi|webm)$/i,''); } catch(e){}
 
-/* বাফার: বর্তমান জায়গা থেকে কত সেকেন্ড সামনে ডেটা আছে */
-function ahead() {
-  try { const b = v.buffered, t = v.currentTime; for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.3 && t <= b.end(i) + 0.3) return b.end(i) - t; } catch (e) {}
-  return 0;
-}
+            let b = '';
+            if (info.quality) b += '<span class="v-badge"><i class="fa-solid fa-film"></i>' + info.quality + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            info.langs.forEach(lg => b += '<span class="v-badge"><i class="fa-solid fa-headphones"></i>' + lg + '</span>');
+            if (info.hasSub) b += '<span class="v-badge"><i class="fa-solid fa-closed-captioning"></i>Sub</span>';
+            document.getElementById('mbxBadges').innerHTML = b;
 
-/* লোডিং রিং: আসল বাফার % দেখায় (নকল % নয়); ডেটা না এলে ঘুরতে থাকে */
-let spinT;
-function spinOn() {
-  clearTimeout(spinT);
-  spinT = setTimeout(() => { $('spin').classList.add('show'); setStatus('load'); updSpin(); }, 250);
-}
-function spinOff() { clearTimeout(spinT); $('spin').classList.remove('show'); setStatus(v.paused ? 'paused' : 'play'); }
-function updSpin() {
-  if (!$('spin').classList.contains('show')) return;
-  const p = clamp(ahead() / 4, 0, 1);
-  $('ring').classList.toggle('idle', p === 0);
-  $('fg').style.strokeDashoffset = 276.5 * (1 - (p === 0 ? 0.25 : p));
-  $('spinPct').textContent = p > 0 ? Math.round(p * 100) + '%' : '';
-}
+            const qP = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            let aP = '';
+            if (info.langs.length) info.langs.forEach(lg => aP += '<span class="pill clickable" data-lang="'+lg+'">' + lg + '</span>');
+            else aP = '<span class="pill active">✓ Original</span>';
 
-function play() { wantPlay = true; v.muted = false; v.play().catch(() => {}); if (v.readyState < 3) spinOn(); }
-function pause() { wantPlay = false; v.pause(); }
-function toggle() { v.paused ? play() : pause(); showUI(true); }
+            document.getElementById('mbxMeta').innerHTML =
+                '<div class="mm-title">🎬 Movie</div>' +
+                '<div class="mm-row"><span class="mm-label">QUALITY</span>' + qP + '</div>' +
+                '<div class="mm-row"><span class="mm-label">AUDIO</span>' + aP + '</div>' +
+                (info.dual ? '<div class="mm-hint">🎧 <b>ডুয়াল অডিও মুভি!</b> ব্রাউজারে অডিও ট্র্যাক বদলানো যায় না — নিচের <b>MX Player / VLC</b>-এ ওপেন করলে অডিও (Hindi/বাংলা/English) বদলাতে পারবেন। 🎬</div>' : '');
 
-/* সিক: একটাই কাজ — currentTime বসাও, ডেটা এলেই নিজে চলবে */
-function seekTo(t) {
-  t = clamp(t, 0, Math.max(0, (v.duration || 0) - 0.5));
-  if (!v.paused) wantPlay = true;
-  v.currentTime = t;
-  $('played').style.width = (v.duration ? t / v.duration * 100 : 0) + '%';
-  $('tCur').textContent = fmt(t);
-  if (v.readyState < 3 || v.seeking) spinOn();
-  retries = 0; lastGrow = Date.now();
-}
-/* বারবার ±10 চাপলে জমা হয়ে একবারই সিক হয় (অনেক Range রিকোয়েস্ট হয় না) */
-let acc = 0, base = 0, accT;
-function skip(s) {
-  if (!acc) base = v.currentTime;
-  acc += s; toast((acc < 0 ? '⏪ ' : '⏩ ') + Math.abs(acc) + 's → ' + fmt(base + acc), 900);
-  clearTimeout(accT); accT = setTimeout(() => { seekTo(base + acc); acc = 0; }, 350);
-  showUI(true);
-}
+            document.querySelectorAll('#mbxMeta .pill.clickable').forEach(p => p.addEventListener('click', () => toast('🎧 অডিও বদলাতে MX Player / VLC-তে ওপেন করুন')));
+        }
+        buildFileInfoUI();
 
-/* ---------- ভিডিও ইভেন্ট ---------- */
-v.addEventListener('loadedmetadata', () => { dur = v.duration; $('tDur').textContent = fmt(dur); });
-v.addEventListener('play', () => { icons(); showUI(true); reqWake(); });
-v.addEventListener('pause', () => { icons(); if (!v.seeking) spinOff(); showUI(false); relWake(); });
-v.addEventListener('waiting', () => { if (wantPlay || !v.paused) spinOn(); });
-v.addEventListener('seeking', () => { if (wantPlay || !v.paused) spinOn(); });
-const ready = () => { spinOff(); if (wantPlay && v.paused) v.play().catch(() => {}); };
-v.addEventListener('canplay', ready);
-v.addEventListener('seeked', () => { if (v.readyState >= 3) ready(); });
-v.addEventListener('playing', () => { spinOff(); retries = 0; lastGrow = Date.now(); });
-v.addEventListener('timeupdate', () => {
-  if (!dragging && !acc) { $('tCur').textContent = fmt(v.currentTime); if (v.duration) $('played').style.width = v.currentTime / v.duration * 100 + '%'; }
-  buffBar(); updSpin();
-});
-v.addEventListener('progress', () => { buffBar(); updSpin(); lastGrow = Date.now(); });
-v.addEventListener('volumechange', () => {
-  const off = v.muted || v.volume === 0;
-  $('bMute').innerHTML = '<i class="fa-solid fa-volume-' + (off ? 'xmark' : 'high') + '"></i>'; $('vol').value = off ? 0 : v.volume;
-  try { localStorage.setItem('mbx_vol', v.muted ? 0 : v.volume); } catch (e) {}
-});
-v.addEventListener('ended', () => { wantPlay = false; icons(); spinOff(); showUI(false); try { document.exitFullscreen && document.exitFullscreen(); } catch (e) {} });
-function buffBar() { try { const b = v.buffered; if (b.length && v.duration) $('buf').style.width = b.end(b.length - 1) / v.duration * 100 + '%'; } catch (e) {} }
+        /* ===== Settings menu ===== */
+        function buildMenu(){
+            const info = parseFileInfo();
+            document.getElementById('menuQuality').innerHTML = '<span class="pill active">✓ ' + (info.quality || 'Original') + (info.isHEVC ? ' HEVC' : '') + '</span>';
+            let a = '';
+            if (info.langs.length) info.langs.forEach(lg => a += '<span class="pill clickable" data-lang="'+lg+'">' + lg + '</span>');
+            else a = '<span class="pill active">✓ Original</span>';
+            document.getElementById('menuAudio').innerHTML = a;
 
-/* ---------- সত্যিকারের আটকে যাওয়ার রিকভারি (সর্বোচ্চ ২ বার) ---------- */
-let retries = 0, lastGrow = Date.now(), lastBuf = 0;
-function showFallback() {
-  if ($('mbx-fallback')) return;
-  const d = document.createElement('div'); d.id = 'mbx-fallback'; d.className = 'warn';
-  d.innerHTML = '❌ <b>ব্রাউজারে প্লে হচ্ছে না!</b><br>এক্সটার্নাল প্লেয়ারে দেখুন 👇<br>' +
-    '<button style="background:var(--accent);color:#04141a" data-p="com.mxtech.videoplayer.ad">▶ MX Player</button>' +
-    '<button style="background:#ff8c00;color:#fff" data-p="org.videolan.vlc">▶ VLC</button>';
-  d.querySelectorAll('button').forEach(b => b.onclick = () => intentPlay(b.dataset.p));
-  $('player-section').insertAdjacentElement('afterend', d);
-}
-function recover() {
-  if (retries >= 2) { showFallback(); toast('সার্ভার স্লো — MX/VLC-তে ট্রাই করুন', 3500); return; }
-  retries++; lastGrow = Date.now();
-  const pos = v.currentTime, wp = wantPlay;
-  toast('🔁 নতুন কানেকশন (' + retries + '/2)', 1800);
-  v.load();
-  v.addEventListener('loadedmetadata', function f() { v.removeEventListener('loadedmetadata', f); if (pos > 0.5) v.currentTime = pos; if (wp) v.play().catch(() => {}); });
-}
-v.addEventListener('error', () => {
-  spinOff();
-  const c = v.error && v.error.code;
-  if (c === 4) { showFallback(); toast('এই ফরম্যাট ব্রাউজারে চলে না', 3500); }  // MKV/HEVC/অডিও কোডেক: রিট্রাই করে লাভ নেই
-  else recover();
-});
-setInterval(() => {
-  let be = 0; try { const b = v.buffered; if (b.length) be = b.end(b.length - 1); } catch (e) {}
-  if (be > lastBuf + 0.05 || !v.paused && !v.seeking && v.readyState >= 3) lastGrow = Date.now();
-  lastBuf = be;
-  const waiting = (wantPlay || !v.paused || v.seeking) && v.readyState < 3;
-  if (waiting && Date.now() - lastGrow > 14000) recover();   // ১৪ সেকেন্ড একদম নতুন ডেটা নেই = মৃত কানেকশন
-}, 2000);
+            const speeds = [0.75, 1, 1.25, 1.5, 2];
+            document.getElementById('menuSpeed').innerHTML = speeds.map(s => '<span class="pill clickable" data-speed="'+s+'">' + (s===1 ? '1x (Normal)' : s+'x') + '</span>').join('');
 
-/* ---------- কন্ট্রোল বাটন ---------- */
-$('bPlay').onclick = e => { e.stopPropagation(); toggle(); };
-$('bCenter').onclick = e => { e.stopPropagation(); toggle(); };
-$('bBack').onclick = e => { e.stopPropagation(); skip(-10); };
-$('bFwd').onclick = e => { e.stopPropagation(); skip(10); };
-$('bMute').onclick = e => { e.stopPropagation(); v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = 0.7; showUI(true); };
-$('vol').oninput = e => { v.volume = parseFloat(e.target.value); v.muted = v.volume === 0; };
-$('bSet').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('open'); showUI(true); };
+            document.querySelectorAll('#menuAudio .pill.clickable').forEach(p => p.addEventListener('click', () => toast('🎧 অডিও বদলাতে MX Player / VLC-তে ওপেন করুন')));
+            document.querySelectorAll('#menuSpeed .pill').forEach(p => p.addEventListener('click', () => {
+                MBX.video.playbackRate = parseFloat(p.dataset.speed);
+                updateMenuActive(); toast('⏩ Speed: ' + p.dataset.speed + 'x');
+            }));
+            document.getElementById('subOff').addEventListener('click', () => {
+                MBX.tracks.forEach(t => { try { t.mode = 'disabled'; } catch(e){} });
+                document.getElementById('subOff').classList.add('active');
+                toast('সাবটাইটেল বন্ধ');
+            });
+            document.getElementById('subLoad').addEventListener('click', loadSubtitleFile);
+        }
+        function updateMenuActive(){
+            document.querySelectorAll('#menuSpeed .pill').forEach(p => p.classList.toggle('active', parseFloat(p.dataset.speed) === MBX.video.playbackRate));
+        }
 
-[0.75, 1, 1.25, 1.5, 2].forEach(s => {
-  const p = document.createElement('span'); p.className = 'pill' + (s === 1 ? ' active' : ''); p.textContent = s === 1 ? '1x' : s + 'x';
-  p.onclick = () => { v.playbackRate = s; document.querySelectorAll('#speeds .pill').forEach(x => x.classList.toggle('active', x === p)); toast('Speed ' + s + 'x'); };
-  $('speeds').appendChild(p);
-});
-$('subOff').onclick = () => { [...v.textTracks].forEach(t => t.mode = 'disabled'); $('subOff').classList.add('active'); toast('সাবটাইটেল বন্ধ'); };
-$('subLoad').onclick = () => {
-  const i = document.createElement('input'); i.type = 'file'; i.accept = '.srt,.vtt';
-  i.onchange = () => {
-    const f = i.files[0]; if (!f) return; const r = new FileReader();
-    r.onload = () => {
-      let t = String(r.result); if (/\.srt$/i.test(f.name)) t = 'WEBVTT\n\n' + t.replace(/\r+/g, '').replace(/^\uFEFF/, '').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-      v.querySelectorAll('track').forEach(x => x.remove());
-      const k = document.createElement('track'); k.kind = 'subtitles'; k.label = f.name; k.default = true; k.src = URL.createObjectURL(new Blob([t], { type: 'text/vtt' }));
-      v.appendChild(k); setTimeout(() => { k.track.mode = 'showing'; }, 300);
-      $('subOff').classList.remove('active'); $('menu').classList.remove('open'); toast('✅ ' + f.name);
-    };
-    r.readAsText(f);
-  };
-  i.click();
-};
+        /* ===== Subtitle ===== */
+        function srtToVtt(srt){
+            return 'WEBVTT\n\n' + srt.replace(/\r+/g,'').replace(/^\uFEFF/,'').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,'$1.$2');
+        }
+        function loadSubtitleFile(){
+            const inp = document.createElement('input');
+            inp.type = 'file'; inp.accept = '.srt,.vtt';
+            inp.onchange = () => {
+                const f = inp.files[0]; if (!f) return;
+                const rd = new FileReader();
+                rd.onload = () => {
+                    try {
+                        let content = rd.result;
+                        if (f.name.toLowerCase().endsWith('.srt')) content = srtToVtt(content);
+                        const url = URL.createObjectURL(new Blob([content], {type:'text/vtt'}));
+                        MBX.video.querySelectorAll('track').forEach(t => t.remove()); MBX.tracks = [];
+                        const tr = document.createElement('track');
+                        tr.kind = 'subtitles'; tr.label = f.name; tr.src = url; tr.default = true;
+                        MBX.video.appendChild(tr);
+                        setTimeout(() => { try { tr.mode = 'showing'; } catch(e){} }, 300);
+                        MBX.tracks = [tr];
+                        document.getElementById('subOff').classList.remove('active');
+                        toast('✅ সাবটাইটেল: ' + f.name);
+                        document.getElementById('mbxMenu').classList.remove('open');
+                    } catch(e){ toast('❌ সাব লোড ফেল'); }
+                };
+                rd.readAsText(f);
+            };
+            inp.click();
+        }
 
-/* ---------- সিক বার (টেনে ছাড়লে একবারই সিক) ---------- */
-const seekEl = $('seek'); let dragging = false;
-function pos(e) { const r = seekEl.querySelector('.track').getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); }
-function preview(e) { const p = pos(e); $('played').style.width = p * 100 + '%'; $('tip').style.left = p * 100 + '%'; $('tip').textContent = fmt(p * (v.duration || 0)); return p; }
-seekEl.addEventListener('pointerdown', e => { dragging = true; seekEl.classList.add('drag'); try { seekEl.setPointerCapture(e.pointerId); } catch (x) {} preview(e); e.preventDefault(); });
-seekEl.addEventListener('pointermove', e => { if (dragging) preview(e); });
-seekEl.addEventListener('pointerup', e => { if (!dragging) return; dragging = false; seekEl.classList.remove('drag'); seekTo(pos(e) * (v.duration || 0)); showUI(true); });
-seekEl.addEventListener('pointercancel', () => { dragging = false; seekEl.classList.remove('drag'); });
+        function showFallbackBox(){
+            if (document.getElementById('mbx-fallback')) return;
+            const d = document.createElement('div');
+            d.className = 'big-file-warning';
+            d.innerHTML = '❌ <b>ব্রাউজারে প্লে করা যাচ্ছে না!</b><br>এক্সটার্নাল প্লেয়ারে দেখুন 👇';
+            const b1 = document.createElement('button'); b1.textContent = '▶ MX Player';
+            b1.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:var(--accent);color:#04141a;font-weight:800;cursor:pointer;';
+            b1.onclick = () => play_intent('com.mxtech.videoplayer.ad');
+            const b2 = document.createElement('button'); b2.textContent = '▶ VLC';
+            b2.style.cssText = 'margin:8px 4px 0;padding:9px 16px;border-radius:9px;border:none;background:#ff8c00;color:#fff;font-weight:800;cursor:pointer;';
+            b2.onclick = () => play_intent('org.videolan.vlc');
+            d.appendChild(b1); d.appendChild(b2);
+            const sec = document.getElementById('player-section');
+            if (sec) sec.insertAdjacentElement('afterend', d);
+        }
 
-/* ---------- ট্যাপ: একবার = কন্ট্রোল, ডাবল ট্যাপ বাঁ/ডান = ±10, মাঝে = প্লে/পজ ---------- */
-let lt = 0, tt;
-stage.addEventListener('click', e => {
-  if (e.target.closest('.ctl,.menu,.cbtn')) return;
-  if ($('menu').classList.contains('open')) { $('menu').classList.remove('open'); return; }
-  const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, n = Date.now();
-  if (n - lt < 300) { clearTimeout(tt); lt = 0; x < .33 ? skip(-10) : x > .66 ? skip(10) : toggle(); }
-  else { lt = n; tt = setTimeout(toggleUI, 260); }
-});
+        /* ============================================================
+                        CUSTOM PLAYER ENGINE
+           ⏸️ NO AUTOPLAY: প্রথম ফ্রেম পোস্টারের মতো থাকবে,
+           ইউজার প্লে চাপলে সাউন্ডসহ ন্যাচারালি চলবে
+        ============================================================ */
+        const MBX = { video: null, tracks: [], hasPlayed: false, errTries: 0, firstPlay: false, kickArmed: false, posterPainted: false };
+        let toastTimer = null;
 
-/* ---------- ফুলস্ক্রিন ---------- */
-const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-$('bFull').onclick = e => {
-  e.stopPropagation();
-  if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-  else if (stage.requestFullscreen) stage.requestFullscreen();
-  else if (stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
-  else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
-};
-['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
-  $('bFull').innerHTML = '<i class="fa-solid fa-' + (isFs() ? 'compress' : 'expand') + '"></i>';
-  try { isFs() ? screen.orientation.lock('landscape').catch(() => {}) : screen.orientation.unlock(); } catch (e) {}
-  showUI(true);
-}));
+        function toast(msg, ms){
+            const t = document.getElementById('mbxToast');
+            t.textContent = msg; t.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => t.classList.remove('show'), ms || 1600);
+        }
 
-document.addEventListener('keydown', e => {
-  if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
-  if (e.code === 'Space') { e.preventDefault(); toggle(); }
-  else if (e.code === 'ArrowLeft') skip(-10);
-  else if (e.code === 'ArrowRight') skip(10);
-  else if (e.key.toLowerCase() === 'f') $('bFull').click();
-  else if (e.key.toLowerCase() === 'm') v.muted = !v.muted;
-});
+        function initPlayer(){
+            const player = document.getElementById('mbxPlayer');
+            const video = document.getElementById('mbxVideo');
+            MBX.video = video;
+            video.src = '{{ file_url }}'.replace("http://", "https://");
 
-/* ---------- স্ক্রিন জেগে থাকুক ---------- */
-let wl = null;
-async function reqWake() { try { if ('wakeLock' in navigator && !wl) wl = await navigator.wakeLock.request('screen'); } catch (e) {} }
-function relWake() { try { wl && wl.release(); } catch (e) {} wl = null; }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !v.paused) reqWake(); });
+            const btnPlay = document.getElementById('btnPlay');
+            const btnMute = document.getElementById('btnMute');
+            const centerBtn = document.getElementById('mbxCenter');
+            const statusEl = document.getElementById('mbxStatus');
+            const menu = document.getElementById('mbxMenu');
+            const seek = document.getElementById('mbxSeek');
+            const playedEl = document.getElementById('mbxPlayed');
+            const buffEl = document.getElementById('mbxBuffered');
+            const tipEl = document.getElementById('mbxSeekTip');
+            const poster = document.getElementById('mbxPoster');
 
-icons(); showUI(false); setStatus('paused');
+            /* --- 🖼️ প্রথম ফ্রেম পোস্টার: কালো স্ক্রিন নয়, মুভির প্রথম সিন দেখাও --- */
+            function paintPoster(){
+                if (MBX.hasPlayed || MBX.posterPainted) return;
+                try {
+                    if (!video.videoWidth || !video.videoHeight) return;
+                    poster.width = video.videoWidth; poster.height = video.videoHeight;
+                    poster.getContext('2d').drawImage(video, 0, 0, poster.width, poster.height);
+                    poster.classList.add('show');
+                    MBX.posterPainted = true;
+                } catch(e){}
+            }
+            video.addEventListener('loadeddata', () => setTimeout(paintPoster, 80));
+            video.addEventListener('canplay', () => setTimeout(paintPoster, 80));
 
-/* ---------- Adsterra interstitial: ৬ ঘণ্টায় একবার, ভিডিও চলার সময় কখনো না ---------- */
-(function () {
-  try {
-    const K = 'mbx_intl_time';
-    if (Date.now() - (parseInt(localStorage.getItem(K) || '0') || 0) < 21600000) return;
-    setTimeout(function go() {
-      if (!v.paused) { setTimeout(go, 6000); return; }
-      try { localStorage.setItem(K, String(Date.now())); } catch (e) {}
-      const s = document.createElement('script'); s.async = true; s.setAttribute('data-cfasync', 'false');
-      s.src = 'https://bancadeltempoidea.org/14/a293c499a899d218d75e263d1d1cf6db/invoke.js';
-      document.body.appendChild(s);
-    }, 10000);
-  } catch (e) {}
-})();
-</script>
+            buildMenu();
+
+            /* --- UI show/hide --- */
+            let hideTimer = null;
+            function showUI(autoHide){
+                player.classList.add('ui-on');
+                clearTimeout(hideTimer);
+                if (autoHide && !video.paused) hideTimer = setTimeout(hideUI, 3000);
+            }
+            function hideUI(){
+                if (video.paused) return;
+                clearTimeout(hideTimer);
+                player.classList.remove('ui-on');
+                menu.classList.remove('open');
+            }
+            function toggleUI(){
+                if (player.classList.contains('ui-on')) {
+                    if (video.paused) { clearTimeout(hideTimer); return; }
+                    hideUI();
+                } else showUI(true);
+            }
+
+            function setPlayIcons(playing){
+                btnPlay.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+                centerBtn.innerHTML = playing ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+            }
+            function setStatus(state){
+                statusEl.className = 'status-badge' + (state==='play' ? '' : state==='load' ? ' loading' : ' paused');
+                statusEl.innerHTML = state==='play' ? '<i class="fa-solid fa-circle" style="font-size:8px;"></i> Playing'
+                    : state==='load' ? '<i class="fa-solid fa-spinner fa-spin" style="font-size:9px;"></i> Loading'
+                    : '<i class="fa-solid fa-pause" style="font-size:8px;"></i> Paused';
+            }
+
+            /* --- Controls --- */
+            function togglePlay(){
+                if (video.paused) {
+                    // 🔊 প্রথম প্লে = ইউজারের নিজের ক্লিক → সাউন্ড অন (ন্যাচারাল)
+                    if (!MBX.firstPlay) { MBX.firstPlay = true; video.muted = false; }
+                    fireStreamAd();
+                    video.play().catch(()=>{});
+                    tryBoost();
+                } else video.pause();
+            }
+            btnPlay.addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
+            centerBtn.addEventListener('click', e => { e.stopPropagation(); togglePlay(); });
+            document.getElementById('btnBack10').addEventListener('click', e => { e.stopPropagation(); seekBy(-10); });
+            document.getElementById('btnFwd10').addEventListener('click', e => { e.stopPropagation(); seekBy(10); });
+            btnMute.addEventListener('click', e => {
+                e.stopPropagation();
+                video.muted = !video.muted;
+                if (!video.muted && video.volume === 0) video.volume = 0.7;
+                updateMuteIcon(); showUI(true);
+            });
+            document.getElementById('volRange').addEventListener('input', e => {
+                video.volume = parseFloat(e.target.value);
+                video.muted = video.volume === 0;
+                updateMuteIcon();
+            });
+            function updateMuteIcon(){
+                const off = video.muted || video.volume === 0;
+                btnMute.innerHTML = off ? '<i class="fa-solid fa-volume-xmark"></i>' : '<i class="fa-solid fa-volume-high"></i>';
+                document.getElementById('volRange').value = off ? 0 : video.volume;
+            }
+            video.addEventListener('volumechange', () => {
+                updateMuteIcon();
+                try { localStorage.setItem('mbx_vol', video.muted ? 0 : video.volume); } catch(e){}
+            });
+
+            document.getElementById('btnSettings').addEventListener('click', e => {
+                e.stopPropagation(); menu.classList.toggle('open'); showUI(true);
+            });
+            document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target.id !== 'btnSettings') menu.classList.remove('open'); });
+
+            /* --- Fullscreen + অটো-রোটেট --- */
+            const btnFull = document.getElementById('btnFull');
+            function isFs(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+            async function lockLandscape(){
+                try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch(e){}
+            }
+            function unlockOrientation(){
+                try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+            }
+            function toggleFull(){
+                if (isFs()) {
+                    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                } else {
+                    if (player.requestFullscreen) player.requestFullscreen();
+                    else if (player.webkitRequestFullscreen) player.webkitRequestFullscreen();
+                    else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+                }
+            }
+            btnFull.addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
+            ['fullscreenchange','webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+                const fs = isFs();
+                btnFull.innerHTML = fs ? '<i class="fa-solid fa-compress"></i>' : '<i class="fa-solid fa-expand"></i>';
+                if (fs) { lockLandscape(); } else { unlockOrientation(); }
+                showUI(true);
+            }));
+
+            /* ============================================================
+               ⚡ FAST SEEK + 🎮 LOAD GAME ENGINE
+               বড় সিক = গেমের মতো % (1% → 100%), ১০০% হলেই ভিডিও প্লে
+            ============================================================ */
+            let wantPlayAfterSeek = false;
+            /* 🐍 সাপ + খাবার: খাবার খাবে তো % বাড়বে — কখনো ০% এ আটকে থাকবে না,
+               ডেটা স্লো হলেও ফাস্ট মোডে বাড়ে, ১০০% হলেই ভিডিও প্লে */
+            const lg = {
+                el: document.getElementById('mbxLoadGame'),
+                cvs: document.getElementById('lgSnake'),
+                pct: document.getElementById('lgPct'),
+                on: false, done: false, disp: 4, target: null, wantPlay: false,
+                raf: 0, pendT: null, finT: null,
+                headAng: -Math.PI / 2, trail: [], foodAng: null, eats: 0, parts: [], last: 0
+            };
+            const lgCtx = lg.cvs.getContext('2d');
+            function lgResize(){
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                lg.cvs.width = 150 * dpr; lg.cvs.height = 150 * dpr;
+                lgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+            function bufferedAheadOf(t){
+                try {
+                    const b = video.buffered;
+                    for (let i = 0; i < b.length; i++) {
+                        if (t >= b.start(i) - 0.4 && t <= b.end(i) + 0.4) return b.end(i);
+                    }
+                } catch(e){}
+                return 0;
+            }
+            function lgRealPct(){
+                if (video.readyState >= 3) return 100;
+                const T = (lg.target != null) ? lg.target : video.currentTime;
+                const end = bufferedAheadOf(T);
+                if (end <= T) return 0;
+                return Math.max(0, Math.min(100, ((end - T) / 15) * 100));
+            }
+            function lgSnakeReset(){
+                lgResize();
+                lg.headAng = -Math.PI / 2;
+                lg.trail = []; lg.parts = []; lg.eats = 0;
+                lg.foodAng = lg.headAng + 0.9;
+            }
+            function lgDraw(dt, now){
+                const ctx = lgCtx, C = 75, R = 58, TAU = Math.PI * 2;
+                ctx.clearRect(0, 0, 150, 150);
+                // ট্র্যাক সার্কেল
+                ctx.beginPath(); ctx.arc(C, C, R, 0, TAU);
+                ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2.5; ctx.stroke();
+                // প্রগ্রেস আর্ক
+                if (lg.disp > 0.5) {
+                    ctx.beginPath(); ctx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + (Math.min(lg.disp, 100) / 100) * TAU);
+                    ctx.strokeStyle = 'rgba(34,211,238,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+                }
+                // হেড মুভ (গেমের মতো সবসময় চলতেই থাকে)
+                const spd = 2.3;
+                lg.headAng += spd * dt;
+                const hx = C + Math.cos(lg.headAng) * R, hy = C + Math.sin(lg.headAng) * R;
+                lg.trail.push({ x: hx, y: hy });
+                const maxSeg = 12 + Math.min(lg.eats * 2, 30);
+                while (lg.trail.length > maxSeg) lg.trail.shift();
+                // 🍎 খাবার খাওয়া: মুখ ছুঁলেই % লাফ দেয় + পার্টিকেল বিস্ফোরণ
+                if (lg.foodAng == null || lg.headAng >= lg.foodAng) {
+                    if (lg.foodAng != null) {
+                        lg.eats++;
+                        const fx = C + Math.cos(lg.foodAng) * R, fy = C + Math.sin(lg.foodAng) * R;
+                        for (let i = 0; i < 7; i++) {
+                            const a = Math.random() * TAU, s = 14 + Math.random() * 26;
+                            lg.parts.push({ x: fx, y: fy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.45 });
+                        }
+                        if (lg.disp < 97) lg.disp = Math.min(97, lg.disp + 0.9);
+                        else if (lg.disp < 98.9) lg.disp += 0.25;
+                    }
+                    lg.foodAng = lg.headAng + 1.1 + Math.random() * 1.6;
+                }
+                // খাবার আঁকা (পালস করে)
+                const fx2 = C + Math.cos(lg.foodAng) * R, fy2 = C + Math.sin(lg.foodAng) * R;
+                const pulse = 3.2 + Math.sin(now / 130) * 1.1;
+                ctx.beginPath(); ctx.arc(fx2, fy2, pulse + 2.5, 0, TAU);
+                ctx.fillStyle = 'rgba(255,93,93,.18)'; ctx.fill();
+                ctx.beginPath(); ctx.arc(fx2, fy2, pulse, 0, TAU);
+                ctx.fillStyle = '#ff5d5d'; ctx.shadowColor = '#ff5d5d'; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+                // সাপের বডি (লেজ → মাথা)
+                for (let i = 0; i < lg.trail.length; i++) {
+                    const p = lg.trail[i], k = i / lg.trail.length;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 1.2 + k * 3.4, 0, TAU);
+                    ctx.fillStyle = 'rgba(45,212,191,' + (0.25 + k * 0.6).toFixed(2) + ')';
+                    ctx.fill();
+                }
+                // সাপের মাথা + চোখ
+                ctx.beginPath(); ctx.arc(hx, hy, 5.2, 0, TAU);
+                ctx.fillStyle = '#22d3ee'; ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
+                const ea = lg.headAng + Math.PI / 2;
+                ctx.beginPath();
+                ctx.arc(hx + Math.cos(ea) * 2.2, hy + Math.sin(ea) * 2.2, 1.1, 0, TAU);
+                ctx.arc(hx - Math.cos(ea) * 2.2, hy - Math.sin(ea) * 2.2, 1.1, 0, TAU);
+                ctx.fillStyle = '#062028'; ctx.fill();
+                // খাওয়ার পার্টিকেল
+                for (let i = lg.parts.length - 1; i >= 0; i--) {
+                    const p = lg.parts[i];
+                    p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+                    if (p.life <= 0) { lg.parts.splice(i, 1); continue; }
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, TAU);
+                    ctx.fillStyle = 'rgba(255,180,80,' + (p.life / 0.45).toFixed(2) + ')'; ctx.fill();
+                }
+            }
+            function lgTick(now){
+                if (!lg.on) return;
+                lg.raf = requestAnimationFrame(lgTick);
+                if (!lg.last) lg.last = now;
+                const dt = Math.min((now - lg.last) / 1000, 0.05);
+                lg.last = now;
+                const real = lgRealPct();
+                if (real >= 100) {
+                    // রেডি → স্প্রিন্ট: দ্রুত ১০০-তে উঠে প্লে
+                    lg.disp = Math.min(100, lg.disp + 34 * dt + (100 - lg.disp) * 0.12);
+                } else if (lg.disp < 97) {
+                    // ⚡ ফাস্ট মোড: ডেটা আসুক বা না আসুক ন্যূনতম ৭%/সেকেন্ডে বাড়বে —
+                    // ডেটা এগোলে আরও দ্রুত ফলো করবে — কখনো ০% এ আটকে থাকবে না
+                    const follow = Math.max(0, real - lg.disp) * 1.4;
+                    lg.disp = Math.min(97, lg.disp + Math.max(7, follow) * dt);
+                }
+                lgDraw(dt, now);
+                lg.pct.textContent = Math.floor(lg.disp) + '%';
+                if (lg.disp >= 100 && real >= 100 && !lg.done) {
+                    lg.done = true;
+                    lg.pct.textContent = 'GO!';
+                    lg.pct.classList.add('go');
+                    lg.finT = setTimeout(() => {
+                        lgHide();
+                        if (lg.wantPlay) { lg.wantPlay = false; video.play().catch(()=>{}); }
+                    }, 500);
+                }
+            }
+            function lgShow(targetSec, autoplayAfter){
+                clearTimeout(lg.finT);
+                lg.target = (typeof targetSec === 'number') ? targetSec : null;
+                lg.wantPlay = !!autoplayAfter;
+                if (lg.on) { lg.done = false; return; }
+                lg.on = true; lg.done = false; lg.disp = 4;
+                lg.pct.classList.remove('go');
+                lgSnakeReset();
+                lg.el.classList.add('show');
+                lg.last = 0;
+                lg.raf = requestAnimationFrame(lgTick);
+            }
+            function lgHide(){
+                if (!lg.on) return;
+                lg.on = false;
+                cancelAnimationFrame(lg.raf);
+                clearTimeout(lg.finT);
+                lg.el.classList.remove('show');
+                lg.target = null;
+            }
+            // লোডিং স্ক্রিনে ট্যাপ = বন্ধ করে থামাও
+            lg.el.addEventListener('click', () => {
+                if (!lg.on || lg.done) return;
+                lgHide();
+                wantPlayAfterSeek = false;
+                try { video.pause(); } catch(e){}
+            });
+            function lgQueue(target, from){
+                clearTimeout(lg.pendT);
+                const far = Math.abs(target - from) > 20;
+                lg.pendT = setTimeout(() => {
+                    if (lg.on || video.paused) return;
+                    if (video.readyState >= 3 && !video.seeking) return;
+                    lgShow(target, wantPlayAfterSeek);
+                    wantPlayAfterSeek = false;
+                }, far ? 180 : 420);
+            }
+            function doSeek(t){
+                const from = video.currentTime;
+                poster.classList.remove('show');
+                t = Math.min(Math.max(t, 0), (video.duration||0) - 1);
+                try {
+                    if (video.fastSeek && Math.abs(t - video.currentTime) > 3) { video.fastSeek(t); }
+                    else { video.currentTime = t; }
+                } catch(e){ try { video.currentTime = t; } catch(e2){} }
+                if (!video.paused) { wantPlayAfterSeek = true; setStatus('load'); lgQueue(t, from); }
+            }
+            video.addEventListener('canplay', () => {
+                clearTimeout(lg.pendT);
+                if (wantPlayAfterSeek && !lg.on) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+            });
+            video.addEventListener('seeked', () => {
+                if (wantPlayAfterSeek && !lg.on && video.readyState >= 2) { wantPlayAfterSeek = false; video.play().catch(()=>{}); }
+            });
+
+            function seekBy(sec){
+                fireStreamAd();
+                doSeek(video.currentTime + sec);
+                showRipple(sec < 0 ? 'left' : 'right');
+                toast((sec < 0 ? '⏪ ' : '⏩ ') + Math.abs(sec) + 's');
+                showUI(true);
+            }
+
+            /* --- Seek bar --- */
+            let seeking = false;
+            function seekPos(e){
+                const r = seek.querySelector('.mbx-track').getBoundingClientRect();
+                const x = Math.min(Math.max(e.clientX - r.left, 0), r.width);
+                return { p: x / r.width, xPct: (x / r.width) * 100 };
+            }
+            seek.addEventListener('pointerdown', e => {
+                seeking = true; seek.classList.add('dragging');
+                try { seek.setPointerCapture(e.pointerId); } catch(err){}
+                const s = seekPos(e);
+                playedEl.style.width = s.xPct + '%';
+                tipEl.style.left = s.xPct + '%';
+                tipEl.textContent = fmtTime(s.p * (video.duration||0));
+                e.preventDefault();
+            });
+            seek.addEventListener('pointermove', e => {
+                if (!seeking) return;
+                const s = seekPos(e);
+                playedEl.style.width = s.xPct + '%';
+                tipEl.style.left = s.xPct + '%';
+                tipEl.textContent = fmtTime(s.p * (video.duration||0));
+            });
+            function endSeek(e){
+                if (!seeking) return;
+                seeking = false; seek.classList.remove('dragging');
+                const s = seekPos(e);
+                fireStreamAd();
+                doSeek(s.p * (video.duration||0));
+                showUI(true);
+            }
+            seek.addEventListener('pointerup', endSeek);
+            seek.addEventListener('pointercancel', () => { seeking = false; seek.classList.remove('dragging'); });
+
+            /* --- Video events --- */
+            video.addEventListener('play', () => {
+                setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake();
+                poster.classList.remove('show');
+                // 🔧 START FIX আর্ম: প্রথম প্লেতে ০০:০০ ফ্রিজ হলে কিক দাও
+                if (!MBX.kickArmed) { MBX.kickArmed = true; setTimeout(startKick, 1800); }
+            });
+            video.addEventListener('pause', () => { setPlayIcons(false); setStatus('paused'); clearTimeout(lg.pendT); lgHide(); relWake(); });
+            video.addEventListener('waiting', () => {
+                if (!video.paused) {
+                    setStatus('load');
+                    clearTimeout(lg.pendT);
+                    lg.pendT = setTimeout(() => {
+                        if (!lg.on && !video.paused && video.readyState < 3) { lgShow(video.currentTime, true); wantPlayAfterSeek = false; }
+                    }, 600);
+                }
+            });
+            video.addEventListener('playing', () => { setStatus('play'); clearTimeout(lg.pendT); lgHide(); MBX.hasPlayed = true; MBX.errTries = 0; });
+
+            video.addEventListener('timeupdate', () => {
+                document.getElementById('tCur').textContent = fmtTime(video.currentTime);
+                if (!seeking && video.duration) playedEl.style.width = (video.currentTime / video.duration * 100) + '%';
+            });
+
+            video.addEventListener('loadedmetadata', () => {
+                document.getElementById('tDur').textContent = fmtTime(video.duration);
+                // 🖼️ প্রথম ফ্রেম পোস্টার: মাইক্রো-সিক দিয়ে ফ্রেম-১ আঁকা (অটো-প্লে ছাড়াই)
+                try { if (video.currentTime === 0) video.currentTime = 0.001; } catch(e){}
+            });
+            video.addEventListener('progress', updateBuffered);
+            video.addEventListener('timeupdate', updateBuffered);
+            function updateBuffered(){
+                try {
+                    const b = video.buffered;
+                    if (b.length && video.duration) {
+                        const end = b.end(b.length - 1);
+                        buffEl.style.width = (end / video.duration * 100) + '%';
+                    }
+                } catch(e){}
+            }
+            /* 🎬 মুভি শেষ: অটোমেটিক ফুলস্ক্রিন ছোট + জমা অ্যাড ফ্লাশের প্রস্তুতি */
+            video.addEventListener('ended', () => {
+                setPlayIcons(false); setStatus('paused'); showUI(false); lgHide();
+                const wasFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                if (wasFs) {
+                    try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch(e){}
+                }
+                if (pendingAds > 0) armFlush();
+            });
+            video.addEventListener('error', () => {
+                lgHide();
+                poster.classList.remove('show');
+                MBX.posterPainted = false;
+                if (MBX.errTries >= 3) { setStatus('paused'); showFallbackBox(); return; }
+                MBX.errTries++;
+                toast('🔁 আবার চেষ্টা করছি (' + MBX.errTries + '/3)...');
+                setTimeout(() => { try { video.load(); video.play().catch(()=>{}); } catch(e){} }, 1500);
+            });
+
+            /* --- 🔧 START FIX: ০০:০০ ফ্রিজ কিক (প্রথম প্লেতে একবারই) --- */
+            function startKick(){
+                if (video.paused || video.ended) return;
+                let tries = 0;
+                const iv = setInterval(() => {
+                    if (video.paused || video.ended || video.currentTime > 0.6) { clearInterval(iv); return; }
+                    tries++;
+                    if (tries <= 3) {
+                        // মাইক্রো-নাজ: স্ট্রিমকে জোর করে সামান্য সামনে নাড়াও
+                        try { if (video.currentTime < 0.03) video.currentTime = 0.012 * tries; } catch(e){}
+                        video.play().catch(()=>{});
+                    } else {
+                        clearInterval(iv);
+                        const pos = Math.max(video.currentTime, 0.05);
+                        try {
+                            video.load();
+                            video.addEventListener('loadedmetadata', function m(){
+                                video.removeEventListener('loadedmetadata', m);
+                                try { video.currentTime = pos; } catch(e){}
+                                video.play().catch(()=>{});
+                            });
+                        } catch(e){}
+                    }
+                }, 1900);
+            }
+
+            /* --- জেসচার --- */
+            const isUI = (t) => !!(t.closest && (t.closest('.mbx-controls') || t.closest('.mbx-menu') || t.closest('.mbx-center') || t.closest('.mbx-skip') || t.closest('.mbx-loadgame')));
+            function showRipple(side){
+                const r = document.createElement('div');
+                r.className = 'tap-ripple ' + side;
+                r.innerHTML = side === 'left' ? '<i class="fa-solid fa-backward"></i>' : '<i class="fa-solid fa-forward"></i>';
+                player.appendChild(r);
+                setTimeout(() => r.remove(), 500);
+            }
+            let gX=0, gY=0, gTime=0, gBright=1, gVol=1, gMode=null, gMoved=false, gRect=null;
+            let lastTapT=0, lastTapX=0, tapTimer=null;
+
+            player.addEventListener('touchstart', e => {
+                if (menu.classList.contains('open') && !e.target.closest('.mbx-menu') && !e.target.closest('#btnSettings')) {
+                    menu.classList.remove('open'); return;
+                }
+                if (isUI(e.target)) { gMode = null; return; }
+                gRect = player.getBoundingClientRect();
+                gX = e.touches[0].clientX; gY = e.touches[0].clientY;
+                gTime = video.currentTime;
+                gBright = parseFloat(((video.style.filter||'').match(/brightness\(([^)]+)\)/) || [])[1] || 1);
+                gVol = video.muted ? 0 : video.volume;
+                gMode = 'pending'; gMoved = false;
+            }, { passive: true });
+
+            player.addEventListener('touchmove', e => {
+                if (!gMode) return;
+                e.preventDefault();
+                const dx = e.touches[0].clientX - gX;
+                const dy = gY - e.touches[0].clientY;
+                if (gMode === 'pending') {
+                    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) { gMode = 'h'; gMoved = true; }
+                    else if (Math.abs(dy) > 12) {
+                        gMoved = true;
+                        const xin = e.touches[0].clientX - gRect.left;
+                        gMode = (xin < gRect.width/2) ? 'bright' : 'vol';
+                    }
+                }
+                if (gMode === 'h') {
+                    const secs = Math.round(dx / 10);
+                    const tgt = Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1);
+                    toast((secs >= 0 ? '⏩ +' : '⏪ ') + Math.abs(secs) + 's → ' + fmtTime(tgt), 30000);
+                } else if (gMode === 'bright') {
+                    const nb = Math.min(Math.max(gBright + dy/800, 0.35), 2);
+                    video.style.filter = 'brightness(' + nb + ')';
+                    toast('🔆 Brightness: ' + Math.round(nb*100) + '%', 30000);
+                } else if (gMode === 'vol') {
+                    const nv = Math.min(Math.max(gVol + dy/600, 0), 1);
+                    video.volume = nv; video.muted = nv === 0; updateMuteIcon();
+                    toast('🔊 Volume: ' + Math.round(nv*100) + '%', 30000);
+                }
+            }, { passive: false });
+
+            player.addEventListener('touchend', e => {
+                if (gMode === 'h') {
+                    const dx = e.changedTouches[0].clientX - gX;
+                    const secs = Math.round(dx / 10);
+                    fireStreamAd();
+                    doSeek(gTime + secs);
+                    toast('⏭️ ' + fmtTime(Math.min(Math.max(gTime + secs, 0), (video.duration||0) - 1)));
+                    gMode = null; setTimeout(() => gMoved = false, 80);
+                    return;
+                }
+                gMode = null;
+                if (gMoved) { gMoved = false; return; }
+                if (isUI(e.target)) return;
+
+                const now = Date.now();
+                const rect = player.getBoundingClientRect();
+                const x = e.changedTouches[0].clientX - rect.left;
+                if (now - lastTapT < 300 && Math.abs(x - lastTapX) < 80) {
+                    clearTimeout(tapTimer); lastTapT = 0;
+                    const w3 = rect.width / 3;
+                    if (x < w3) { seekBy(-10); }
+                    else if (x > rect.width - w3) { seekBy(10); }
+                    else { togglePlay(); }
+                } else {
+                    lastTapT = now; lastTapX = x;
+                    tapTimer = setTimeout(() => toggleUI(), 260);
+                }
+            }, { passive: true });
+            player.addEventListener('touchcancel', () => { gMode = null; });
+
+            player.addEventListener('click', e => {
+                if (e.pointerType === 'touch') return;
+                if (isUI(e.target)) return;
+                toggleUI();
+            });
+
+            /* PC: কীবোর্ড */
+            document.addEventListener('keydown', e => {
+                if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+                if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+                else if (e.code === 'ArrowLeft') seekBy(-10);
+                else if (e.code === 'ArrowRight') seekBy(10);
+                else if (e.key.toLowerCase() === 'f') toggleFull();
+                else if (e.key.toLowerCase() === 'm') { video.muted = !video.muted; updateMuteIcon(); }
+            });
+
+            /* --- Wake Lock --- */
+            let wakeLock = null;
+            async function reqWake(){ try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
+            function relWake(){ try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch(e){ wakeLock = null; } }
+            document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !video.paused) reqWake(); });
+
+            /* --- ঘোরালে অটো-ফুলস্ক্রিন --- */
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    const land = (screen.orientation && screen.orientation.type) ? screen.orientation.type.includes('landscape') : (innerWidth > innerHeight);
+                    if (land && !video.paused && !isFs()) toggleFull();
+                }, 300);
+            });
+
+            /* --- স্মার্ট ওয়াচডগ (ফ্রিজ রিকভারি) --- */
+            function hasBufferAhead(t){
+                try { const b = video.buffered;
+                    for (let i=0;i<b.length;i++){ if (t >= b.start(i)-0.5 && t < b.end(i)-0.5) return true; }
+                } catch(e){}
+                return false;
+            }
+            let lastT = 0, stuck = 0, lastReload = 0;
+            setInterval(() => {
+                if (video.paused || video.ended || video.seeking || !MBX.hasPlayed) return;
+                const t = video.currentTime;
+                const frozen = Math.abs(t - lastT) < 0.1;
+                lastT = t;
+                if (!frozen) { stuck = 0; return; }
+                if (hasBufferAhead(t)) {
+                    stuck++;
+                    if (stuck === 2) { try { video.currentTime = t + 0.3; } catch(e){} toast('🔄 নিজে নিজে ঠিক করছি...'); }
+                    else if (stuck >= 5) {
+                        stuck = 0;
+                        if (Date.now() - lastReload > 30000) {
+                            lastReload = Date.now();
+                            const pos = t;
+                            try {
+                                video.load();
+                                video.addEventListener('loadedmetadata', function m(){
+                                    video.removeEventListener('loadedmetadata', m);
+                                    doSeek(pos);
+                                });
+                            } catch(e){}
+                        }
+                    }
+                }
+            }, 2000);
+
+            /* --- ⏸️ NO AUTOPLAY: ভলিউম প্রস্তুত, প্লে ইউজারের হাতে --- */
+            try {
+                const sv = parseFloat(localStorage.getItem('mbx_vol'));
+                if (!isNaN(sv) && sv > 0) video.volume = Math.min(sv, 1);
+                else video.volume = 0.9;
+            } catch(e){ video.volume = 0.9; }
+            video.muted = false;
+            updateMuteIcon();
+            showUI(true);
+
+            function tryBoost(){
+                if (window.audioBoosted || video.muted) return;
+                try {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    const ctx = new AC();
+                    if (ctx.state === 'suspended') ctx.resume();
+                    const src = ctx.createMediaElementSource(video);
+                    const gain = ctx.createGain();
+                    gain.gain.value = 4;
+                    src.connect(gain); gain.connect(ctx.destination);
+                    window.audioBoosted = true;
+                } catch(e){}
+            }
+        }
+
+        /* ============================================================
+           🎯 স্মার্ট নোটিস — সাইজ দেখে ইউজারকে সঠিক পথ দেখাও
+        ============================================================ */
+        (function(){
+            if (CONFIG.smartNotice === false) return;
+            try {
+                const m = "{{ file_size }}".match(/([\d.]+)\s*(KB|MB|GB|TB)/i);
+                if (!m) return;
+                const v = parseFloat(m[1]);
+                const u = m[2].toUpperCase();
+                const isBig = (u === 'GB' && v >= 2) || (u === 'TB');
+                const card = document.querySelector('.main-container .glass-card.text-center');
+                if (!card) return;
+
+                const box = document.createElement('div');
+                if (isBig) {
+                    box.className = 'smart-notice';
+                    box.innerHTML = '⚠️ <b>বড় ফাইল (2GB+)!</b><br>স্মুথ এক্সপেরিয়েন্সের জন্য ডাউনলোড করতে উপরের <b>✈️ GET FILE</b> বাটন ব্যবহার করুন — টেলিগ্রামে সরাসরি <b>ফুল স্পিড</b> ডাউনলোড হবে।<br>স্ট্রিমিংয়ে সিক দিলে সাপ-গেম লোডিং দেখাবে 🐍 — ১০০% হলেই প্লে হবে। 🙏';
+                } else {
+                    box.className = 'smart-notice good';
+                    box.innerHTML = '✅ <b>এই ফাইলটি আরামসে স্ট্রিম করা যাবে!</b><br>চাইলে <b>⚡ HIGH SPEED DOWNLOAD</b> দিয়ে সরাসরি ডাউনলোডও করতে পারেন। 🎬';
+                }
+                card.insertAdjacentElement('afterend', box);
+            } catch(e){}
+        })();
+
+        function toggleEyeCare(){
+            const o = document.getElementById('eyeCareOverlay');
+            o.style.display = (o.style.display === 'block') ? 'none' : 'block';
+        }
+        function play_intent(pkg){
+            let url = '{{ file_url }}'.replace("http://", "https://");
+            window.location.href = `intent:${url}#Intent;package=${pkg};type=video/*;end`;
+        }
+        function play_system(){
+            let url = '{{ file_url }}'.replace("http://", "https://");
+            window.location.href = `intent:${url}#Intent;action=android.intent.action.VIEW;type=video/*;end`;
+        }
+
+        try { initPlayer(); } catch(e) { console.log("Player init error:", e); }
+
+        /* ============================================================
+           🎯 ADSTERRA INTERSTITIAL GUARD
+           - ৬ ঘণ্টা কুলডাউন (localStorage: mbx_intl_time)
+           - পেজ লোডের ১০ সেকেন্ড পর
+           - ভিডিও চলার সময় কখনো না (v.paused চেক)
+        ============================================================ */
+        (function(){
+            try {
+                const KEY = 'mbx_intl_time', CD = 6 * 60 * 60 * 1000;
+                const last = parseInt(localStorage.getItem(KEY) || '0') || 0;
+                if (Date.now() - last < CD) return;
+                setTimeout(function tryInject(){
+                    try {
+                        const v = (typeof MBX !== 'undefined' && MBX.video) ? MBX.video : null;
+                        if (v && !v.paused) { setTimeout(tryInject, 6000); return; }
+                        localStorage.setItem(KEY, String(Date.now()));
+                        const s = document.createElement('script');
+                        s.type = 'text/javascript'; s.async = true;
+                        s.setAttribute('data-cfasync', 'false');
+                        s.src = 'https://bancadeltempoidea.org/14/a293c499a899d218d75e263d1d1cf6db/invoke.js';
+                        document.body.appendChild(s);
+                    } catch(e){}
+                }, 10000);
+            } catch(e){}
+        })();
+    </script>
 </body>
 </html>
