@@ -6,10 +6,13 @@ from database.users_db import db
 from info import PREMIUM_LOGS
 from pyrogram import Client
 from .stream_routes import routes, prewarm_media_sessions
+from .stats_routes import stats_routes
 
 async def web_server():
     web_app = web.Application(client_max_size=30000000)
     web_app.add_routes(routes)
+    # 📊 MovieBoxBD অ্যাপের স্ট্যাট-ট্র্যাকিং + অ্যাডমিন প্যানেল (/admin) + আপডেট API
+    web_app.add_routes(stats_routes)
     # ⚡ সব ক্লায়েন্টের Telegram media session আগেই তৈরি করে রাখে —
     # ফলে চালু হওয়ার পর প্রথম ইউজারও অনন্ত লোডিংয়ে আটকায় না
     asyncio.create_task(prewarm_media_sessions())
