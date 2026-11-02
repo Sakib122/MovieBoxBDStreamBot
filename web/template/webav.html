@@ -1113,6 +1113,7 @@
             /* --- Video events --- */
             video.addEventListener('play', () => {
                 setPlayIcons(true); setStatus('play'); showUI(true); tryBoost(); reqWake();
+                try { if (MBX.actx && MBX.actx.state === 'suspended') MBX.actx.resume(); } catch(e){}
                 MBX.userWantsPlay = true;
                 poster.classList.remove('show');
                 document.getElementById('mbxPosterImg').classList.remove('show');
@@ -1706,6 +1707,64 @@
         }
 
         try { initPlayer(); } catch(e) { console.log("Player init error:", e); }
+                /* 🔇 NO-SOUND DETECTOR — Dolby (DDP5.1/AC3) সাউন্ড ব্রাউজার প্লে করতে পারে না,
+           তাই মুভি চলছে কিন্তু আওয়াজ নেই — এমন হলে ছোট্ট নোটিস + MX/VLC বাটন */
+        (function(){
+            try {
+                const v = MBX.video;
+                if (!v) return;
+                let done = false, lastT = -1, lastTs = 0, playMs = 0;
+                function audioBroken(){
+                    try {
+                        if (typeof v.mozHasAudio === 'boolean') return !v.mozHasAudio;
+                        if (typeof v.webkitAudioDecodedByteCount === 'number') return v.webkitAudioDecodedByteCount === 0;
+                    } catch(e){}
+                    return null;
+                }
+                const box = document.createElement('div');
+                box.id = 'mbxNoSndBox';
+                box.style.cssText = 'position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:2147483000;max-width:94%;background:rgba(13,16,28,.97);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:13px 15px 12px;color:#fff;font-size:13.5px;line-height:1.55;box-shadow:0 12px 36px rgba(0,0,0,.55);display:none;text-align:center;font-family:inherit;';
+                box.innerHTML =
+                    '<div style="font-weight:800;font-size:14.5px;margin-bottom:3px;">🔇 সাউন্ড আসছে না?</div>'
+                  + '<div style="opacity:.9;">এই মুভির সাউন্ড ফরম্যাট (Dolby DDP5.1/AC3-র মতো) ব্রাউজার সাপোর্ট করে না — তাই ছবি চলছে, আওয়াজ নেই। সাউন্ডসহ দেখতে 👇</div>'
+                  + '<div style="display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:9px;">'
+                  + '<button data-mbxp="com.mxtech.videoplayer.ad" style="padding:8px 13px;border-radius:9px;border:none;background:#7c4dff;color:#fff;font-weight:700;cursor:pointer;">▶ MX Player</button>'
+                  + '<button data-mbxp="org.videolan.vlc" style="padding:8px 13px;border-radius:9px;border:none;background:#ff8c00;color:#fff;font-weight:700;cursor:pointer;">▶ VLC</button>'
+                  + '<button id="mbxNoSndSys" style="padding:8px 13px;border-radius:9px;border:none;background:#0984e3;color:#fff;font-weight:700;cursor:pointer;">▶ System</button>'
+                  + '</div>'
+                  + '<div style="margin-top:7px;font-size:11.5px;opacity:.65;">বা উপরের ✈️ GET FILE দিয়ে ডাউনলোড করে MX Player-এ চালাও</div>';
+                const xb = document.createElement('button');
+                xb.textContent = '✕';
+                xb.style.cssText = 'position:absolute;top:6px;right:9px;background:none;border:none;color:#fff;opacity:.6;font-size:13px;cursor:pointer;';
+                xb.onclick = () => { box.style.display = 'none'; };
+                box.appendChild(xb);
+                box.querySelectorAll('[data-mbxp]').forEach(b => { b.onclick = () => play_intent(b.dataset.mbxp); });
+                const sys = box.querySelector('#mbxNoSndSys');
+                if (sys) sys.onclick = () => play_system();
+                document.body.appendChild(box);
+                setInterval(() => {
+                    try {
+                        if (done) return;
+                        if (v.paused) { lastTs = 0; return; }
+                        const now = Date.now();
+                        if (!lastTs) { lastTs = now; lastT = v.currentTime; return; }
+                        if (v.currentTime > lastT) playMs += now - lastTs;
+                        lastT = v.currentTime; lastTs = now;
+                        if (v.muted || v.volume <= 0 || MBX.autoMuted) { playMs = 0; return; }
+                        if (MBX.holding || (MBX.hold && !MBX.hasPlayed)) { playMs = 0; return; }
+                        if (playMs < 7000) return;
+                        const bad = audioBroken();
+                        if (bad === false) { done = true; return; }
+                        if (bad === true) {
+                            done = true;
+                            const fs = document.fullscreenElement || document.webkitFullscreenElement;
+                            (fs || document.body).appendChild(box);
+                            box.style.display = 'block';
+                        }
+                    } catch(e){}
+                }, 1500);
+            } catch(e){}
+        })();
 
         /* ============================================================
            🎯 ADSTERRA INTERSTITIAL GUARD
