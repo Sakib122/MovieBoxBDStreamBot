@@ -17,6 +17,7 @@
 # ══════════════════════════════════════════════════════════════════
 
 import os
+import re
 import time
 import hashlib
 import html
@@ -48,6 +49,32 @@ def _day_key(ts: float) -> int:
 def _today_start(ts: float) -> float:
     return _day_key(ts) * DAY - TZ
 
+# 🎬 নতুন হেল্পার — লেবেল থেকে শুধু কোয়ালিটি বের করে
+def _quality(label: str) -> str:
+    """'720p WEB-DL 1002MB' → '720p' — কোয়ালিটি রাখো, সাইজ/বাড়তি বাদ দাও"""
+    m = re.search(r"\b\d{3,4}\s?p\b", label, re.IGNORECASE)
+    if m:
+        return m.group(0).replace(" ", "").lower()
+    m = re.search(r"\b[24]k\b", label, re.IGNORECASE)
+    if m:
+        return m.group(0).upper()
+    return label.strip()[:24]
+
+
+# 🎬 নতুন হেল্পার — প্লে-লেবেলের সাথে আসল মুভির নাম জুড়ে দেয়
+async def _play_label(iid: str, label: str, now: float) -> str:
+    """প্লে-এর ঠিক আগে একই ফোন যে মুভির ডিটেইল খুলেছিল (view ইভেন্ট) —
+    সেই আসল মুভির নামটাই লেবেলের সাথে জুড়ে দাও → 'মুভির নাম (720p)'"""
+    try:
+        doc = await installs.find_one({"_id": iid}, {"last_view": 1, "last_view_ts": 1})
+        name = str(doc.get("last_view") or "").strip() if doc else ""
+        ts = float(doc.get("last_view_ts") or 0) if doc else 0.0
+        if name and 0 < now - ts <= 1800:   # ৩০ মিনিটের ভিতরের view হলেই গ্রহণযোগ্য
+            q = _quality(label)
+            return f"{name} ({q})"[:120] if q else name[:120]
+    except Exception:
+        pass
+    return label
 
 # ────────────────────────── অ্যাপ API ──────────────────────────
 
@@ -63,12 +90,17 @@ async def api_track(request):
         model = str(d.get("model", "")).strip()[:48]
         ver = str(d.get("ver", "")).strip()[:16]
         now = time.time()
+        extra = {}
+        if event == "view" and label:   # 🎬 শেষ কোন মুভির ডিটেইল খুলল — নামটা মনে রাখো
+            extra = {"last_view": label[:120], "last_view_ts": now}
         await installs.update_one(
             {"_id": iid},
-            {"$set": {"last": now, "model": model, "ver": ver},
+            {"$set": {"last": now, "model": model, "ver": ver, **extra},
              "$setOnInsert": {"first": now}},
             upsert=True,
         )
+        if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি বসিয়ে দাও
+            label = await _play_label(iid, label, now)
         if event != "beat":   # 💓 হার্টবিট ইভেন্ট-লিস্টে জমা হয় না — শুধু 'last' টাইম আপডেট হয়
             await events.insert_one({"id": iid, "event": event, "label": label,
                                      "ver": ver, "ts": now})
