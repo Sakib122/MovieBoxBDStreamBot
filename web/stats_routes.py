@@ -49,7 +49,8 @@ def _day_key(ts: float) -> int:
 def _today_start(ts: float) -> float:
     return _day_key(ts) * DAY - TZ
 
-# 🎬 নতুন হেল্পার — লেবেল থেকে শুধু কোয়ালিটি বের করে
+
+# 🎬 হেল্পার ১ — লেবেল থেকে শুধু কোয়ালিটি বের করে
 def _quality(label: str) -> str:
     """'720p WEB-DL 1002MB' → '720p' — কোয়ালিটি রাখো, সাইজ/বাড়তি বাদ দাও"""
     m = re.search(r"\b\d{3,4}\s?p\b", label, re.IGNORECASE)
@@ -61,10 +62,21 @@ def _quality(label: str) -> str:
     return label.strip()[:24]
 
 
-# 🎬 নতুন হেল্পার — প্লে-লেবেলের সাথে আসল মুভির নাম জুড়ে দেয়
+# 🎬 হেল্পার ২ — লেবেলটা কি লিংকের নামের মতো? ('720p WEB-DL', 'EP 128', '450MB')
+def _looks_link(label: str) -> bool:
+    if re.search(r"\b\d{3,4}\s?p\b", label, re.IGNORECASE):
+        return True
+    if re.match(r"^ep\s*\d+", label, re.IGNORECASE):
+        return True
+    if re.search(r"\b\d+(\.\d+)?\s?(mb|gb|kb)\b", label, re.IGNORECASE):
+        return True
+    return False
+
+
+# 🎬 হেল্পার ৩ — প্লে-লেবেলের সাথে আসল মুভি/সিরিজের নাম জুড়ে দেয়
 async def _play_label(iid: str, label: str, now: float) -> str:
     """প্লে-এর ঠিক আগে একই ফোন যে মুভির ডিটেইল খুলেছিল (view ইভেন্ট) —
-    সেই আসল মুভির নামটাই লেবেলের সাথে জুড়ে দাও → 'মুভির নাম (720p)'"""
+    সেই আসল নামটাই জুড়ে দাও → 'মুভির নাম (720p)' / 'সিরিজের নাম (EP 128)'"""
     try:
         doc = await installs.find_one({"_id": iid}, {"last_view": 1, "last_view_ts": 1})
         name = str(doc.get("last_view") or "").strip() if doc else ""
@@ -75,6 +87,7 @@ async def _play_label(iid: str, label: str, now: float) -> str:
     except Exception:
         pass
     return label
+
 
 # ────────────────────────── অ্যাপ API ──────────────────────────
 
@@ -91,7 +104,8 @@ async def api_track(request):
         ver = str(d.get("ver", "")).strip()[:16]
         now = time.time()
         extra = {}
-        if event == "view" and label:   # 🎬 শেষ কোন মুভির ডিটেইল খুলল — নামটা মনে রাখো
+        if event == "view" and label and not _looks_link(label):
+            # 🎬 শেষ কোন মুভি/সিরিজের ডিটেইল খুলল — আসল নাম হলেই মনে রাখো
             extra = {"last_view": label[:120], "last_view_ts": now}
         await installs.update_one(
             {"_id": iid},
@@ -99,7 +113,7 @@ async def api_track(request):
              "$setOnInsert": {"first": now}},
             upsert=True,
         )
-        if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি বসিয়ে দাও
+        if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি/EP বসিয়ে দাও
             label = await _play_label(iid, label, now)
         if event != "beat":   # 💓 হার্টবিট ইভেন্ট-লিস্টে জমা হয় না — শুধু 'last' টাইম আপডেট হয়
             await events.insert_one({"id": iid, "event": event, "label": label,
@@ -154,6 +168,7 @@ def _page(title: str, body: str) -> web.Response:
   th,td{{padding:8px 12px;text-align:left;font-size:14px;border-bottom:1px solid #232742}}
   th{{color:#8A93B2;font-weight:600;background:#1B1F36}}
   td.num{{color:#7C4DFF;font-weight:700}}
+  .scroll{{max-height:420px;overflow-y:auto}}
   .bar{{color:#00E5A0;letter-spacing:1px}}
   form{{background:#171A2E;border-radius:12px;padding:16px;max-width:640px}}
   input,textarea{{width:100%;box-sizing:border-box;background:#0D0F1C;border:1px solid #2A2F4F;
@@ -218,11 +233,19 @@ async def admin_home(request):
         pass
 
     def rows(counter):
-        top = counter.most_common(10)
+        top = counter.most_common()   # 🎬 ক্যাপ নাই — ৩০ দিনের সবগুলো দেখাবে, কিছু বাদ যাবে না
         if not top:
             return "<tr><td colspan=2 style='color:#8A93B2'>এখনো কোনো ডাটা নেই</td></tr>"
         return "".join(
             f"<tr><td>{html.escape(k)}</td><td class='num'>{v}</td></tr>" for k, v in top)
+
+    def table_html(counter, unit):
+        # 🎬 ফুল লিস্ট — স্ক্রলসহ, উপরে মোট হিসাব
+        if not counter:
+            return "<table><tr><td colspan=2 style='color:#8A93B2'>এখনো কোনো ডাটা নেই</td></tr></table>"
+        total = sum(counter.values())
+        head = f"<div class='sub'>মোট {len(counter)}টি মুভি · {total} বার {unit} — যত বেশি দেখা, তত উপরে</div>"
+        return head + f"<div class='scroll'><table><tr><th>মুভি</th><th>{unit}</th></tr>{rows(counter)}</table></div>"
 
     peak = max(joins.values()) if joins else 0
     bars = []
@@ -262,14 +285,14 @@ async def admin_home(request):
     <h2>📅 শেষ ৭ দিনে জয়েন (প্রতিদিন)</h2>
     <table>{bars_html}</table>
 
-    <h2>👀 সবচেয়ে বেশি দেখা (৩০ দিন — ডিটেইল খোলা)</h2>
-    <table><tr><th>মুভি</th><th>ভিউ</th></tr>{rows(views)}</table>
+    <h2>👀 দেখা হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
+    {table_html(views, "ভিউ")}
 
-    <h2>▶ সবচেয়ে বেশি প্লে (৩০ দিন)</h2>
-    <table><tr><th>মুভি</th><th>প্লে</th></tr>{rows(plays)}</table>
+    <h2>▶ প্লে হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
+    {table_html(plays, "প্লে")}
 
-    <h2>⬇ সবচেয়ে বেশি ডাউনলোড (৩০ দিন)</h2>
-    <table><tr><th>মুভি</th><th>ডাউনলোড</th></tr>{rows(dls)}</table>
+    <h2>⬇ ডাউনলোড হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
+    {table_html(dls, "ডাউনলোড")}
 
     <h2>📱 ভার্সন বিতরণ</h2>
     <div class="cur">{vers_html}</div>
