@@ -144,6 +144,7 @@ async def api_latest(request):
             "name": str(doc.get("name", "")),
             "url": str(doc.get("url", "")),
             "msg": str(doc.get("msg", "")),
+            "ts": float(doc.get("ts", 0)),   # 🆕 ঘোষণার সময় — প্রতিবার নতুন ঘোষণা = নতুন পিং
         })
     except Exception:
         return web.json_response({"code": 0})
@@ -359,6 +360,7 @@ async def admin_setupdate(request):
                     "name": str(form.get("name", ""))[:24],
                     "url": str(form.get("url", ""))[:500],
                     "msg": str(form.get("msg", ""))[:200],
+                    "ts": time.time(),   # 🆕 প্রতিবার ঘোষণা = নতুন পিং — সব পুরনো ফোন আবার পাবে
                 }},
                 upsert=True,
             )
