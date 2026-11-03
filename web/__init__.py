@@ -10,9 +10,12 @@ from .stats_routes import stats_routes
 
 async def web_server():
     web_app = web.Application(client_max_size=30000000)
-    web_app.add_routes(routes)
+    # ⚠️ জরুরি: stats রুটগুলো অবশ্যই stream-রুটের আগে রেজিস্টার করতে হবে।
+    # stream_routes.py-তে "/{path:.+}" ক্যাচ-অল রুট আছে — ওটা পরে থাকলে
+    # /admin আর /api/* কলগুলো ওই রুটেই ঢুকে 400 "Connection Error" দেয়।
     # 📊 MovieBoxBD অ্যাপের স্ট্যাট-ট্র্যাকিং + অ্যাডমিন প্যানেল (/admin) + আপডেট API
     web_app.add_routes(stats_routes)
+    web_app.add_routes(routes)
     # ⚡ সব ক্লায়েন্টের Telegram media session আগেই তৈরি করে রাখে —
     # ফলে চালু হওয়ার পর প্রথম ইউজারও অনন্ত লোডিংয়ে আটকায় না
     asyncio.create_task(prewarm_media_sessions())
@@ -54,7 +57,7 @@ async def check_expired_premium(client):
                     tg_user = await client.get_users(user_id)
                     await client.send_message(
                         user_id,
-                        f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴡɪʟʟ ᴇxᴘɪʀᴇ ɪɴ {label}.\nTᴀᴘ /plan ᴛᴏ ʀᴇɴᴇᴡ ɴᴏᴡ!</b>"
+                        f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴡɪʟʟ ᴇxᴘɪʀᴇ ɪɴ {label}.\nTᴀᴘ /plan ꜰᴏʀ ʀᴇɴᴇᴡᴀʟ ᴏᴘᴛɪᴏɴs.</b>"
                     )
                     await client.send_message(
                         PREMIUM_LOGS,
