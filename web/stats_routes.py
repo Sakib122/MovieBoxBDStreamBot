@@ -69,12 +69,23 @@ async def api_track(request):
              "$setOnInsert": {"first": now}},
             upsert=True,
         )
-        await events.insert_one({"id": iid, "event": event, "label": label,
-                                 "ver": ver, "ts": now})
+        if event != "beat":   # 💓 হার্টবিট ইভেন্ট-লিস্টে জমা হয় না — শুধু 'last' টাইম আপডেট হয়
+            await events.insert_one({"id": iid, "event": event, "label": label,
+                                     "ver": ver, "ts": now})
         return web.json_response({"ok": True})
     except Exception:
         return web.json_response({"ok": False}, status=400)
 
+@stats_routes.get("/api/live")
+async def api_live(request):
+    """🔴 লাইভ কাউন্ট — প্যানেলের কার্ড প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয় এটা দিয়ে"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.json_response({"live": 0})
+    try:
+        n = await installs.count_documents({"last": {"$gte": time.time() - 60}})
+        return web.json_response({"live": n})
+    except Exception:
+        return web.json_response({"live": 0})
 
 @stats_routes.get("/api/app/latest")
 async def api_latest(request):
@@ -142,8 +153,11 @@ async def admin_home(request):
         total = await installs.count_documents({})
         active_today = await installs.count_documents({"last": {"$gte": midnight}})
         new_today = await installs.count_documents({"first": {"$gte": midnight}})
+        live_now = await installs.count_documents({"last": {"$gte": now - 60}})   # 🔴 ১ মিনিটে অ্যাক্টিভ
+        gone = await installs.count_documents({"last": {"$lt": now - 2 * DAY}})   # 🗑 ২ দিন নিরব = আনইনস্টল (আনুমানিক)
     except Exception:
         total = active_today = new_today = 0
+        live_now = gone = 0
 
     joins = Counter()
     views, plays, dls = Counter(), Counter(), Counter()
@@ -204,10 +218,14 @@ async def admin_home(request):
     <div class="sub">লাইভ স্ট্যাট — <a href="/admin/logout" style="color:#8A93B2">লগআউট</a></div>
 
     <div class="cards">
-      <div class="card"><div class="n">{total}</div><div class="t">👥 মোট ইউজার</div></div>
+      <div class="card"><div class="n" id="liveN">{live_now}</div><div class="t">🔴 এখন লাইভ (১ মিনিটে)</div></div>
       <div class="card"><div class="n">{active_today}</div><div class="t">🟢 আজ অ্যাক্টিভ</div></div>
       <div class="card"><div class="n">{new_today}</div><div class="t">✨ আজ নতুন জয়েন</div></div>
+      <div class="card"><div class="n">{total}</div><div class="t">👥 মোট ইউজার</div></div>
+      <div class="card"><div class="n">{gone}</div><div class="t">🗑 আনইনস্টল (আনুমানিক)</div></div>
     </div>
+    <div class="sub">🗑 আনইনস্টল = গত ২ দিনে সার্ভারে কোনো খবর পাওয়া যায়নি এমন ফোন (আনুমানিক)।
+    🔴 লাইভ সংখ্যা প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
 
     <h2>📅 শেষ ৭ দিনে জয়েন (প্রতিদিন)</h2>
     <table>{bars_html}</table>
@@ -240,6 +258,16 @@ async def admin_home(request):
       <button type="submit">🚀 আপডেট ঘোষণা করো</button>
       <button type="submit" formaction="/admin/clearupdate" class="gray">⏹ আপডেট বন্ধ করো</button>
     </form>
+        <script>
+    setInterval(async () => {{
+      try {{
+        const r = await fetch('/api/live');
+        const j = await r.json();
+        const el = document.getElementById('liveN');
+        if (el && el.textContent !== String(j.live)) el.textContent = j.live;
+      }} catch (e) {{}}
+    }}, 30000);
+    </script>
     """
     return _page("অ্যাডমিন প্যানেল", body)
 
