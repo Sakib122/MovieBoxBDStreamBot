@@ -212,7 +212,7 @@ async def admin_home(request):
     try:
         async for u in installs.find({"first": {"$gte": week}}, {"first": 1}):
             joins[_day_key(float(u.get("first") or 0))] += 1
-        async for u in installs.find({}, {"ver": 1}):
+        async for u in installs.find({"last": {"$gte": month}}, {"ver": 1}):
             versions[str(u.get("ver") or "?")] += 1
         async for e in events.find({"event": "view", "ts": {"$gte": month}}, {"label": 1}):
             if e.get("label"):
