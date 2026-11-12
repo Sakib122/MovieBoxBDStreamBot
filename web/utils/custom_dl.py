@@ -269,8 +269,10 @@ class ByteStreamer:
                         raise
         except (TimeoutError, AttributeError) as e:
             logging.error(f"Error yielding file: {e}")
+            raise   # ⚡ গিলে ফেলো না — guarded_stream জানবে, ক্লায়েন্ট bench হবে
         except Exception as e:
             logging.error(f"Unexpected error in yield_file: {e}")
+            raise   # ⚡ Connection lost / Broken pipe — bench গণনার জন্য ছড়িয়ে দাও
 
     async def clean_cache(self) -> None:
         while True:
