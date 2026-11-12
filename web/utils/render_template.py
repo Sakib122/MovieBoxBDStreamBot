@@ -2,6 +2,7 @@ import os
 import re
 import html
 import json
+import time
 import jinja2
 import logging
 import aiohttp
@@ -37,9 +38,22 @@ def _url_safe_name(display_name: str, real_name: str, fallback_id: int) -> str:
     return urllib.parse.quote(f"{base}{ext}", safe="()")
 
 
+# ⚡ watch পেজ ক্যাশ — একই মুভির পেজ বার বার খুললে Telegram-কে বার বার
+# জিজ্ঞেস করা বন্ধ; ক্যাশ ১০ মিনিট পর্যন্ত মনে রাখে
+_page_cache: dict = {}
+PAGE_CACHE_TTL = 10 * 60
+
+
 async def render_page(id, secure_hash, src=None):
-    file = await WebavBot.get_messages(int(BIN_CHANNEL), int(id))
-    file_data = await get_file_ids(WebavBot, int(BIN_CHANNEL), int(id))
+    cached = _page_cache.get(id)
+    if cached and (time.time() - cached[2]) < PAGE_CACHE_TTL:
+        file, file_data = cached[0], cached[1]
+    else:
+        file = await WebavBot.get_messages(int(BIN_CHANNEL), int(id))
+        file_data = await get_file_ids(WebavBot, int(BIN_CHANNEL), int(id))
+        _page_cache[id] = (file, file_data, time.time())
+        if len(_page_cache) > 300:
+            _page_cache.pop(next(iter(_page_cache)))
 
     if file_data.unique_id[:6] != secure_hash:
         logging.debug(f"link hash: {secure_hash} - {file_data.unique_id[:6]}")
