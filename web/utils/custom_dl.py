@@ -40,27 +40,61 @@ class ByteStreamer:
         self.ref_ttl = 10 * 60
         self.premium_cache: Dict[int, tuple] = {}
         self.premium_ttl = 5 * 60
+        # ⚡ get_me() জীবনে একবারই কল হবে — আগে প্রতি স্ট্রিম রিকোয়েস্টে
+        # কল হচ্ছিল, এটাই users.GetFullUser FLOOD_WAIT-এর মূল কারণ ছিল
+        self._is_premium = None
+        # ⚡ একই ফাইলের প্যারালাল রিকোয়েস্ট এক জায়গায় মিলবে —
+        # ৩টা রিকোয়েস্ট এলে ১টাই Telegram-কে জিজ্ঞেস করবে
+        self._prop_locks: Dict[int, asyncio.Lock] = {}
         try:
             asyncio.create_task(self.clean_cache())
         except RuntimeError:
             pass 
 
+    async def _resolve_premium(self) -> bool:
+        """get_me() একবার কল করে ফলাফল মনে রাখে।
+        get_me = users.GetFullUser — প্রতি রিকোয়েস্টে কল করলেই
+        Telegram FLOOD_WAIT দিয়ে স্ট্রিম আটকে দেয়।"""
+        if self._is_premium is not None:
+            return self._is_premium
+        try:
+            me = await self.client.get_me()
+        except FloodWait as e:
+            if e.value > MAX_INLINE_FLOODWAIT:
+                raise
+            await asyncio.sleep(e.value + 1)
+            me = await self.client.get_me()
+        except Exception:
+            me = None
+        if me is None:
+            return False
+        self._is_premium = bool(not getattr(me, "is_bot", True))
+        logging.info(f"Client premium status resolved (once): {self._is_premium}")
+        return self._is_premium
+    
     async def get_file_properties(self, id: int) -> FileId:
         now = time.time()
 
-        # ⚡ প্রিমিয়াম (ইউজার অ্যাকাউন্ট): নিজের নামে ফ্রেশ টিকিট, ৫ মিনিট ক্যাশ
+        # ⚡ প্রিমিয়াম (ইউজার অ্যাকাউন্ট): ক্যাশ আগে — মিললে Telegram-কে
+        # একবারও জিজ্ঞেস করতে হবে না, এতেই FLOOD_WAIT শেষ
         try:
-            me = await self.client.get_me()
-            if me and not getattr(me, "is_bot", True):
+            if await self._resolve_premium():
                 e = self.premium_cache.get(id)
                 if e and (now - e[1]) < self.premium_ttl:
                     logging.debug(f"Premium cached reference for ID {id}")
                     return e[0]
-                fid = await get_file_ids(self.client, BIN_CHANNEL, id)
-                if fid:
-                    self.premium_cache[id] = (fid, now)
-                    logging.info(f"Fresh file reference (premium) for ID {id}")
-                    return fid
+                # একই ফাইলে প্যারালাল রিকোয়েস্ট একই সাথে ফ্রেশ নিতে পারবে না
+                async with self._prop_locks.setdefault(id, asyncio.Lock()):
+                    now = time.time()
+                    e = self.premium_cache.get(id)
+                    if e and (now - e[1]) < self.premium_ttl:
+                        logging.debug(f"Premium cached reference (post-lock) for ID {id}")
+                        return e[0]
+                    fid = await get_file_ids(self.client, BIN_CHANNEL, id)
+                    if fid:
+                        self.premium_cache[id] = (fid, now)
+                        logging.info(f"Fresh file reference (premium) for ID {id}")
+                        return fid
         except Exception as e:
             logging.warning(f"Premium fresh-fetch failed for ID {id}: {e}")
 
@@ -69,12 +103,17 @@ class ByteStreamer:
         if e and (now - e[1]) < self.ref_ttl:
             return e[0]
 
-        fid = await get_file_ids(self.client, BIN_CHANNEL, id)
-        if not fid:
-            raise FileNotFound
-        self.cached_file_ids[id] = (fid, now)
-        logging.debug(f"Generated file properties for message with ID {id}")
-        return fid
+        async with self._prop_locks.setdefault(id, asyncio.Lock()):
+            now = time.time()
+            e = self.cached_file_ids.get(id)
+            if e and (now - e[1]) < self.ref_ttl:
+                return e[0]
+            fid = await get_file_ids(self.client, BIN_CHANNEL, id)
+            if not fid:
+                raise FileNotFound
+            self.cached_file_ids[id] = (fid, now)
+            logging.debug(f"Generated file properties for message with ID {id}")
+            return fid
 
     async def generate_file_properties(self, id: int) -> FileId:
         fid = await get_file_ids(self.client, BIN_CHANNEL, id)
