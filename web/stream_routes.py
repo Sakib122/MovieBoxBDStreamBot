@@ -68,7 +68,14 @@ def mark_client_failure(index):
 
 
 def mark_client_success(index):
-    client_health[index] = {"fails": 0, "cooldown_until": 0.0}
+    # সফল চাঙ্ক ফেইল-কাউন্ট রিসেট করবে, কিন্তু চলমান ১২০ সেকেন্ডের
+    # বেঞ্চ মুছবে না — নইলে আটকানো ক্লায়েন্ট ১ সেকেন্ডেই বেঞ্চ থেকে
+    # বেরিয়ে আবার চাপ নিয়ে আবার আটকায় (লগের ১৯:৪৩:৫৫ → ১৯:৪৪:০৪ ঘটনা)
+    h = client_health.get(index)
+    if h and h.get("cooldown_until", 0) > time.time():
+        h["fails"] = 0
+    else:
+        client_health[index] = {"fails": 0, "cooldown_until": 0.0}
 
 
 # ---------------------------------------------------------------
