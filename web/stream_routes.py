@@ -78,15 +78,23 @@ def mark_client_success(index):
 # তাই প্রতি ক্লায়েন্টের সামনে গেট — সর্বোচ্চ ৮টি লাইভ স্ট্রিম।
 # ---------------------------------------------------------------
 client_gates: dict = {}   # client index -> BoundedSemaphore
-STREAM_GATE_LIMIT = 8     # প্রতি ক্লায়েন্টে একসাথে সর্বোচ্চ কতগুলো লাইভ স্ট্রিম
+STREAM_GATE_LIMIT = 8     # সাধারণ বট ক্লায়েন্টে একসাথে সর্বোচ্চ লাইভ স্ট্রিম
+PREMIUM_GATE_LIMIT = 5    # প্রিমিয়ামে কম — লাইভ টেস্টে ৮টিতেও সংযোগ ভেঙেছিল
 STREAM_GATE_WAIT = 12     # গেট ফাঁকা হওয়ার অপেক্ষা (সেকেন্ড), এর পরে 504
 OVERFLOW_GATE_WAIT = 1    # ওভারফ্লোতে প্রতি অন্য ক্লায়েন্টে এত সেকেন্ড অপেক্ষা
+
+
+def premium_index():
+    """প্রিমিয়াম ক্লায়েন্টের নম্বর (সবচেয়ে বড় index) — এক ক্লায়েন্ট হলে None"""
+    keys = list(work_loads.keys())
+    return max(keys) if len(keys) > 1 else None
 
 
 def _gate(index):
     g = client_gates.get(index)
     if g is None:
-        g = asyncio.BoundedSemaphore(STREAM_GATE_LIMIT)
+        limit = PREMIUM_GATE_LIMIT if index == premium_index() else STREAM_GATE_LIMIT
+        g = asyncio.BoundedSemaphore(limit)
         client_gates[index] = g
     return g
 
@@ -108,11 +116,20 @@ def release_load(index):
         pass
 
 
-def pick_client_index():
-    """লোড সবচেয়ে কম এমন সুস্থ ক্লায়েন্ট — বেঞ্চড (cooling) ক্লায়েন্ট এড়িয়ে"""
+def pick_client_index(exclude_premium=True):
+    """সুস্থ বটদের মধ্যে সবচেয়ে কম লোডের ক্লায়েন্ট।
+    ⚡ ছোট ফাইল সাধারণত প্রিমিয়ামে যায় না; তবে সব বট বেঞ্চড হলে
+    প্রিমিয়াম শেষ ভরসা — তখন ও ধরা পড়বে (ইউজার ফাঁকা থাকবে না)।"""
     now = time.time()
-    healthy = [i for i in work_loads.keys() if not _cooling(i, now)]
-    pool = healthy if healthy else list(work_loads.keys())
+    all_keys = list(work_loads.keys())
+    pm = premium_index()
+    bots = [i for i in all_keys if i != pm] if (exclude_premium and pm not in (None, 0)) else all_keys
+    healthy = [i for i in bots if not _cooling(i, now)]
+    if healthy:
+        pool = healthy
+    else:
+        # সব বট বেঞ্চড হলে সুস্থ প্রিমিয়ামই শেষ ভরসা; কেউ সুস্থ না থাকলে সবাই
+        pool = [i for i in all_keys if not _cooling(i, now)] or all_keys
     return min(pool, key=lambda i: work_loads.get(i, 0))
 
 
@@ -399,6 +416,13 @@ async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
                 mark_client_failure(index)
                 logging.warning(f"FloodWait {e.value}s mid-stream on client {index} — abandoned, player will retry")
                 raise UpstreamTimeout()
+            except Exception as e:
+                # Telegram-পাশের সংযোগ মারা গেল (Connection lost / Broken pipe) —
+                # আগে চুপচাপ গিলে ফেলা হতো, তাই ভাঙা ক্লায়েন্ট সত্যিকারের
+                # bench হতো না। এখন ব্যর্থতা গণনায় ধরা হবে।
+                mark_client_failure(index)
+                logging.error(f"Stream died on client {index}: {e} — counted as failure")
+                raise UpstreamTimeout()
             mark_client_success(index)
             yield chunk
     finally:
@@ -412,10 +436,12 @@ async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
 
 
 def _busy_504():
+    # ৩-৬ সেকেন্ডে এলোমেলো বিলম্ব — সব প্লেয়ার একসাথে ধাক্কা মারলে
+    # আবার ভিড় জমে যায়, তা ভাঙতে জিটার
     return web.Response(
         status=504,
         text="Upstream busy — auto retrying…",
-        headers={"Retry-After": "3"},
+        headers={"Retry-After": str(3 + secrets.randbelow(4))},
     )
 
 
@@ -506,10 +532,15 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     # player নিজে থেকেই আবার চেষ্টা করবে। গেট হারানো = মৃত্যু-চক্র।
     if not await acquire_gate(index, STREAM_GATE_WAIT):
         _now = time.time()
-        alts = sorted(
-            (i for i in work_loads.keys() if i != index and not _cooling(i, _now)),
-            key=lambda i: work_loads.get(i, 0),
-        )
+        _pm = premium_index()
+        _others = [i for i in work_loads.keys() if i != index and not _cooling(i, _now)]
+        # ছোট ফাইল: আগে অন্য বটরা, সবাই ফুল হলে শেষে প্রিমিয়াম হেল্প করবে
+        # বড় ফাইল: index নিজেই প্রিমিয়াম, তাই তালিকায় বটরা-ই থাকে
+        if file_size > PREMIUM_SIZE_LIMIT or _pm is None:
+            alts = sorted(_others, key=lambda i: work_loads.get(i, 0))
+        else:
+            _bots = sorted((i for i in _others if i != _pm), key=lambda i: work_loads.get(i, 0))
+            alts = _bots + ([_pm] if _pm in _others else [])
         moved = False
         for alt in alts:
             if await acquire_gate(alt, OVERFLOW_GATE_WAIT):
