@@ -71,8 +71,41 @@ def mark_client_success(index):
     client_health[index] = {"fails": 0, "cooldown_until": 0.0}
 
 
+# ---------------------------------------------------------------
+# ⚡⚡ GATE SYSTEM — এক ক্লায়েন্টে অনিয়ন্ত্রিত সমান্তরাল স্ট্রিম ঢুকলে
+# pyrogram-এর একটাই TCP connection ভেঙে পড়ে ('Connection lost' →
+# session restart race → 504 ঝড় → player আরও রিট্রাই → মৃত্যু-চক্র)।
+# তাই প্রতি ক্লায়েন্টের সামনে গেট — সর্বোচ্চ ৮টি লাইভ স্ট্রিম।
+# ---------------------------------------------------------------
+client_gates: dict = {}   # client index -> BoundedSemaphore
+STREAM_GATE_LIMIT = 8     # প্রতি ক্লায়েন্টে একসাথে সর্বোচ্চ কতগুলো লাইভ স্ট্রিম
+STREAM_GATE_WAIT = 12     # গেট ফাঁকা হওয়ার অপেক্ষা (সেকেন্ড), এর পরে 504
+OVERFLOW_GATE_WAIT = 1    # ওভারফ্লোতে প্রতি অন্য ক্লায়েন্টে এত সেকেন্ড অপেক্ষা
+
+
+def _gate(index):
+    g = client_gates.get(index)
+    if g is None:
+        g = asyncio.BoundedSemaphore(STREAM_GATE_LIMIT)
+        client_gates[index] = g
+    return g
+
+
+async def acquire_gate(index, timeout):
+    """গেটে জায়গা পেলে True — না পেলে False (504 দিলে player নিজেই রিট্রাই করবে)"""
+    try:
+        await asyncio.wait_for(_gate(index).acquire(), timeout=timeout)
+        return True
+    except asyncio.TimeoutError:
+        return False
+
+
 def release_load(index):
     work_loads[index] = max(0, work_loads.get(index, 1) - 1)
+    try:
+        _gate(index).release()
+    except ValueError:
+        pass
 
 
 def pick_client_index():
@@ -466,6 +499,31 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
 
     req_length = until_bytes - from_bytes + 1
     part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+
+    # ⚡ STEP 2.5: GATE — নির্বাচিত ক্লায়েন্টে একসাথে ৮টির বেশি লাইভ স্ট্রিম
+    # ঢুকলে session ভেঙে যায়। তাই আগে গেটে জায়গা নিতে হবে; না পেলে
+    # অন্য সুস্থ ক্লায়েন্টগুলোতে ওভারফ্লো, সব ভরা হলে ছোট্ট 504 —
+    # player নিজে থেকেই আবার চেষ্টা করবে। গেট হারানো = মৃত্যু-চক্র।
+    if not await acquire_gate(index, STREAM_GATE_WAIT):
+        _now = time.time()
+        alts = sorted(
+            (i for i in work_loads.keys() if i != index and not _cooling(i, _now)),
+            key=lambda i: work_loads.get(i, 0),
+        )
+        moved = False
+        for alt in alts:
+            if await acquire_gate(alt, OVERFLOW_GATE_WAIT):
+                index = alt
+                moved = True
+                break
+        if moved:
+            tg_connect = streamer_for(multi_clients[index])
+            file_id = await get_props_safe(tg_connect, id)
+            file_size = file_id.file_size
+            logging.info(f"Gate full — overflow -> Client {index}")
+        else:
+            logging.warning(f"All gates full — shedding load (msg {id})")
+            return _busy_504()
 
     # ⚡ load কাউন্টার এখন routes নিজে সামলায় (yield_file থেকে সরানো হয়েছে) —
     # ঝুলে-যাওয়া স্ট্রিমও কাউন্টার আটকে রাখতে পারবে না
