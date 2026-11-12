@@ -407,7 +407,7 @@ async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
                 logging.error(
                     f"Stream idle > {idle_timeout}s on client {index} — abandoned, player will retry"
                 )
-                raise UpstreamTimeout()
+                raise ConnectionResetError("stream abandoned")
             try:
                 chunk = task.result()
             except StopAsyncIteration:
@@ -415,14 +415,14 @@ async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
             except FloodWait as e:
                 mark_client_failure(index)
                 logging.warning(f"FloodWait {e.value}s mid-stream on client {index} — abandoned, player will retry")
-                raise UpstreamTimeout()
+                raise ConnectionResetError("stream abandoned")
             except Exception as e:
                 # Telegram-পাশের সংযোগ মারা গেল (Connection lost / Broken pipe) —
                 # আগে চুপচাপ গিলে ফেলা হতো, তাই ভাঙা ক্লায়েন্ট সত্যিকারের
                 # bench হতো না। এখন ব্যর্থতা গণনায় ধরা হবে।
                 mark_client_failure(index)
                 logging.error(f"Stream died on client {index}: {e} — counted as failure")
-                raise UpstreamTimeout()
+                raise ConnectionResetError("stream abandoned")
             mark_client_success(index)
             yield chunk
     finally:
