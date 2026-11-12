@@ -7,10 +7,15 @@ from info import AUTH_PICS, AUTH_CHANNEL, ENABLE_LIMIT, RATE_LIMIT_TIMEOUT, MAX_
 import asyncio, time
 
 rate_limit = {}
-
+# ⚡ বটের নিজের username জীবনে একবারই নেওয়া হবে — প্রতি মেসেজে
+# get_me() কল করলে Telegram FLOOD_WAIT (users.GetFullUser) দেয়
+_BOT_USERNAME = None
 async def is_user_joined(bot, message: Message) -> bool:
+    global _BOT_USERNAME
     user_id = message.from_user.id
-    bot_user = await bot.get_me()    
+    if _BOT_USERNAME is None:
+        bot_user = await bot.get_me()
+        _BOT_USERNAME = bot_user.username
     not_joined_channels = []
     for channel_id in AUTH_CHANNEL:
         try:
@@ -45,7 +50,7 @@ async def is_user_joined(bot, message: Message) -> bool:
             for i, (title, link) in enumerate(not_joined_channels)
         ]
         buttons.append([
-            InlineKeyboardButton("🔄 Try Again", url=f"https://t.me/{bot_user.username}?start=start")
+            InlineKeyboardButton("🔄 Try Again", url=f"https://t.me/{_BOT_USERNAME}?start=start")
         ])
         await message.reply_photo(
             photo=AUTH_PICS,
