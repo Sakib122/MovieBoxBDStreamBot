@@ -41,6 +41,8 @@ sys.excepthook = handle_exception
 # Hack for Channel ID limits
 pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
+import session_patch   # ⚡ CPU-100% ফিক্স — PyroFork Session churn patch
+
 # ===============================
 # Logging Config
 # ===============================
