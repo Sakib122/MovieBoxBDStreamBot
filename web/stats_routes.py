@@ -8,21 +8,27 @@
 # সাকিব ভাইয়ের জন্য:
 #   GET  /admin          → পাসওয়ার্ড দিয়ে লগইন → লাইভ ড্যাশবোর্ড
 #     • মোট ইউজার, আজ অ্যাক্টিভ, প্রতিদিন কতজন জয়েন
-#     • কোন মুভি কতবার দেখা/প্লে/ডাউনলোড হয়েছে
-#     • কোন ভার্সন কতজন ব্যবহার করছে
+#     • 🎬 ব্লগের সবগুলো আপলোডের টেবিল — নতুনগুলো সবার উপরে, সার্চ অপশন,
+#       প্রতি মুভির ভিউ কাউন্ট, ব্লগার-এডিট + প্যানেল-হাইড বাটন (v2 নতুন)
+#     • ⬇ কোন মুভি বেশি ডাউনলোড হয়েছে — ওই সিস্টেম অক্ষত
 #     • 🚀 আপডেট ব্রডকাস্ট: ভার্সন + APK লিংক দিলেই সব অ্যাপে ব্যানার+নোটিফিকেশন
+#   v2 পরিবর্তন: আনইনস্টল কার্ড বাদ (ডিমোটিভেটিং ছিল), ব্লগ-মুভি টেবিল যোগ
 #
 # পাসওয়ার্ড: Koyeb-এ ADMIN_PASSWORD এনভায়রনমেন্ট ভ্যারিয়েবল দাও
 #   (না দিলে ডিফল্ট "moviebox@2026" — দ্রুত বদলাবে!)
+# ব্লগ: Koyeb-এ BLOG_URL ভ্যারিয়েবলে তোমার ব্লগের লিঙ্ক দাও
+#   (যেমন https://movieboxbd.blogspot.com) — টেবিল ওখান থেকেই লোড হয়
 # ══════════════════════════════════════════════════════════════════
 
 import os
 import re
 import time
+import asyncio
 import hashlib
 import html
 from collections import Counter
 
+import aiohttp
 from aiohttp import web
 
 from database.users_db import mydb
@@ -32,6 +38,7 @@ stats_routes = web.RouteTableDef()
 installs = mydb["mbx_installs"]     # {_id: installId, first, last, model, ver}
 events = mydb["mbx_events"]         # {id, event, label, ver, ts}
 appcfg = mydb["mbx_app_config"]     # {_id: "update", code, name, url, msg}
+hidden_db = mydb["mbx_hidden"]      # {_id: postId, ts} — প্যানেল থেকে লুকানো পোস্ট
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "moviebox@2026")
 COOKIE = "mbx_admin"
@@ -41,7 +48,133 @@ DAY = 86400.0
 TZ = 6 * 3600  # বাংলাদেশ UTC+6 — দিনের হিসাব এখান থেকে
 WEEKDAYS = ["সোম", "মঙ্গল", "বুধ", "বৃহঃ", "শুক্র", "শনি", "রবি"]
 
+# ──────────────────── 🎬 ব্লগ-ফিড (মুভি টেবিলের উৎস) ────────────────────
+BLOG_URL = os.environ.get("BLOG_URL", "").strip().rstrip("/")
+BLOG_TTL = 900        # ১৫ মিনিট ক্যাশ — CPU বাঁচাতে বারবার Blogger-কে টানা হয় না
+BLOG_MAX_POSTS = 3000  # সেফটি ক্যাপ
+BLOG_PAGE = 100
 
+_blog_state = {"ts": 0.0, "posts": [], "blog_id": "", "total": 0,
+               "err": "", "loading": False, "stale": False}
+
+
+def _t(v) -> str:
+    """Blogger JSON feed-এর $t-মোড়ানো ভ্যালু সোজা স্ট্রিং করে"""
+    if isinstance(v, dict):
+        return str(v.get("$t", "") or "")
+    return str(v or "")
+
+
+_NORM_RE = re.compile(r"[^0-9a-z\u0980-\u09FF]+")
+
+
+def _norm(s: str) -> str:
+    """টাইটেল-ম্যাচিংয়ের জন্য স্বাভাবিকীকরণ: ছোট হাতের + শুধু অক্ষর/সংখ্যা/বাংলা"""
+    return _NORM_RE.sub(" ", (s or "").lower()).strip()
+
+
+def _title_quality(title: str) -> str:
+    m = re.search(r"\b(2160|1080|720|480|360)p\b", title, re.IGNORECASE)
+    if m:
+        return m.group(0).lower()
+    if re.search(r"\b4\s?k\b", title, re.IGNORECASE):
+        return "4K"
+    m = re.search(r"\bEP\s*\d+(\s*-\s*\d+)?\b", title, re.IGNORECASE)
+    if m:
+        return m.group(0).upper().replace(" ", "")
+    if re.search(r"\bHD\b", title, re.IGNORECASE):
+        return "HD"
+    return "—"
+
+
+def _parse_blog_json(data) -> tuple:
+    """Blogger feed JSON → (posts list, blog_id, total) — অফলাইন-টেস্টেবল"""
+    feed = data.get("feed", {}) if isinstance(data, dict) else {}
+    blog_id = ""
+    m = re.search(r"blog-(\d+)", _t(feed.get("id")))
+    if m:
+        blog_id = m.group(1)
+    try:
+        total = int(float(_t(feed.get("openSearch$totalResults")) or 0))
+    except Exception:
+        total = 0
+    entries = feed.get("entry", []) or []
+    if isinstance(entries, dict):
+        entries = [entries]
+    posts = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        m = re.search(r"post-(\d+)", _t(e.get("id")))
+        pid = m.group(1) if m else ""
+        title = _t(e.get("title")).strip()
+        pub = _t(e.get("published"))[:10]
+        cats = e.get("category") or []
+        labels = []
+        if isinstance(cats, dict):
+            cats = [cats]
+        for c in cats:
+            if isinstance(c, dict) and c.get("term"):
+                labels.append(str(c["term"]))
+        if pid and title:
+            posts.append({"pid": pid, "title": title, "pub": pub, "labels": labels})
+    return posts, blog_id, total
+
+
+async def _fetch_blog_all():
+    """Blogger summary-feed থেকে সব পোস্ট টেনে ক্যাশে ভরে — প্রতি ১৫ মিনিটে"""
+    timeout = aiohttp.ClientTimeout(total=90)
+    posts, bid, total = [], "", 0
+    async with aiohttp.ClientSession(timeout=timeout,
+                                     headers={"User-Agent": "MovieBoxBD-Panel/2.0"}) as s:
+        for start in range(1, BLOG_MAX_POSTS + 1, BLOG_PAGE):
+            url = f"{BLOG_URL}/feeds/posts/summary?alt=json&max-results={BLOG_PAGE}&start-index={start}"
+            async with s.get(url) as r:
+                if r.status != 200:
+                    raise RuntimeError(f"HTTP {r.status}")
+                data = await r.json(content_type=None)
+            chunk, bid2, total2 = _parse_blog_json(data)
+            if bid2:
+                bid = bid2
+            if total2:
+                total = total2
+            posts.extend(chunk)
+            if len(chunk) < BLOG_PAGE:
+                break
+    _blog_state.update(ts=time.time(), posts=posts, blog_id=bid, total=total,
+                       err="", stale=False)
+
+
+def _ensure_blog_fresh(force: bool = False):
+    """ক্যাশ টাটকা থাকলে কিছু না; বাসি/খালি হলে ব্যাকগ্রাউন্ডে ফ্রেশ করে —
+    প্যানেল লোড কখনোই আটকায় না (0.1 vCPU-তে জরুরি)"""
+    if not BLOG_URL:
+        return
+    fresh = _blog_state["posts"] and (time.time() - _blog_state["ts"]) < BLOG_TTL
+    if fresh and not force:
+        return
+    if _blog_state["loading"]:
+        return
+    _blog_state["loading"] = True
+
+    async def _job():
+        try:
+            await _fetch_blog_all()
+        except Exception as e:
+            if _blog_state["posts"]:
+                _blog_state.update(err=str(e)[:120], stale=True)
+            else:
+                _blog_state.update(err=str(e)[:120], ts=time.time())
+        finally:
+            _blog_state["loading"] = False
+
+    try:
+        asyncio.get_running_loop().create_task(_job())
+    except Exception:
+        _blog_state["loading"] = False
+
+
+# ──────────────────────── ট্র্যাকিং হেল্পার ────────────────────────
 def _day_key(ts: float) -> int:
     return int((ts + TZ) // DAY)
 
@@ -169,14 +302,57 @@ def _page(title: str, body: str) -> web.Response:
   th,td{{padding:8px 12px;text-align:left;font-size:14px;border-bottom:1px solid #232742}}
   th{{color:#8A93B2;font-weight:600;background:#1B1F36}}
   td.num{{color:#7C4DFF;font-weight:700}}
-  .scroll{{max-height:420px;overflow-y:auto}}
+  td .pid{{color:#5A6284;font-size:11px;margin-top:2px}}
+  .scroll{{max-height:460px;overflow-y:auto}}
   .bar{{color:#00E5A0;letter-spacing:1px}}
   form{{background:#171A2E;border-radius:12px;padding:16px;max-width:640px}}
+  form.inline{{background:none;padding:0;max-width:none;display:inline;margin:0}}
   input,textarea{{width:100%;box-sizing:border-box;background:#0D0F1C;border:1px solid #2A2F4F;
     color:#ECEFF7;border-radius:8px;padding:9px 11px;font-size:14px;margin:4px 0 10px}}
+  input.search{{width:auto;max-width:280px;display:inline-block;margin:0;vertical-align:middle}}
   button{{background:#7C4DFF;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}}
-  button.gray{{background:#2A2F4F}} a{{color:#00E5A0}} .cur{{background:#232742;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:14px}}
+  button.gray{{background:#2A2F4F}}
+  button.mini{{background:#232742;color:#DCE3FF;border:1px solid #2A2F4F;border-radius:7px;
+    padding:5px 10px;font-size:12px;cursor:pointer;margin:2px}}
+  button.mini:hover{{background:#2A2F4F}}
+  button.warn{{background:#3A1F26;color:#FF9C9C;border-color:#5A2A34}}
+  a.mini{{background:#1E2A4A;color:#00E5A0;text-decoration:none;border-radius:7px;
+    padding:5px 10px;font-size:12px;display:inline-block;border:1px solid #2A3F55;margin:2px}}
+  .chip{{display:inline-block;background:#232742;border-radius:14px;padding:4px 10px;margin:3px;font-size:12px}}
+  .hot{{color:#00E5A0}}
+  .box{{background:#171A2E;border:1px solid #2A2F4F;border-radius:12px;padding:14px;font-size:14px;color:#8A93B2}}
+  a{{color:#00E5A0}} .cur{{background:#232742;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:14px}}
 </style></head><body>{body}</body></html>""", content_type="text/html")
+
+
+@stats_routes.post("/admin/hidemovie")
+async def admin_hidemovie(request):
+    """🙈 প্যানেলের তালিকা থেকে পোস্ট লুকাও (ব্লগ থেকে ডিলিট হয় না)"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        pid = str(form.get("pid", "")).strip()[:32]
+        if pid:
+            await hidden_db.update_one({"_id": pid}, {"$set": {"ts": time.time()}}, upsert=True)
+    except Exception:
+        pass
+    return web.HTTPFound("/admin")
+
+
+@stats_routes.post("/admin/showmovie")
+async def admin_showmovie(request):
+    """👁 লুকানো পোস্ট আবার দেখাও"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        pid = str(form.get("pid", "")).strip()[:32]
+        if pid:
+            await hidden_db.delete_one({"_id": pid})
+    except Exception:
+        pass
+    return web.HTTPFound("/admin")
 
 
 @stats_routes.get("/admin")
@@ -202,25 +378,24 @@ async def admin_home(request):
         active_today = await installs.count_documents({"last": {"$gte": midnight}})
         new_today = await installs.count_documents({"first": {"$gte": midnight}})
         live_now = await installs.count_documents({"last": {"$gte": now - 60}})   # 🔴 ১ মিনিটে অ্যাক্টিভ
-        gone = await installs.count_documents({"last": {"$lt": now - 2 * DAY}})   # 🗑 ২ দিন নিরব = আনইনস্টল (আনুমানিক)
     except Exception:
         total = active_today = new_today = 0
-        live_now = gone = 0
+        live_now = 0
 
     joins = Counter()
-    views, plays, dls = Counter(), Counter(), Counter()
+    dls = Counter()
     versions = Counter()
+    vnorm = Counter()   # 🎬 স্বাভাবিকীকৃত লেবেল → view+play সংখ্যা (৩০ দিন)
     try:
         async for u in installs.find({"first": {"$gte": week}}, {"first": 1}):
             joins[_day_key(float(u.get("first") or 0))] += 1
         async for u in installs.find({"last": {"$gte": month}}, {"ver": 1}):
             versions[str(u.get("ver") or "?")] += 1
-        async for e in events.find({"event": "view", "ts": {"$gte": month}}, {"label": 1}):
-            if e.get("label"):
-                views[e["label"]] += 1
-        async for e in events.find({"event": "play", "ts": {"$gte": month}}, {"label": 1}):
-            if e.get("label"):
-                plays[e["label"]] += 1
+        async for e in events.find({"event": {"$in": ["view", "play"]},
+                                    "ts": {"$gte": month}}, {"label": 1}):
+            lab = (e.get("label") or "").strip()
+            if lab:
+                vnorm[_norm(lab)] += 1
         async for e in events.find({"event": "download", "ts": {"$gte": month}}, {"label": 1}):
             if e.get("label"):
                 dls[e["label"]] += 1
@@ -233,6 +408,111 @@ async def admin_home(request):
     except Exception:
         pass
 
+    # ── 🎬 ব্লগের সব আপলোড ──────────────────────────────────────────
+    _ensure_blog_fresh(force=request.query.get("refresh") == "1")
+    hidden_pids = set()
+    hidden_docs = []
+    try:
+        hcur = hidden_db.find({}, {"_id": 1, "ts": 1}).limit(500)
+        hidden_docs = [d async for d in hcur]
+        hidden_pids = {str(d["_id"]) for d in hidden_docs}
+    except Exception:
+        pass
+
+    blog_posts = [p for p in _blog_state["posts"] if p["pid"] not in hidden_pids]
+
+    def _views_for(title: str) -> int:
+        nt = _norm(title)
+        if not nt or len(nt) < 6:
+            return 0
+        v = vnorm.get(nt, 0)
+        if v:
+            return v
+        pref = nt + " "
+        for nl, c in vnorm.items():
+            if nl.startswith(pref):
+                v += c
+        return v
+
+    def _movie_rows() -> str:
+        if not blog_posts:
+            return ""
+        out = []
+        for p in blog_posts:
+            title = p["title"]
+            v = _views_for(title)
+            q = _title_quality(title)
+            cat = " · ".join(p["labels"][:2]) if p["labels"] else "—"
+            pub = html.escape(p["pub"] or "—")
+            if _blog_state["blog_id"]:
+                edit = f"https://www.blogger.com/blog/post/edit/{_blog_state['blog_id']}/{p['pid']}"
+                edit_btn = (f"<a class='mini' href='{html.escape(edit, quote=True)}' "
+                            f"target='_blank' rel='noopener'>✏️ এডিট</a>")
+            else:
+                edit_btn = ""
+            t_show = html.escape(title[:90] + ("…" if len(title) > 90 else ""))
+            vcls = "num hot" if v >= 100 else "num"
+            out.append(
+                f"<tr data-v='{v}' data-d='{pub}'>"
+                f"<td><b>{t_show}</b>"
+                f"<div class='pid'>ID: {html.escape(p['pid'][:12])}… · {pub}</div></td>"
+                f"<td>{html.escape(q)}</td>"
+                f"<td>{html.escape(cat)}</td>"
+                f"<td class='{vcls}'>{v}</td>"
+                f"<td>{edit_btn}"
+                f"<form class='inline' method='post' action='/admin/hidemovie'>"
+                f"<input type='hidden' name='pid' value='{html.escape(p['pid'], quote=True)}'>"
+                f"<button class='mini warn' onclick=\"return confirm('প্যানেল থেকে লুকানো হবে — ব্লগ থেকে ডিলিট হবে না, ঠিক আছে?')\">🙈 লুকাও</button>"
+                f"</form></td></tr>"
+            )
+        return "".join(out)
+
+    if not BLOG_URL:
+        movies_html = ("<div class='box'>⚙️ ব্লগ-টেবিল চালু করতে Koyeb-এ "
+                       "<b style='color:#ECEFF7'>BLOG_URL</b> এনভায়রনমেন্ট ভ্যারিয়েবলে তোমার ব্লগের "
+                       "লিঙ্ক দাও (যেমন https://movieboxbd.blogspot.com) — তারপর সার্ভিস রিস্টার্ট। "
+                       "বাকি সব এখনই কাজ করছে।</div>")
+    elif not blog_posts:
+        if _blog_state["loading"] or not _blog_state["ts"]:
+            movies_html = ("<div class='box'>⏳ ব্লগ থেকে সব পোস্ট আনা হচ্ছে… "
+                           "২০-৩০ সেকেন্ড পর পেজটা একবার রিফ্রেশ করো।"
+                           "<script>setTimeout(function(){location.reload()},25000)</script></div>")
+        else:
+            movies_html = (f"<div class='box'>⚠️ ব্লগ পড়া যায়নি: "
+                           f"{html.escape(_blog_state['err'] or 'কোনো পোস্ট পাওয়া যায়নি')} — "
+                           f"BLOG_URL ঠিক আছে কিনা দেখো। <a href='/admin?refresh=1'>আবার চেষ্টা</a></div>")
+    else:
+        stale_note = " · <i>তালিকা ফ্রেশ হচ্ছে, একটু পর রিলোড করলে নতুন পোস্ট দেখা যাবে</i>" \
+            if (_blog_state["loading"] or _blog_state["stale"]) else ""
+        movies_html = (
+            f"<div class='sub'>মোট <b style='color:#ECEFF7'>{len(blog_posts)}</b>টি পোস্ট "
+            f"(লুকানো {len(hidden_docs)}টা বাদে) · নতুনগুলো সবার উপরে · "
+            f"ভিউ = গত ৩০ দিনের view+play{stale_note} · "
+            f"<a href='/admin?refresh=1'>🔄 ফ্রেশ করো</a></div>"
+            f"<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px'>"
+            f"<input class='search' id='mvSearch' type='search' placeholder='🔍 Search movie…' "
+            f"onkeyup='mvFilter(this.value)' autocomplete='off'>"
+            f"<button class='mini' onclick='mvSort(&quot;date&quot;)'>🆕 নতুন আগে</button>"
+            f"<button class='mini' onclick='mvSort(&quot;views&quot;)'>🔥 বেশি ভিউ আগে</button>"
+            f"</div>"
+            f"<div class='scroll'><table id='mvTable'><thead><tr>"
+            f"<th>টাইটেল</th><th>কোয়ালিটি</th><th>ক্যাটাগরি</th><th>ভিউ</th><th>অ্যাকশন</th>"
+            f"</tr></thead><tbody>{_movie_rows()}</tbody></table></div>"
+        )
+
+    hidden_html = ""
+    if hidden_docs:
+        chips = []
+        for d in hidden_docs:
+            pid = str(d["_id"])
+            chips.append(
+                f"<form class='inline' method='post' action='/admin/showmovie'>"
+                f"<input type='hidden' name='pid' value='{html.escape(pid, quote=True)}'>"
+                f"<span class='chip'>🙈 {html.escape(pid[:10])}… "
+                f"<button class='mini' type='submit'>দেখাও</button></span></form>"
+            )
+        hidden_html = f"<h2>🙈 লুকানো পোস্ট ({len(hidden_docs)})</h2><div>{''.join(chips)}</div>"
+
     def rows(counter):
         top = counter.most_common()   # 🎬 ক্যাপ নাই — ৩০ দিনের সবগুলো দেখাবে, কিছু বাদ যাবে না
         if not top:
@@ -244,8 +524,8 @@ async def admin_home(request):
         # 🎬 ফুল লিস্ট — স্ক্রলসহ, উপরে মোট হিসাব
         if not counter:
             return "<table><tr><td colspan=2 style='color:#8A93B2'>এখনো কোনো ডাটা নেই</td></tr></table>"
-        total = sum(counter.values())
-        head = f"<div class='sub'>মোট {len(counter)}টি মুভি · {total} বার {unit} — যত বেশি দেখা, তত উপরে</div>"
+        tot = sum(counter.values())
+        head = f"<div class='sub'>মোট {len(counter)}টি মুভি · {tot} বার {unit} — যত বেশি দেখা, তত উপরে</div>"
         return head + f"<div class='scroll'><table><tr><th>মুভি</th><th>{unit}</th></tr>{rows(counter)}</table></div>"
 
     peak = max(joins.values()) if joins else 0
@@ -266,7 +546,7 @@ async def admin_home(request):
     cur_html = ("🚀 চালু আছে: <b style='color:#00E5A0'>v{} ({})</b> — {} — <a href='{}'>{}</a>"
                 .format(html.escape(str(cur.get("code", ""))), html.escape(str(cur.get("name", ""))),
                         html.escape(str(cur.get("msg", ""))), html.escape(str(cur.get("url", "")), quote=True),
-                        "APK লিংক ✓")
+                        "APK লিঙ্ক ✓")
                 if cur else "এখনো কোনো আপডেট ঘোষণা করা হয়নি")
 
     body = f"""
@@ -278,19 +558,15 @@ async def admin_home(request):
       <div class="card"><div class="n">{active_today}</div><div class="t">🟢 আজ অ্যাক্টিভ</div></div>
       <div class="card"><div class="n">{new_today}</div><div class="t">✨ আজ নতুন জয়েন</div></div>
       <div class="card"><div class="n">{total}</div><div class="t">👥 মোট ইউজার</div></div>
-      <div class="card"><div class="n">{gone}</div><div class="t">🗑 আনইনস্টল (আনুমানিক)</div></div>
     </div>
-    <div class="sub">🗑 আনইনস্টল = গত ২ দিনে সার্ভারে কোনো খবর পাওয়া যায়নি এমন ফোন (আনুমানিক)।
-    🔴 লাইভ সংখ্যা প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
+    <div class="sub">🔴 লাইভ সংখ্যা প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
+
+    <h2>🎬 আপলোড হওয়া মুভি/সিরিজ — ব্লগের সবগুলো</h2>
+    {movies_html}
+    {hidden_html}
 
     <h2>📅 শেষ ৭ দিনে জয়েন (প্রতিদিন)</h2>
     <table>{bars_html}</table>
-
-    <h2>👀 দেখা হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
-    {table_html(views, "ভিউ")}
-
-    <h2>▶ প্লে হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
-    {table_html(plays, "প্লে")}
 
     <h2>⬇ ডাউনলোড হয়েছে যেসব মুভি (৩০ দিন — সবগুলো)</h2>
     {table_html(dls, "ডাউনলোড")}
@@ -307,14 +583,30 @@ async def admin_home(request):
       <input name="code" type="number" min="1" required>
       <label>ভার্সন নাম (যেমন 2.6)</label>
       <input name="name" placeholder="2.6" required>
-      <label>APK ডাউনলোড লিংক (GitHub Release-এর MovieBoxBD.apk লিংক)</label>
+      <label>APK ডাউনলোড লিঙ্ক (GitHub Release-এর MovieBoxBD.apk লিঙ্ক)</label>
       <input name="url" type="url" placeholder="https://github.com/Sakib122/MovieBoxBD-App/releases/…" required>
       <label>ছোট মেসেজ (ইউজার কী পাবে — যেমন: সাউন্ড সমস্যা ফিক্স)</label>
       <input name="msg" placeholder="নতুন ফিচার ও ফিক্স">
       <button type="submit">🚀 আপডেট ঘোষণা করো</button>
       <button type="submit" formaction="/admin/clearupdate" class="gray">⏹ আপডেট বন্ধ করো</button>
     </form>
-        <script>
+    <script>
+    function mvFilter(q) {{
+      q = q.toLowerCase();
+      document.querySelectorAll('#mvTable tbody tr').forEach(function(tr) {{
+        tr.style.display = tr.textContent.toLowerCase().indexOf(q) > -1 ? '' : 'none';
+      }});
+    }}
+    function mvSort(key) {{
+      var tb = document.querySelector('#mvTable tbody');
+      if (!tb) return;
+      var rows = [].slice.call(tb.querySelectorAll('tr'));
+      rows.sort(function(a, b) {{
+        if (key === 'views') return (parseInt(b.getAttribute('data-v')) || 0) - (parseInt(a.getAttribute('data-v')) || 0);
+        return (b.getAttribute('data-d') || '').localeCompare(a.getAttribute('data-d') || '');
+      }});
+      rows.forEach(function(r) {{ tb.appendChild(r); }});
+    }}
     setInterval(async () => {{
       try {{
         const r = await fetch('/api/live');
