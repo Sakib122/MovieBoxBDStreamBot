@@ -98,11 +98,18 @@ async def render_page(id, secure_hash, src=None):
         template_file = "web/template/webav.html"
     else:
         template_file = "web/template/dl.html"
-        async with aiohttp.ClientSession() as s:
-            async with s.get(src) as u:
-                content_len = u.headers.get("Content-Length")
-                if content_len:
-                    file_size = humanbytes(int(content_len))
+        # ⚡ অপটিমাইজেশন: আগে নিজের স্ট্রিম রুটে পুরো GET পাঠাত — মানে
+        # ডকুমেন্ট পেজ খুললেই একটা আসল টেলিগ্রাম ডাউনলোড শুরু হতো!
+        # এখন HEAD — ওর জন্য stream_routes-এ short-circuit আছে, শুধু
+        # হেডার আসে (Content-Length থেকে সাইজ), একটাও বাইট নামে না।
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.head(src, allow_redirects=False) as u:
+                    content_len = u.headers.get("Content-Length")
+                    if content_len:
+                        file_size = humanbytes(int(content_len))
+        except Exception as e:
+            logging.debug(f"HEAD size probe failed for {src}: {e}")
 
     async with aiofiles.open(template_file, mode='r') as f:
         template_content = await f.read()
