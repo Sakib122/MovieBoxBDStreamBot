@@ -66,4 +66,9 @@ async def check_expired_premium(client):
                 except Exception as e:
                     print(f"[REMINDER ERROR] {e}")
                 await sleep(0.5)
-        await sleep(1)
+        # ⚡ CPU অপটিমাইজেশন: আগে প্রতি ১ সেকেন্ডে এই লুপ ৪টা MongoDB কোয়েরি
+        # চালাত (get_expired + ৩টা get_expiring_soon) — মানে রাতদিনে ৩ লাখ+
+        # মৃত কোয়েরি, 0.1 vCPU বক্সে এটাই স্থায়ী ব্যাকগ্রাউন্ড চাপ ছিল।
+        # রিমাইন্ডারগুলোর সূক্ষ্মতা ৫০ মিনিট / ৫ ঘণ্টা / ১ দিন — তাই
+        # ৬০ সেকেন্ড পোলিং-ই যথেষ্ট, কোনো ইউজার টেরও পাবে না।
+        await sleep(60)

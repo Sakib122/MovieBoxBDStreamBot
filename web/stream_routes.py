@@ -239,6 +239,9 @@ async def watch_handler(request: web.Request):
         else:
             id = int(re.search(r"(\d+)(?:\/\S+)?", path).group(1))
             secure_hash = request.rel_url.query.get("hash")
+        # ⚡ HEAD-এ টেমপ্লেট রেন্ডারের দরকার নেই — সস্তা হেডার-উত্তরই যথেষ্ট
+        if request.method == "HEAD":
+            return web.Response(status=200, content_type="text/html")
         return web.Response(
             text=await render_page(id, secure_hash), content_type="text/html"
         )
@@ -278,6 +281,20 @@ async def thumb_handler(request: web.Request):
         # হ্যাশ ছাড়া / ভুল হ্যাশ → ছবি কেউ চুরি করতে পারবে না
         if not secure_hash:
             return web.Response(status=403, text="Forbidden")
+
+        # ⚡ HEAD + ক্যাশ হিট = বাইট না পাঠিয়ে শুধু হেডার (ক্যাশ মিস হলে নিচে
+        # স্বাভাবিক পথে গিয়ে একবার নামিয়ে নেবে, পরে সব HEAD ফ্রি)
+        if request.method == "HEAD":
+            cached = thumb_cache.get(id)
+            if cached:
+                return web.Response(
+                    status=200,
+                    content_type="image/jpeg",
+                    headers={
+                        "Cache-Control": "public, max-age=604800",
+                        "Content-Length": str(len(cached[0])),
+                    },
+                )
 
         cached = thumb_cache.get(id)
         if cached:
@@ -349,6 +366,9 @@ async def stream_handler(request: web.Request):
         else:
             id = int(re.search(r"(\d+)(?:\/\S+)?", path).group(1))
             secure_hash = request.rel_url.query.get("hash")
+        # ⚡ HEAD = বডি কেউ চায় না — টেলিগ্রাম স্ট্রিম শুরু না করে শুধু হেডার
+        if request.method == "HEAD":
+            return await media_streamer_head(request, id, secure_hash)
         return await media_streamer(request, id, secure_hash)
     except InvalidHash as e:
         raise web.HTTPForbidden(text=e.message)
@@ -452,6 +472,56 @@ def _busy_504():
     )
 
 
+# ---------------------------------------------------------------
+# ⚡⚡ HEAD SHORT-CIRCUIT — CPU বাঁচানোর সবচেয়ে সস্তা উপায়
+# ---------------------------------------------------------------
+# প্লেয়ার, আপটাইম-মনিটর, ব্রাউজার প্রিফ্লাইট, স্ক্র্যাপার — অনেকেই ভিডিও
+# লিংকে HEAD রিকোয়েস্ট পাঠায়। আগে প্রতিটি HEAD ক্যাচ-অল রুট দিয়ে
+# media_streamer-এ ঢুকে যেত: মানে প্রতিটি HEAD = props লুকআপ + gate +
+# টেলিগ্রামে GetFile (আসল স্ট্রিম শুরু!) — কেউ বডি পড়বে না জেনেও।
+# এখন HEAD-এ শুধু ক্যাশড props দিয়ে হেডার ফেরত — টেলিগ্রামের GetFile-এ
+# হাতই দেওয়া হয় না। একটাও বাইট ডাউনলোড ছাড়া উত্তর।
+def _base_streamer():
+    c = multi_clients.get(0) or next(iter(multi_clients.values()))
+    return streamer_for(c)
+
+
+async def media_streamer_head(request: web.Request, id: int, secure_hash: str):
+    streamer = _base_streamer()
+    file_id = await get_props_safe(streamer, id)
+
+    if file_id.unique_id[:6] != secure_hash:
+        raise InvalidHash
+
+    file_size = file_id.file_size
+    mime_type = (file_id.mime_type
+                 or mimetypes.guess_type(file_id.file_name or "")[0]
+                 or "application/octet-stream")
+
+    headers = {
+        "Content-Type": str(mime_type),
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store, no-cache, must-revalidate, private",
+        "CDN-Cache-Control": "no-store",
+    }
+
+    range_header = request.headers.get("Range")
+    if range_header:
+        rm = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", str(range_header).strip())
+        if rm and (rm.group(1) or rm.group(2)):
+            from_bytes = (file_size - min(int(rm.group(2)), file_size)) if rm.group(1) == "" else int(rm.group(1))
+        else:
+            from_bytes = 0
+        if 0 <= from_bytes < file_size:
+            headers["Content-Range"] = f"bytes {from_bytes}-{file_size - 1}/{file_size}"
+            headers["Content-Length"] = str(file_size - from_bytes)
+            return web.Response(status=206, headers=headers)
+
+    headers["Content-Length"] = str(file_size)
+    return web.Response(status=200, headers=headers)
+
+
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
@@ -474,18 +544,25 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
         index = pick_client_index()
 
     # ⚡ STEP 3: যে ক্লায়েন্ট স্ট্রিম দেবে, তার নিজের streamer + নিজের fresh file reference
-    tg_connect = streamer_for(multi_clients[index])
-    try:
-        file_id = await get_props_safe(tg_connect, id)
-        file_size = file_id.file_size
-    except Exception as e:
-        # এই ক্লায়েন্ট ফাইলের তথ্যই দিতে পারল না — বেঞ্চ করে অন্য ক্লায়েন্ট দিয়ে একবার চেষ্টা
-        mark_client_failure(index)
-        logging.warning(f"Client {index} props failed ({e}) — trying another client")
-        index = pick_client_index()
+    # ⚡ অপটিমাইজেশন: নির্বাচিত ক্লায়েন্ট যদি base ক্লায়েন্টই হয়, STEP 1-এ পাওয়া
+    # props-ই ব্যবহার হবে — দ্বিতীয় লুকআপ (Telegram getMessages) একদম বাদ।
+    # আগে প্রতি স্ট্রিমে একই ক্লায়েন্টের streamer-এ আবার জিজ্ঞেস করা হতো।
+    base_index = 0 if 0 in multi_clients else next(iter(multi_clients))
+    if index == base_index:
+        tg_connect = base_streamer
+    else:
         tg_connect = streamer_for(multi_clients[index])
-        file_id = await get_props_safe(tg_connect, id)
-        file_size = file_id.file_size
+        try:
+            file_id = await get_props_safe(tg_connect, id)
+            file_size = file_id.file_size
+        except Exception as e:
+            # এই ক্লায়েন্ট ফাইলের তথ্যই দিতে পারল না — বেঞ্চ করে অন্য ক্লায়েন্ট দিয়ে একবার চেষ্টা
+            mark_client_failure(index)
+            logging.warning(f"Client {index} props failed ({e}) — trying another client")
+            index = pick_client_index()
+            tg_connect = streamer_for(multi_clients[index])
+            file_id = await get_props_safe(tg_connect, id)
+            file_size = file_id.file_size
 
     if MULTI_CLIENT:
         logging.info(f"Client {index} is now serving {request.remote}")
