@@ -28,51 +28,44 @@ REMINDER_TIMES = [
 ]
 
 async def check_expired_premium(client):
-    # 🛡 সেলফ-হিলিং লুপ: আগে একবার error হলেই টাস্কটা চিরতরে মরে যেত
-    # ("Task exception was never retrieved") — মানে কারো প্রিমিয়াম শেষ হলে
-    # আর কখনো নোটিফিকেশন যেত না। এখন error হলে ৬০ সেকেন্ড পর আবার চেষ্টা।
     while True:
-        try:
-            now = datetime.utcnow()
-            expired_users = await db.get_expired(now)
-            for user in expired_users:
+        now = datetime.utcnow()
+        expired_users = await db.get_expired(now)
+        for user in expired_users:
+            user_id = user["id"]
+            await db.remove_premium_access(user_id)
+            unset_flags = {f"reminder_{label}_sent": "" for label, _ in REMINDER_TIMES}
+            await db.users.update_one({"id": user_id}, {"$unset": unset_flags})
+            try:
+                tg_user = await client.get_users(user_id)
+                await client.send_message(
+                    user_id,
+                    f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss ʜᴀs ᴇxᴘɪʀᴇᴅ.\n\nTᴀᴘ /plan ꜰᴏʀ ʀᴇɴᴇᴡᴀʟ ᴏᴘᴛɪᴏɴs.</b>"
+                )
+                await client.send_message(
+                    PREMIUM_LOGS,
+                    f"<b>#Premium_Expired\nUser: {tg_user.mention}\nID: <code>{user_id}</code></b>"
+                )
+            except Exception as e:
+                print(f"[EXPIRED ERROR] {e}")
+            await sleep(0.5)
+        for label, delta in REMINDER_TIMES:
+            reminder_users = await db.get_expiring_soon(label, delta)
+            for user in reminder_users:
                 user_id = user["id"]
-                await db.remove_premium_access(user_id)
-                unset_flags = {f"reminder_{label}_sent": "" for label, _ in REMINDER_TIMES}
-                await db.users.update_one({"id": user_id}, {"$unset": unset_flags})
                 try:
                     tg_user = await client.get_users(user_id)
                     await client.send_message(
                         user_id,
-                        f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss ʜᴀs ᴇxᴘɪʀᴇᴅ.\n\nTᴀᴘ /plan ꜰᴏʀ ʀᴇɴᴇᴡᴀʟ ᴏᴘᴛɪᴏɴs.</b>"
+                        f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴡɪʟʟ ᴇxᴘɪʀᴇ ɪɴ {label}.\nTᴀᴘ /plan ꜰᴏʀ ʀᴇɴᴇᴡᴀʟ ᴏᴘᴛɪᴏɴs.</b>"
                     )
                     await client.send_message(
                         PREMIUM_LOGS,
-                        f"<b>#Premium_Expired\nUser: {tg_user.mention}\nID: <code>{user_id}</code></b>"
+                        f"<b>#Reminder ({label})\nUser: {tg_user.mention}\nID: <code>{user_id}</code></b>"
                     )
                 except Exception as e:
-                    print(f"[EXPIRED ERROR] {e}")
+                    print(f"[REMINDER ERROR] {e}")
                 await sleep(0.5)
-            for label, delta in REMINDER_TIMES:
-                reminder_users = await db.get_expiring_soon(label, delta)
-                for user in reminder_users:
-                    user_id = user["id"]
-                    try:
-                        tg_user = await client.get_users(user_id)
-                        await client.send_message(
-                            user_id,
-                            f"<b>ʜᴇʏ {tg_user.mention},\n\nʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴡɪʟʟ ᴇxᴘɪʀᴇ ɪɴ {label}.\nTᴀᴘ /plan ꜰᴏʀ ʀᴇɴᴇᴡᴀʟ ᴏᴘᴛɪᴏɴs.</b>"
-                        )
-                        await client.send_message(
-                            PREMIUM_LOGS,
-                            f"<b>#Reminder ({label})\nUser: {tg_user.mention}\nID: <code>{user_id}</code></b>"
-                        )
-                    except Exception as e:
-                        print(f"[REMINDER ERROR] {e}")
-                    await sleep(0.5)
-        except Exception as e:
-            # 🛡 একবারের DB/নেটওয়ার্ক ঝিমানোয় চেকার আর মরবে না
-            print(f"[PREMIUM CHECKER ERROR] {e}")
         # ⚡ CPU অপটিমাইজেশন: আগে প্রতি ১ সেকেন্ডে এই লুপ ৪টা MongoDB কোয়েরি
         # চালাত (get_expired + ৩টা get_expiring_soon) — মানে রাতদিনে ৩ লাখ+
         # মৃত কোয়েরি, 0.1 vCPU বক্সে এটাই স্থায়ী ব্যাকগ্রাউন্ড চাপ ছিল।
