@@ -27,7 +27,11 @@ try:
 except Exception:
     print("uvloop not available — using default asyncio loop")
 
-asyncio.set_event_loop(asyncio.new_event_loop())
+# ⚡ লুপ একবারই তৈরি ও সেট করা হয় — নিচের __main__ ব্লক এটাকেই ব্যবহার করে
+# (আগে __main__-এ asyncio.get_event_loop() ডাকা হতো → Python 3.12-এ
+# DeprecationWarning আসত; এখন সেটা নেই, লুপ একটাই — Motor/সব টাস্ক একই লুপে)
+MAIN_LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(MAIN_LOOP)
 
 from info import *
 from utils import temp, ping_server
@@ -192,11 +196,7 @@ async def Webav_start():
 # ENTRY POINT
 # ===============================
 if __name__ == "__main__":
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    loop = MAIN_LOOP   # ইমপোর্ট-টাইমেই তৈরি ও সেট করা লুপ — নতুন করে বানানো হয় না
 
     try:
         loop.run_until_complete(Webav_start())
