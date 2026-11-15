@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════
-# 📊 MovieBoxBD অ্যাডমিন প্যানেল + অ্যাপ-ট্র্যাকিং API (aiohttp)
+# 📊 MovieBoxBD অ্যাডমিন প্যানেল v4 + অ্যাপ-ট্র্যাকিং API (aiohttp)
 #
 # অ্যাপ থেকে আসে:
 #   POST /api/track      → ইনস্টল / অ্যাপ-ওপেন / ভিউ / প্লে / ডাউনলোড
@@ -8,11 +8,14 @@
 # সাকিব ভাইয়ের জন্য:
 #   GET  /admin          → পাসওয়ার্ড দিয়ে লগইন → লাইভ ড্যাশবোর্ড
 #     • মোট ইউজার, আজ অ্যাক্টিভ, প্রতিদিন কতজন জয়েন
-#     • 🎬 ব্লগের সবগুলো আপলোডের টেবিল — নতুনগুলো সবার উপরে, সার্চ অপশন,
-#       প্রতি মুভির ভিউ কাউন্ট, ব্লগার-এডিট + প্যানেল-হাইড বাটন (v2 নতুন)
+#     • 🎬 ব্লগের সবগুলো আপলোডের টেবিল — নতুনগুলো সবার উপরে, সার্চ অপশন
+#     • 🆕 v3: এডিট/লুকাও বাটন বাদ — পোস্ট এডিট-ডিলিট এখন শুধু ব্লগারেই
+#     • 🆕 v4: ভিউ = মুভির পেজ/ডিটেইল খুললেই অটোমেটিক কাউন্ট (view ইভেন্ট) —
+#       আগের ভিউ-সিস্টেমই থাকবে; প্লে-ভিত্তিক হিসাব আর এপিসোড/কোয়ালিটি ভাগ বাদ
 #     • ⬇ কোন মুভি বেশি ডাউনলোড হয়েছে — ওই সিস্টেম অক্ষত
-#     • 🚀 আপডেট ব্রডকাস্ট: ভার্সন + APK লিংক দিলেই সব অ্যাপে ব্যানার+নোটিফিকেশন
-#   v2 পরিবর্তন: আনইনস্টল কার্ড বাদ (ডিমোটিভেটিং ছিল), ব্লগ-মুভি টেবিল যোগ
+#     • 🚀 আপডেট ব্রডকাস্ট: ভার্সন + APK লিঙ্ক দিলেই সব অ্যাপে ব্যানার+নোটিফিকেশন
+#   ইতিহাস: v3 = বাটন বাদ + প্লে-ভিত্তিক ভিউ + নতুন ডিজাইন
+#            v4 = প্লে-সিস্টেম বাদ — ভিউ আবার পেজ-ভিউ অটো-কাউন্ট
 #
 # পাসওয়ার্ড: Koyeb-এ ADMIN_PASSWORD এনভায়রনমেন্ট ভ্যারিয়েবল দাও
 #   (না দিলে ডিফল্ট "moviebox@2026" — দ্রুত বদলাবে!)
@@ -38,7 +41,6 @@ stats_routes = web.RouteTableDef()
 installs = mydb["mbx_installs"]     # {_id: installId, first, last, model, ver}
 events = mydb["mbx_events"]         # {id, event, label, ver, ts}
 appcfg = mydb["mbx_app_config"]     # {_id: "update", code, name, url, msg}
-hidden_db = mydb["mbx_hidden"]      # {_id: postId, ts} — প্যানেল থেকে লুকানো পোস্ট
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "moviebox@2026")
 COOKIE = "mbx_admin"
@@ -74,6 +76,8 @@ def _norm(s: str) -> str:
 
 
 def _title_quality(title: str) -> str:
+    """টাইটেল থেকে কোয়ালিটি — v3: খালি 'HD' আর দেখানো হয় না।
+    টাইটেলে সোজা 720p/1080p/480p/4K থাকলে সেটা, সিরিজ হলে EP রেঞ্জ, নাহলে খালি"""
     m = re.search(r"\b(2160|1080|720|480|360)p\b", title, re.IGNORECASE)
     if m:
         return m.group(0).lower()
@@ -82,8 +86,6 @@ def _title_quality(title: str) -> str:
     m = re.search(r"\bEP\s*\d+(\s*-\s*\d+)?\b", title, re.IGNORECASE)
     if m:
         return m.group(0).upper().replace(" ", "")
-    if re.search(r"\bHD\b", title, re.IGNORECASE):
-        return "HD"
     return "—"
 
 
@@ -126,7 +128,7 @@ async def _fetch_blog_all():
     timeout = aiohttp.ClientTimeout(total=90)
     posts, bid, total = [], "", 0
     async with aiohttp.ClientSession(timeout=timeout,
-                                     headers={"User-Agent": "MovieBoxBD-Panel/2.0"}) as s:
+                                     headers={"User-Agent": "MovieBoxBD-Panel/3.0"}) as s:
         for start in range(1, BLOG_MAX_POSTS + 1, BLOG_PAGE):
             url = f"{BLOG_URL}/feeds/posts/summary?alt=json&max-results={BLOG_PAGE}&start-index={start}"
             async with s.get(url) as r:
@@ -222,6 +224,24 @@ async def _play_label(iid: str, label: str, now: float) -> str:
     return label
 
 
+# ──────────────── 🆕 v4 — ভিউ-ম্যাচিং (পেজ-ভিউ অটো-কাউন্ট) ────────────────
+def _view_count(nt: str, idx: dict) -> int:
+    """একটা পোস্ট-টাইটেলের মোট ভিউ — অ্যাপে মুভির পেজ খুললেই 'view' ইভেন্ট
+    গোনা হয় (প্লে-সিস্টেম বাদ)। idx = প্রথম শব্দ → [(স্বাভাবিক লেবেল, সংখ্যা)]
+    — ০.১ vCPU-তে দ্রুত রাখার ইনডেক্স"""
+    if not nt or len(nt) < 6:
+        return 0
+    cands = idx.get(nt.split(" ", 1)[0], [])
+    if not cands:
+        return 0
+    n = 0
+    pref = nt + " "
+    for k, c in cands:
+        if k == nt or k.startswith(pref):
+            n += c          # হুবহু ম্যাচ + টাইটেলের পরে বাড়তি অংশ থাকলেও গণ্য
+    return n
+
+
 # ────────────────────────── অ্যাপ API ──────────────────────────
 
 @stats_routes.post("/api/track")
@@ -285,82 +305,192 @@ async def api_latest(request):
 
 # ────────────────────────── অ্যাডমিন UI ──────────────────────────
 
+_CSS = """
+*{box-sizing:border-box}
+body{background:#070A14;color:#E9EEFF;font-family:'Noto Sans Bengali','SolaimanLipi',sans-serif;margin:0;padding:22px 18px 46px;
+background-image:radial-gradient(900px 500px at 85% -5%,rgba(124,108,255,.15),transparent 60%),radial-gradient(700px 420px at -5% 22%,rgba(0,229,160,.09),transparent 60%)}
+h1{font-size:23px;margin:0 0 4px;font-weight:700;background:linear-gradient(90deg,#00E5A0,#7C6CFF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:#8B94B8;font-size:13px;margin-bottom:16px}
+.sub b{color:#E9EEFF}
+h2{font-size:16px;color:#E9EEFF;margin:28px 0 10px;padding-bottom:8px;position:relative}
+h2:after{content:'';position:absolute;left:0;bottom:0;width:64px;height:3px;border-radius:2px;background:linear-gradient(90deg,#00E5A0,#7C6CFF)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.card{background:linear-gradient(160deg,#151B33,#10142A);border:1px solid #232B4A;border-radius:14px;padding:16px 18px;min-width:150px;flex:1;position:relative;overflow:hidden;animation:fadeUp .5s ease both;transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease}
+.card:nth-child(2){animation-delay:.07s}.card:nth-child(3){animation-delay:.14s}.card:nth-child(4){animation-delay:.21s}
+.card:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(124,108,255,.18);border-color:#31406F}
+.card .n{font-size:28px;font-weight:700;color:#8F7BFF}
+.card .t{font-size:13px;color:#8B94B8;margin-top:3px}
+.card.live .n{color:#FF5D7A}
+.card.live:after{content:'';position:absolute;top:16px;right:16px;width:9px;height:9px;border-radius:50%;background:#FF3B5C;animation:pulse 1.6s ease infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,92,.5)}70%{box-shadow:0 0 0 9px rgba(255,59,92,0)}100%{box-shadow:0 0 0 0 rgba(255,59,92,0)}}
+table{width:100%;border-collapse:collapse;background:#11162A;border-radius:12px;overflow:hidden}
+th,td{padding:9px 12px;text-align:left;font-size:14px;border-bottom:1px solid #1D2440}
+th{color:#8B94B8;font-weight:600;background:#161C36;font-size:13px}
+td.num{color:#8F7BFF;font-weight:700;font-size:15px;white-space:nowrap}
+td.num.hot{color:#00E5A0}
+td.num.mid{color:#FFC24B}
+.scroll{max-height:500px;overflow:auto;border-radius:12px}
+.bar{color:#00E5A0;letter-spacing:1px}
+form{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:16px;max-width:640px}
+form.inline{background:none;padding:0;max-width:none;display:inline;margin:0;border:none}
+input,textarea{width:100%;background:#0B0F1F;border:1px solid #2A2F4F;color:#E9EEFF;border-radius:9px;padding:10px 12px;font-size:14px;margin:4px 0 12px;transition:border-color .2s,box-shadow .2s}
+input:focus,textarea:focus{outline:none;border-color:#7C6CFF;box-shadow:0 0 0 3px rgba(124,108,255,.18)}
+input.search{width:auto;max-width:300px;display:inline-block;margin:0;vertical-align:middle}
+button{background:linear-gradient(135deg,#7C6CFF,#5A3FE0);color:#fff;border:0;border-radius:9px;padding:10px 18px;font-size:14px;cursor:pointer;font-family:inherit;transition:transform .2s ease,box-shadow .2s ease}
+button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(124,108,255,.35)}
+button.gray{background:#2A2F4F}
+button.mini{background:#1B2340;color:#DCE3FF;border:1px solid #2C3763;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;margin:2px}
+button.mini:hover{background:#26305A;transform:none;box-shadow:none}
+.qchip{display:inline-block;background:#1B2340;border:1px solid #2C3763;border-radius:8px;padding:3px 9px;font-size:12px;color:#B8C4FF;margin:1px 4px 1px 0;white-space:nowrap}
+.dim{color:#5A6284}
+td.ttl{position:relative}
+td.ttl b{font-size:14px}
+.pid{color:#5A6284;font-size:11px;margin-top:2px}
+tr.mrow{transition:background .2s ease}
+tr.mrow:hover{background:rgba(124,108,255,.08)}
+@keyframes grow{from{width:0}}
+.wbar{height:12px;background:#1A2140;border-radius:6px;overflow:hidden;min-width:90px}
+.wbar i{display:block;height:100%;background:linear-gradient(90deg,#00E5A0,#7C6CFF);animation:grow 1s ease both}
+td.dwd{width:64px;color:#8B94B8}
+.dbar{height:10px;background:#1A2140;border-radius:6px;overflow:hidden;min-width:60px}
+.dbar i{display:block;height:100%;background:linear-gradient(90deg,#FFC24B,#FF5D7A);animation:grow .9s ease both}
+.box{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:14px;font-size:14px;color:#8B94B8}
+a{color:#00E5A0}
+.cur{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:14px;margin-bottom:10px;font-size:14px;color:#8B94B8}
+.loginbox{max-width:380px;margin:70px auto 0;text-align:center;background:#11162A;border:1px solid #232B4A;border-radius:16px;padding:32px 26px;animation:fadeUp .5s ease both;box-shadow:0 22px 55px rgba(0,0,0,.45)}
+@media(max-width:640px){body{padding:14px 10px 40px}}
+"""
+
+
 def _page(title: str, body: str) -> web.Response:
     return web.Response(text=f"""<!DOCTYPE html>
 <html lang="bn"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
 <title>{html.escape(title)}</title>
-<style>
-  body{{background:#0D0F1C;color:#ECEFF7;font-family:'Noto Sans Bengali',sans-serif;margin:0;padding:20px}}
-  h1{{font-size:22px;color:#00E5A0;margin:0 0 4px}} .sub{{color:#8A93B2;font-size:13px;margin-bottom:18px}}
-  .cards{{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}}
-  .card{{background:#171A2E;border-radius:12px;padding:14px 18px;min-width:140px;flex:1}}
-  .card .n{{font-size:26px;font-weight:700;color:#7C4DFF}}
-  .card .t{{font-size:13px;color:#8A93B2;margin-top:2px}}
-  h2{{font-size:16px;color:#00E5A0;margin:22px 0 8px}}
-  table{{width:100%;border-collapse:collapse;background:#171A2E;border-radius:12px;overflow:hidden}}
-  th,td{{padding:8px 12px;text-align:left;font-size:14px;border-bottom:1px solid #232742}}
-  th{{color:#8A93B2;font-weight:600;background:#1B1F36}}
-  td.num{{color:#7C4DFF;font-weight:700}}
-  td .pid{{color:#5A6284;font-size:11px;margin-top:2px}}
-  .scroll{{max-height:460px;overflow-y:auto}}
-  .bar{{color:#00E5A0;letter-spacing:1px}}
-  form{{background:#171A2E;border-radius:12px;padding:16px;max-width:640px}}
-  form.inline{{background:none;padding:0;max-width:none;display:inline;margin:0}}
-  input,textarea{{width:100%;box-sizing:border-box;background:#0D0F1C;border:1px solid #2A2F4F;
-    color:#ECEFF7;border-radius:8px;padding:9px 11px;font-size:14px;margin:4px 0 10px}}
-  input.search{{width:auto;max-width:280px;display:inline-block;margin:0;vertical-align:middle}}
-  button{{background:#7C4DFF;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;cursor:pointer}}
-  button.gray{{background:#2A2F4F}}
-  button.mini{{background:#232742;color:#DCE3FF;border:1px solid #2A2F4F;border-radius:7px;
-    padding:5px 10px;font-size:12px;cursor:pointer;margin:2px}}
-  button.mini:hover{{background:#2A2F4F}}
-  button.warn{{background:#3A1F26;color:#FF9C9C;border-color:#5A2A34}}
-  a.mini{{background:#1E2A4A;color:#00E5A0;text-decoration:none;border-radius:7px;
-    padding:5px 10px;font-size:12px;display:inline-block;border:1px solid #2A3F55;margin:2px}}
-  .chip{{display:inline-block;background:#232742;border-radius:14px;padding:4px 10px;margin:3px;font-size:12px}}
-  .hot{{color:#00E5A0}}
-  .box{{background:#171A2E;border:1px solid #2A2F4F;border-radius:12px;padding:14px;font-size:14px;color:#8A93B2}}
-  a{{color:#00E5A0}} .cur{{background:#232742;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:14px}}
-</style></head><body>{body}</body></html>""", content_type="text/html")
+<style>{_CSS}</style></head><body>{body}</body></html>""", content_type="text/html")
 
 
-@stats_routes.post("/admin/hidemovie")
-async def admin_hidemovie(request):
-    """🙈 প্যানেলের তালিকা থেকে পোস্ট লুকাও (ব্লগ থেকে ডিলিট হয় না)"""
-    if request.cookies.get(COOKIE) != TOKEN:
-        return web.HTTPFound("/admin")
-    try:
-        form = await request.post()
-        pid = str(form.get("pid", "")).strip()[:32]
-        if pid:
-            await hidden_db.update_one({"_id": pid}, {"$set": {"ts": time.time()}}, upsert=True)
-    except Exception:
-        pass
-    return web.HTTPFound("/admin")
+ADMIN_JS = """
+(function(){
+  function cu(el){
+    var n = parseInt(el.getAttribute('data-n')||'0',10)||0;
+    if(n<=0){ el.textContent='0'; return; }
+    var t0=null, dur=900;
+    function step(ts){
+      if(t0===null) t0=ts;
+      var p=Math.min(1,(ts-t0)/dur);
+      el.textContent=Math.round(n*(1-Math.pow(1-p,3)));
+      if(p<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  document.querySelectorAll('.card .n[data-n]').forEach(cu);
+})();
+function mvFilter(q){
+  q=(q||'').toLowerCase();
+  document.querySelectorAll('#mvTable tbody.mgrp').forEach(function(g){
+    var t=g.querySelector('td.ttl');
+    g.style.display=(t && t.textContent.toLowerCase().indexOf(q)>-1)?'':'none';
+  });
+}
+function mvSort(key){
+  var tbl=document.getElementById('mvTable'); if(!tbl) return;
+  var gs=[].slice.call(tbl.querySelectorAll('tbody.mgrp'));
+  gs.sort(function(a,b){
+    if(key==='views') return (parseInt(b.getAttribute('data-v'),10)||0)-(parseInt(a.getAttribute('data-v'),10)||0);
+    return (b.getAttribute('data-d')||'').localeCompare(a.getAttribute('data-d')||'');
+  });
+  gs.forEach(function(g){ tbl.appendChild(g); });
+}
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/live');
+    const j = await r.json();
+    const el = document.getElementById('liveN');
+    if (el && el.textContent !== String(j.live)) el.textContent = j.live;
+  } catch (e) {}
+}, 30000);
+"""
 
 
-@stats_routes.post("/admin/showmovie")
-async def admin_showmovie(request):
-    """👁 লুকানো পোস্ট আবার দেখাও"""
-    if request.cookies.get(COOKIE) != TOKEN:
-        return web.HTTPFound("/admin")
-    try:
-        form = await request.post()
-        pid = str(form.get("pid", "")).strip()[:32]
-        if pid:
-            await hidden_db.delete_one({"_id": pid})
-    except Exception:
-        pass
-    return web.HTTPFound("/admin")
+# ──────────────── 🆕 v4 — মুভি টেবিল (বাটন-মুক্ত, পেজ-ভিউ অটো-কাউন্ট) ────────────────
+def _movies_html(vnorm) -> str:
+    """ব্লগের সব পোস্টের টেবিল — এডিট/লুকাও নেই,
+    ভিউ = মুভির পেজ খুললেই অটোমেটিক গোনা হয় (আগের সিস্টেম)"""
+    if not BLOG_URL:
+        return ("<div class='box'>⚙️ ব্লগ-টেবিল চালু করতে Koyeb-এ "
+                "<b style='color:#E9EEFF'>BLOG_URL</b> এনভায়রনমেন্ট ভ্যারিয়েবলে তোমার ব্লগের "
+                "লিঙ্ক দাও (যেমন https://movieboxbd.blogspot.com) — তারপর সার্ভিস রিস্টার্ট। "
+                "বাকি সব এখনই কাজ করছে।</div>")
+
+    if not _blog_state["posts"]:
+        if _blog_state["loading"] or not _blog_state["ts"]:
+            return ("<div class='box'>⏳ ব্লগ থেকে সব পোস্ট আনা হচ্ছে… "
+                    "২০-৩০ সেকেন্ড পর পেজটা একবার রিফ্রেশ করো।"
+                    "<script>setTimeout(function(){location.reload()},25000)</script></div>")
+        return (f"<div class='box'>⚠️ ব্লগ পড়া যায়নি: "
+                f"{html.escape(_blog_state['err'] or 'কোনো পোস্ট পাওয়া যায়নি')} — "
+                f"BLOG_URL ঠিক আছে কিনা দেখো। <a href='/admin?refresh=1'>আবার চেষ্টা</a></div>")
+
+    # 🚀 ইনডেক্স: প্রথম শব্দ → লেবেল-তালিকা (৩০০০ পোস্টেও দ্রুত থাকে)
+    idx = {}
+    for k, c in vnorm.items():
+        idx.setdefault(k.split(" ", 1)[0], []).append((k, c))
+
+    groups = []
+    for p in _blog_state["posts"]:
+        title = p["title"]
+        pub = html.escape(p["pub"] or "—")
+        nt = _norm(title)
+        tot = _view_count(nt, idx)
+        fb = _title_quality(title)
+        qcell = (f"<span class='qchip'>{html.escape(fb)}</span>"
+                 if fb != "—" else "<span class='dim'>—</span>")
+        cat = " · ".join(p["labels"][:2]) if p["labels"] else "—"
+        cat = html.escape(cat)
+        t_show = html.escape(title[:90] + ("…" if len(title) > 90 else ""))
+
+        vcls = "num hot" if tot >= 100 else ("num mid" if tot >= 20 else "num")
+        groups.append(
+            f"<tbody class='mgrp' data-v='{tot}' data-d='{pub}'>"
+            f"<tr class='mrow'>"
+            f"<td class='ttl'><b>{t_show}</b>"
+            f"<div class='pid'>ID: {html.escape(p['pid'][:12])}… · {pub}</div></td>"
+            f"<td>{qcell}</td>"
+            f"<td>{cat}</td>"
+            f"<td class='{vcls}'>{tot}</td>"
+            f"</tr></tbody>"
+        )
+
+    stale_note = " · <i>তালিকা ফ্রেশ হচ্ছে, একটু পর রিলোড করলে নতুন পোস্ট দেখা যাবে</i>" \
+        if (_blog_state["loading"] or _blog_state["stale"]) else ""
+    head = (
+        f"<div class='sub'>মোট <b>{len(_blog_state['posts'])}</b>টি পোস্ট · নতুনগুলো সবার উপরে · "
+        f"ভিউ = মুভির <b style='color:#00E5A0'>পেজ/ডিটেইল খুললেই অটোমেটিক</b> গোনা হয় (গত ৩০ দিন)"
+        f"{stale_note} · "
+        f"<a href='/admin?refresh=1'>🔄 ফ্রেশ করো</a></div>"
+        f"<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px'>"
+        f"<input class='search' id='mvSearch' type='search' placeholder='🔍 Search movie…' "
+        f"onkeyup='mvFilter(this.value)' autocomplete='off'>"
+        f"<button class='mini' onclick='mvSort(&quot;date&quot;)'>🆕 নতুন আগে</button>"
+        f"<button class='mini' onclick='mvSort(&quot;views&quot;)'>🔥 বেশি ভিউ আগে</button>"
+        f"</div>"
+        f"<div class='scroll'><table id='mvTable'><thead><tr>"
+        f"<th>টাইটেল</th><th>কোয়ালিটি</th><th>ক্যাটাগরি</th><th>ভিউ (৩০ দিন)</th>"
+        f"</tr></thead>{''.join(groups)}</table></div>"
+    )
+    return head
 
 
 @stats_routes.get("/admin")
 async def admin_home(request):
     if request.cookies.get(COOKIE) != TOKEN:
         return _page("লগইন", """
-        <div style="max-width:360px;margin:60px auto;text-align:center">
-          <h1>📊 MovieBoxBD অ্যাডমিন</h1>
+        <div class="loginbox">
+          <h1>MovieBoxBD অ্যাডমিন</h1>
           <div class="sub">প্যানেলে ঢুকতে পাসওয়ার্ড দাও</div>
           <form method="post" action="/admin/login">
             <input type="password" name="pw" placeholder="অ্যাডমিন পাসওয়ার্ড" required>
@@ -385,14 +515,14 @@ async def admin_home(request):
     joins = Counter()
     dls = Counter()
     versions = Counter()
-    vnorm = Counter()   # 🎬 স্বাভাবিকীকৃত লেবেল → view+play সংখ্যা (৩০ দিন)
+    vnorm = Counter()   # 🎬 v4: স্বাভাবিক লেবেল → ভিউ সংখ্যা (৩০ দিন)
     try:
         async for u in installs.find({"first": {"$gte": week}}, {"first": 1}):
             joins[_day_key(float(u.get("first") or 0))] += 1
         async for u in installs.find({"last": {"$gte": month}}, {"ver": 1}):
             versions[str(u.get("ver") or "?")] += 1
-        async for e in events.find({"event": {"$in": ["view", "play"]},
-                                    "ts": {"$gte": month}}, {"label": 1}):
+        # 🆕 v4: প্লে-সিস্টেম বাদ — আবার 'view' ইভেন্ট (পেজ খুললেই অটো গোনা হয়)
+        async for e in events.find({"event": "view", "ts": {"$gte": month}}, {"label": 1}):
             lab = (e.get("label") or "").strip()
             if lab:
                 vnorm[_norm(lab)] += 1
@@ -410,123 +540,30 @@ async def admin_home(request):
 
     # ── 🎬 ব্লগের সব আপলোড ──────────────────────────────────────────
     _ensure_blog_fresh(force=request.query.get("refresh") == "1")
-    hidden_pids = set()
-    hidden_docs = []
-    try:
-        hcur = hidden_db.find({}, {"_id": 1, "ts": 1}).limit(500)
-        hidden_docs = [d async for d in hcur]
-        hidden_pids = {str(d["_id"]) for d in hidden_docs}
-    except Exception:
-        pass
-
-    blog_posts = [p for p in _blog_state["posts"] if p["pid"] not in hidden_pids]
-
-    def _views_for(title: str) -> int:
-        nt = _norm(title)
-        if not nt or len(nt) < 6:
-            return 0
-        v = vnorm.get(nt, 0)
-        if v:
-            return v
-        pref = nt + " "
-        for nl, c in vnorm.items():
-            if nl.startswith(pref):
-                v += c
-        return v
-
-    def _movie_rows() -> str:
-        if not blog_posts:
-            return ""
-        out = []
-        for p in blog_posts:
-            title = p["title"]
-            v = _views_for(title)
-            q = _title_quality(title)
-            cat = " · ".join(p["labels"][:2]) if p["labels"] else "—"
-            pub = html.escape(p["pub"] or "—")
-            if _blog_state["blog_id"]:
-                edit = f"https://www.blogger.com/blog/post/edit/{_blog_state['blog_id']}/{p['pid']}"
-                edit_btn = (f"<a class='mini' href='{html.escape(edit, quote=True)}' "
-                            f"target='_blank' rel='noopener'>✏️ এডিট</a>")
-            else:
-                edit_btn = ""
-            t_show = html.escape(title[:90] + ("…" if len(title) > 90 else ""))
-            vcls = "num hot" if v >= 100 else "num"
-            out.append(
-                f"<tr data-v='{v}' data-d='{pub}'>"
-                f"<td><b>{t_show}</b>"
-                f"<div class='pid'>ID: {html.escape(p['pid'][:12])}… · {pub}</div></td>"
-                f"<td>{html.escape(q)}</td>"
-                f"<td>{html.escape(cat)}</td>"
-                f"<td class='{vcls}'>{v}</td>"
-                f"<td>{edit_btn}"
-                f"<form class='inline' method='post' action='/admin/hidemovie'>"
-                f"<input type='hidden' name='pid' value='{html.escape(p['pid'], quote=True)}'>"
-                f"<button class='mini warn' onclick=\"return confirm('প্যানেল থেকে লুকানো হবে — ব্লগ থেকে ডিলিট হবে না, ঠিক আছে?')\">🙈 লুকাও</button>"
-                f"</form></td></tr>"
-            )
-        return "".join(out)
-
-    if not BLOG_URL:
-        movies_html = ("<div class='box'>⚙️ ব্লগ-টেবিল চালু করতে Koyeb-এ "
-                       "<b style='color:#ECEFF7'>BLOG_URL</b> এনভায়রনমেন্ট ভ্যারিয়েবলে তোমার ব্লগের "
-                       "লিঙ্ক দাও (যেমন https://movieboxbd.blogspot.com) — তারপর সার্ভিস রিস্টার্ট। "
-                       "বাকি সব এখনই কাজ করছে।</div>")
-    elif not blog_posts:
-        if _blog_state["loading"] or not _blog_state["ts"]:
-            movies_html = ("<div class='box'>⏳ ব্লগ থেকে সব পোস্ট আনা হচ্ছে… "
-                           "২০-৩০ সেকেন্ড পর পেজটা একবার রিফ্রেশ করো।"
-                           "<script>setTimeout(function(){location.reload()},25000)</script></div>")
-        else:
-            movies_html = (f"<div class='box'>⚠️ ব্লগ পড়া যায়নি: "
-                           f"{html.escape(_blog_state['err'] or 'কোনো পোস্ট পাওয়া যায়নি')} — "
-                           f"BLOG_URL ঠিক আছে কিনা দেখো। <a href='/admin?refresh=1'>আবার চেষ্টা</a></div>")
-    else:
-        stale_note = " · <i>তালিকা ফ্রেশ হচ্ছে, একটু পর রিলোড করলে নতুন পোস্ট দেখা যাবে</i>" \
-            if (_blog_state["loading"] or _blog_state["stale"]) else ""
-        movies_html = (
-            f"<div class='sub'>মোট <b style='color:#ECEFF7'>{len(blog_posts)}</b>টি পোস্ট "
-            f"(লুকানো {len(hidden_docs)}টা বাদে) · নতুনগুলো সবার উপরে · "
-            f"ভিউ = গত ৩০ দিনের view+play{stale_note} · "
-            f"<a href='/admin?refresh=1'>🔄 ফ্রেশ করো</a></div>"
-            f"<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px'>"
-            f"<input class='search' id='mvSearch' type='search' placeholder='🔍 Search movie…' "
-            f"onkeyup='mvFilter(this.value)' autocomplete='off'>"
-            f"<button class='mini' onclick='mvSort(&quot;date&quot;)'>🆕 নতুন আগে</button>"
-            f"<button class='mini' onclick='mvSort(&quot;views&quot;)'>🔥 বেশি ভিউ আগে</button>"
-            f"</div>"
-            f"<div class='scroll'><table id='mvTable'><thead><tr>"
-            f"<th>টাইটেল</th><th>কোয়ালিটি</th><th>ক্যাটাগরি</th><th>ভিউ</th><th>অ্যাকশন</th>"
-            f"</tr></thead><tbody>{_movie_rows()}</tbody></table></div>"
-        )
-
-    hidden_html = ""
-    if hidden_docs:
-        chips = []
-        for d in hidden_docs:
-            pid = str(d["_id"])
-            chips.append(
-                f"<form class='inline' method='post' action='/admin/showmovie'>"
-                f"<input type='hidden' name='pid' value='{html.escape(pid, quote=True)}'>"
-                f"<span class='chip'>🙈 {html.escape(pid[:10])}… "
-                f"<button class='mini' type='submit'>দেখাও</button></span></form>"
-            )
-        hidden_html = f"<h2>🙈 লুকানো পোস্ট ({len(hidden_docs)})</h2><div>{''.join(chips)}</div>"
+    movies_html = _movies_html(vnorm)
 
     def rows(counter):
-        top = counter.most_common()   # 🎬 ক্যাপ নাই — ৩০ দিনের সবগুলো দেখাবে, কিছু বাদ যাবে না
+        top = counter.most_common()   # 🎬 ক্যাপ নাই — ৩০ দিনের সবগুলো দেখাবে
         if not top:
-            return "<tr><td colspan=2 style='color:#8A93B2'>এখনো কোনো ডাটা নেই</td></tr>"
-        return "".join(
-            f"<tr><td>{html.escape(k)}</td><td class='num'>{v}</td></tr>" for k, v in top)
+            return "<tr><td colspan=3 style='color:#8B94B8'>এখনো কোনো ডাটা নেই</td></tr>"
+        mx = max(v for _, v in top)
+        out = []
+        for k, v in top:
+            pct = max(3, int(v * 100 / mx)) if mx else 3
+            out.append(f"<tr><td>{html.escape(k)}</td>"
+                       f"<td style='width:42%'><div class='dbar'><i style='width:{pct}%'></i></div></td>"
+                       f"<td class='num'>{v}</td></tr>")
+        return "".join(out)
 
     def table_html(counter, unit):
-        # 🎬 ফুল লিস্ট — স্ক্রলসহ, উপরে মোট হিসাব
+        # 🎬 ফুল লিস্ট — স্ক্রলসহ, উপরে মোট হিসাব, পাশে বার
         if not counter:
-            return "<table><tr><td colspan=2 style='color:#8A93B2'>এখনো কোনো ডাটা নেই</td></tr></table>"
+            return "<table><tr><td colspan=3 style='color:#8B94B8'>এখনো কোনো ডাটা নেই</td></tr></table>"
         tot = sum(counter.values())
-        head = f"<div class='sub'>মোট {len(counter)}টি মুভি · {tot} বার {unit} — যত বেশি দেখা, তত উপরে</div>"
-        return head + f"<div class='scroll'><table><tr><th>মুভি</th><th>{unit}</th></tr>{rows(counter)}</table></div>"
+        head = f"<div class='sub'>মোট {len(counter)}টি মুভি · {tot} বার {unit} — যত বেশি, তত উপরে</div>"
+        return head + (f"<div class='scroll'><table>"
+                       f"<tr><th>মুভি</th><th style='width:42%'></th><th>{unit}</th></tr>"
+                       f"{rows(counter)}</table></div>")
 
     peak = max(joins.values()) if joins else 0
     bars = []
@@ -535,12 +572,13 @@ async def admin_home(request):
         n = joins.get(d, 0)
         wnum = int(time.strftime("%w", time.gmtime(d * DAY - TZ)))  # 0=রবি … 6=শনি
         wd = WEEKDAYS[(wnum + 6) % 7]  # লিস্টটা সোমবার থেকে শুরু
-        w = max(1, int(n * 22 / peak)) if peak else 1
-        bars.append(f"<tr><td style='width:64px'>{wd}</td>"
-                    f"<td class='bar'>{'▇' * w}</td><td class='num'>{n}</td></tr>")
+        pct = max(3, int(n * 100 / peak)) if (peak and n) else 0
+        bars.append(f"<tr><td class='dwd'>{wd}</td>"
+                    f"<td><div class='wbar'><i style='width:{pct}%'></i></div></td>"
+                    f"<td class='num'>{n}</td></tr>")
     bars_html = "".join(bars)
 
-    vers_html = " · ".join(f"v{html.escape(k)} — <b style='color:#7C4DFF'>{v}</b> জন"
+    vers_html = " · ".join(f"v{html.escape(k)} — <b style='color:#8F7BFF'>{v}</b> জন"
                            for k, v in versions.most_common(8)) or "—"
 
     cur_html = ("🚀 চালু আছে: <b style='color:#00E5A0'>v{} ({})</b> — {} — <a href='{}'>{}</a>"
@@ -550,20 +588,19 @@ async def admin_home(request):
                 if cur else "এখনো কোনো আপডেট ঘোষণা করা হয়নি")
 
     body = f"""
-    <h1>📊 MovieBoxBD অ্যাডমিন প্যানেল</h1>
-    <div class="sub">লাইভ স্ট্যাট — <a href="/admin/logout" style="color:#8A93B2">লগআউট</a></div>
+    <h1>MovieBoxBD অ্যাডমিন প্যানেল</h1>
+    <div class="sub">লাইভ স্ট্যাট — <a href="/admin/logout" style="color:#8B94B8">লগআউট</a></div>
 
     <div class="cards">
-      <div class="card"><div class="n" id="liveN">{live_now}</div><div class="t">🔴 এখন লাইভ (১ মিনিটে)</div></div>
-      <div class="card"><div class="n">{active_today}</div><div class="t">🟢 আজ অ্যাক্টিভ</div></div>
-      <div class="card"><div class="n">{new_today}</div><div class="t">✨ আজ নতুন জয়েন</div></div>
-      <div class="card"><div class="n">{total}</div><div class="t">👥 মোট ইউজার</div></div>
+      <div class="card live"><div class="n" id="liveN" data-n="{live_now}">{live_now}</div><div class="t">🔴 এখন লাইভ (১ মিনিটে)</div></div>
+      <div class="card"><div class="n" data-n="{active_today}">{active_today}</div><div class="t">🟢 আজ অ্যাক্টিভ</div></div>
+      <div class="card"><div class="n" data-n="{new_today}">{new_today}</div><div class="t">✨ আজ নতুন জয়েন</div></div>
+      <div class="card"><div class="n" data-n="{total}">{total}</div><div class="t">👥 মোট ইউজার</div></div>
     </div>
     <div class="sub">🔴 লাইভ সংখ্যা প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
 
     <h2>🎬 আপলোড হওয়া মুভি/সিরিজ — ব্লগের সবগুলো</h2>
     {movies_html}
-    {hidden_html}
 
     <h2>📅 শেষ ৭ দিনে জয়েন (প্রতিদিন)</h2>
     <table>{bars_html}</table>
@@ -590,32 +627,7 @@ async def admin_home(request):
       <button type="submit">🚀 আপডেট ঘোষণা করো</button>
       <button type="submit" formaction="/admin/clearupdate" class="gray">⏹ আপডেট বন্ধ করো</button>
     </form>
-    <script>
-    function mvFilter(q) {{
-      q = q.toLowerCase();
-      document.querySelectorAll('#mvTable tbody tr').forEach(function(tr) {{
-        tr.style.display = tr.textContent.toLowerCase().indexOf(q) > -1 ? '' : 'none';
-      }});
-    }}
-    function mvSort(key) {{
-      var tb = document.querySelector('#mvTable tbody');
-      if (!tb) return;
-      var rows = [].slice.call(tb.querySelectorAll('tr'));
-      rows.sort(function(a, b) {{
-        if (key === 'views') return (parseInt(b.getAttribute('data-v')) || 0) - (parseInt(a.getAttribute('data-v')) || 0);
-        return (b.getAttribute('data-d') || '').localeCompare(a.getAttribute('data-d') || '');
-      }});
-      rows.forEach(function(r) {{ tb.appendChild(r); }});
-    }}
-    setInterval(async () => {{
-      try {{
-        const r = await fetch('/api/live');
-        const j = await r.json();
-        const el = document.getElementById('liveN');
-        if (el && el.textContent !== String(j.live)) el.textContent = j.live;
-      }} catch (e) {{}}
-    }}, 30000);
-    </script>
+    <script>{ADMIN_JS}</script>
     """
     return _page("অ্যাডমিন প্যানেল", body)
 
