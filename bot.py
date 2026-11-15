@@ -43,6 +43,17 @@ pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
 import session_patch   # ⚡ CPU-100% ফিক্স — PyroFork Session churn patch
 
+# ⚡ UVLOOP — C-তে লেখা ইভেন্ট লুপ: টেলিগ্রাম MTProto + aiohttp-র সব
+# asyncio অপারেশন (সকেট read/write, টাইমার, টাস্ক সুইচ) ২-৪ গুণ দ্রুত।
+# স্ট্রিমিংয়ের সময় প্রতি সেকেন্ডে শত শত ইভেন্ট লুপ টিক — ওইখানেই বড়
+# CPU বাঁচে। uvloop না থাকলে (ইনস্টল ফেল করলে) সাধারণ asyncio-ই চলবে।
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    print("⚡ uvloop event loop enabled — asyncio is now 2-4x faster")
+except Exception:
+    print("uvloop not available — using default asyncio loop")
+
 # ===============================
 # Logging Config
 # ===============================
@@ -156,7 +167,7 @@ async def Webav_start():
         # (সিক দিলে/ট্যাব বন্ধ করলে) পুরনো রিকোয়েস্ট সাথে সাথে বন্ধ হয়।
         # আগে ওগুলো জম্বি হয়ে 1GB পর্যন্ত টেনে নিত — কাউন্টার আটকে থাকত,
         # সার্ভারের ব্যান্ডউইডথ শেষ হয়ে অন্য স্ট্রিম ঝুলে যেত।
-        app = web.AppRunner(await web_server(), handler_cancellation=True)
+        app = web.AppRunner(await web_server(), handler_cancellation=True, keepalive_timeout=30)
         await app.setup()
         bind_address = "0.0.0.0"
         await web.TCPSite(app, bind_address, PORT).start()
