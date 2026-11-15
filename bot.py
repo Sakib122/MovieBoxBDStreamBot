@@ -13,6 +13,22 @@ from pyrogram import idle, __version__
 from pyrogram.raw.all import layer
 import pyrogram.utils
 from pyrogram.types import Message
+
+# ⚡⚡ LOOP-ORDER FIX (Koyeb log: "Task got Future attached to a different loop"):
+# ইভেন্ট লুপ এখানেই তৈরি ও সেট করা হচ্ছে — এই প্রজেক্টের কোনো মডিউল
+# (info/utils/Script/web/database) ইমপোর্ট হওয়ার আগে। database মডিউলের
+# MotorClient এই লুপেই বাঁধা হয়। আগে uvloop ব্লক ফাইলের নিচে ছিল বলে Motor
+# ভিন্ন লুপে বাঁধা হয়ে যেত — ফলে check_expired_premium টাস্ক স্টার্টআপেই
+# "attached to a different loop" error দিয়ে মারা যেত।
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    print("⚡ uvloop event loop enabled — asyncio is now 2-4x faster")
+except Exception:
+    print("uvloop not available — using default asyncio loop")
+
+asyncio.set_event_loop(asyncio.new_event_loop())
+
 from info import *
 from utils import temp, ping_server
 from Script import script
@@ -43,16 +59,8 @@ pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
 import session_patch   # ⚡ CPU-100% ফিক্স — PyroFork Session churn patch
 
-# ⚡ UVLOOP — C-তে লেখা ইভেন্ট লুপ: টেলিগ্রাম MTProto + aiohttp-র সব
-# asyncio অপারেশন (সকেট read/write, টাইমার, টাস্ক সুইচ) ২-৪ গুণ দ্রুত।
-# স্ট্রিমিংয়ের সময় প্রতি সেকেন্ডে শত শত ইভেন্ট লুপ টিক — ওইখানেই বড়
-# CPU বাঁচে। uvloop না থাকলে (ইনস্টল ফেল করলে) সাধারণ asyncio-ই চলবে।
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    print("⚡ uvloop event loop enabled — asyncio is now 2-4x faster")
-except Exception:
-    print("uvloop not available — using default asyncio loop")
+# ⚡ uvloop + ইভেন্ট লুপ সেটআপ এখন ফাইলের একদম উপরে হয় — MotorClient
+#   ইমপোর্টের আগে, যাতে DB ও সব ব্যাকগ্রাউন্ড টাস্ক একই লুপে চলে।
 
 # ===============================
 # Logging Config
