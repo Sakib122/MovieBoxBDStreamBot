@@ -43,13 +43,6 @@ async def channel_receive_handler(bot: Client, broadcast: Message):
             print(f"❌ Bin Channel Forward Error: {e}")
             return
 
-        # 🎬 ব্র্যান্ডিং ব্যাকগ্রাউন্ডে শুরু — লিংক তৎক্ষণাৎ কাজ করবে
-        try:
-            import branding
-            branding.enqueue(msg.id)
-        except Exception as _be:
-            print(f"⚠️ Brand enqueue Error: {_be}")
-
         raw_stream = f"{URL}watch/{msg.id}/{name_for_url}?hash={get_hash(msg)}"
         raw_download = f"{URL}{msg.id}/{name_for_url}?hash={get_hash(msg)}"
         raw_file_link = f"https://t.me/{temp.U_NAME}?start=file_{msg.id}"
@@ -122,13 +115,6 @@ async def group_link_handler(bot: Client, message: Message):
             log_msg = await reply.forward(chat_id=BIN_CHANNEL)
         except Exception as e:
             return await status_msg.edit(f"❌ Error forwarding to Bin Channel: {e}")
-
-        # 🎬 ব্র্যান্ডিং ব্যাকগ্রাউন্ডে শুরু — লিংক তৎক্ষণাৎ কাজ করবে
-        try:
-            import branding
-            branding.enqueue(log_msg.id)
-        except Exception as _be:
-            await status_msg.edit(f"⚠️ Brand enqueue Error: {_be}")
             
         file = reply.document or reply.video
         file_name = file.file_name if hasattr(file, 'file_name') and file.file_name else "Unknown File"

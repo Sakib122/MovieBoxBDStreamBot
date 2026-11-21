@@ -14,7 +14,6 @@ from web.utils.file_properties import get_hash, display_name_from, url_name_from
 from utils import temp, get_size
 from plugins.utils import is_user_allowed, is_user_joined
 from Script import script
-import branding
 
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio), group=4)
 async def private_receive_handler(c: Client, m: Message):                    
@@ -51,10 +50,6 @@ async def private_receive_handler(c: Client, m: Message):
     display_html = html.escape(display_name)
     try:
         forwarded = await m.forward(chat_id=BIN_CHANNEL)
-        try:
-            branding.enqueue(forwarded.id)   # 🎬 ব্যাকগ্রাউন্ডে ব্র্যান্ডিং — লিংক তৎক্ষণাৎ কাজ করবে
-        except Exception as _be:
-            logging.warning(f"brand enqueue failed: {_be}")
         hash_str = get_hash(forwarded)
         stream = f"{URL}watch/{forwarded.id}/{name_for_url}?hash={hash_str}"
         download = f"{URL}{forwarded.id}/{name_for_url}?hash={hash_str}"
@@ -111,10 +106,6 @@ async def private_receive_handler(c: Client, m: Message):
         await asyncio.sleep(e.value + 1)
         try:
             forwarded = await m.forward(chat_id=BIN_CHANNEL)
-            try:
-                branding.enqueue(forwarded.id)   # 🎬 ব্যাকগ্রাউন্ডে ব্র্যান্ডিং
-            except Exception as _be:
-                logging.warning(f"brand enqueue failed: {_be}")
             hash_str = get_hash(forwarded)
             stream = f"{URL}watch/{forwarded.id}/{name_for_url}?hash={hash_str}"
             download = f"{URL}{forwarded.id}/{name_for_url}?hash={hash_str}"
