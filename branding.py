@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from functools import partial
 
 from info import (
     BRAND_ENABLED, BRAND_TEXT, BRAND_VOICE_PATH, BRAND_FONT_PATH,
@@ -101,6 +102,21 @@ def _run(cmd, tag: str):
         raise RuntimeError(f"ffmpeg [{tag}] ব্যর্থ:\n{tail}")
 
 
+def _as_int(v, default):
+    """স্ট্রিং/বাজে মান এলেও ভেঙে না পড়ে ইন্ট ফেরত দেয় (env ভুল হলেও সেফ)"""
+    try:
+        return int(v) if v is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(v, default):
+    try:
+        return float(v) if v is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 # ───────────────────────── কোর পাইপলাইন (টেলিগ্রাম-মুক্ত) ─────────────────────────
 
 def process_video(in_path, out_path, voice_path=None, text=None, interval_min=None,
@@ -112,11 +128,11 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
     os.makedirs(BRAND_TMP_DIR, exist_ok=True)
     voice_path = voice_path or BRAND_VOICE_PATH
     text = _escape_drawtext(text or BRAND_TEXT)
-    interval_min = BRAND_INTERVAL_MIN if interval_min is None else interval_min
-    show_sec = BRAND_SHOW_SEC if show_sec is None else show_sec
+    interval_min = _as_float(interval_min, BRAND_INTERVAL_MIN)
+    show_sec = _as_int(show_sec, BRAND_SHOW_SEC)
     preset = preset or BRAND_PRESET
-    crf = BRAND_CRF if crf is None else crf
-    max_height = max_height or BRAND_MAX_HEIGHT
+    crf = _as_int(crf, BRAND_CRF)
+    max_height = _as_int(max_height, BRAND_MAX_HEIGHT)
     font_path = font_path or BRAND_FONT_PATH
 
     if not os.path.exists(font_path):
@@ -357,9 +373,11 @@ async def _process_one(orig_id):
                 f"ডিস্কে জায়গা নেই ({free / 1e9:.1f}GB ফ্রি, দরকার ~{size * 1.3 / 1e9:.1f}GB)")
 
         # ffmpeg — এক্সিকিউটর থ্রেডে (ইভেন্ট-লুপ আটকাবে না)
+        # ⚠️ partial + কীওয়ার্ড-আর্গ: পজিশনালে পাঠালে এক ঘর সরে গিয়ে
+        # max_height-এ থাম্ব-পাথ (স্ট্রিং) বসে যায় — সেই বাগই ছিল!
         result = await asyncio.get_running_loop().run_in_executor(
-            None, process_video, in_path, out_path,
-            None, None, None, None, None, None, thumb_path, None)
+            None, partial(process_video, thumb_path=thumb_path),
+            in_path, out_path)
         o = result["out"]
         logger.info(f"🎬 bin#{orig_id}: বার্ন শেষ (ইন্ট্রো {result['intro_dur']:.1f}s, মোট {o['duration'] / 60:.1f} মিনিট)")
 
