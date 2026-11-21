@@ -106,6 +106,29 @@ def _make_prog(msg, prefix: str):
     return prog
 
 
+async def _encode_status(status, job, enc):
+    """ফুল-মোড এনকোড চলাকালীন লাইভ % + fps + বাকি-সময় দেখায়।
+    ffmpeg -progress থেকে ভ্যালুগুলো অন্য থ্রেডে `enc` dict-এ ঢোকে,
+    এই টাস্ক প্রতি ১০ সেকেন্ডে মেসেজ এডিট করে।"""
+    try:
+        while True:
+            if enc.get("pct") is not None:
+                eta = enc.get("eta")
+                eta_txt = f" | ⏳ বাকি ~{_dur(eta)}" if eta else ""
+                try:
+                    await status.edit("⚙️ ব্র্যান্ডিং চলছে (এনকোড)...\n"
+                                      f"{_bar(enc['pct'])}\n"
+                                      f"🎬 {job['name']}\n"
+                                      f"🖥 স্পিড: {enc.get('fps') or 0:.0f} fps{eta_txt}")
+                except FloodWait as e:
+                    await asyncio.sleep(e.value + 1)
+                except Exception:
+                    pass
+            await asyncio.sleep(10)
+    except asyncio.CancelledError:
+        raise
+
+
 def _video_of(m):
     d = m.video or m.document
     if d is None:
@@ -200,16 +223,34 @@ async def _worker():
                 result = await loop.run_in_executor(
                     None, partial(fast_concat_video, thumb_path=job.get("thumb_path")),
                     job["path"], out_path)
-                if result is None:
+                if result is None or result.get("mode") == "skip":
+                    reason = (result or {}).get("reason") or "ফাস্ট-কনক্যাট চলতে পারেনি"
                     await status.edit(
-                        "ℹ️ এই ফাইলের কোডেক ফাস্ট-মোড সাপোর্ট করে না\n"
-                        "(h264 + aac হতে হয়) — 🎬 নিরাপদ ফুল মোডে\n"
-                        "(ঘুরন্ত হলুদ ওয়াটারমার্ক বার্নসহ) কাজ চলছে...")
+                        "ℹ️ ⚡ ফাস্ট মোড এই ফাইলে নিরাপদ না\n"
+                        f"🔎 কারণ: {reason}\n\n"
+                        "🎬 তাই নিরাপদ ফুল মোডে চলছে\n"
+                        "(ঘুরন্ত হলুদ ওয়াটারমার্ক) — এনকোডে সময় লাগবে,\n"
+                        "নিচে % আর বাকি-সময় দেখা যাবে ⏳")
                     is_fast = False
+                    result = None
             if result is None:
-                result = await loop.run_in_executor(
-                    None, partial(process_video, thumb_path=job.get("thumb_path")),
-                    job["path"], out_path)
+                enc = {"pct": None, "eta": None, "fps": 0.0}
+
+                def _enc_cb(pct, eta, fps):
+                    enc.update(pct=pct, eta=eta, fps=fps)
+
+                updater = asyncio.create_task(_encode_status(status, job, enc))
+                try:
+                    result = await loop.run_in_executor(
+                        None, partial(process_video, thumb_path=job.get("thumb_path"),
+                                      progress_cb=_enc_cb),
+                        job["path"], out_path)
+                finally:
+                    updater.cancel()
+                    try:
+                        await updater
+                    except (asyncio.CancelledError, Exception):
+                        pass
             o = result["out"]
             logger.info(f"/brand শেষ {job['name']}: মোড {'ফাস্ট' if is_fast else 'ফুল'}, "
                         f"ইন্ট্রো {result['intro_dur']}s, মোট {o['duration'] / 60:.1f} মিনিট "
