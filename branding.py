@@ -108,6 +108,72 @@ def _run(cmd, tag: str):
         raise RuntimeError(f"ffmpeg [{tag}] ব্যর্থ:\n{tail}")
 
 
+def popen_progress(cmd, total_sec, cb, tag: str, cb_every: float = 5.0):
+    """দীর্ঘ ffmpeg কাজ `-progress pipe:1` দিয়ে চালিয়ে লাইভ প্রোগ্রেস বের করে।
+
+    cb(pct, eta_sec, fps) প্রতি cb_every সেকেন্ডে ডাকা হয় — এটা একই থ্রেডে
+    (ওয়ার্কার executor-এ) ব্লকিং লুপ, তাই asyncio আটকায় না; cb ভ্যালুগুলো
+    শুধু একটা সাধারণ dict আপডেট করে — GIL-সেফ।
+    nice 19 + stderr temp-file (deadlock এড়াতে PIPE না)।
+    """
+    if BRAND_NICE:
+        cmd = ["nice", "-n", "19", *cmd]
+    cmd = list(cmd) + ["-progress", "pipe:1", "-nostats"]
+    err_f = tempfile.TemporaryFile(mode="w+")
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_f, text=True, bufsize=1)
+    out_t = fps = speed = 0.0
+    last = 0.0
+    try:
+        for line in (proc.stdout or ""):
+            k, _, v = line.strip().partition("=")
+            if not k:
+                continue
+            if k == "out_time_us":
+                try:
+                    out_t = max(0.0, float(v) / 1e6)
+                except ValueError:
+                    pass
+            elif k == "out_time_ms" and out_t <= 0.0:
+                try:  # ffmpeg-এর পুরনো "ms" ফিল্ড আসলে µs মানেই ধরে
+                    out_t = max(0.0, float(v) / 1e6)
+                except ValueError:
+                    pass
+            elif k == "fps":
+                try:
+                    fps = float(v)
+                except ValueError:
+                    pass
+            elif k == "speed":
+                try:
+                    speed = float((v or "0").rstrip("x") or 0)
+                except ValueError:
+                    speed = 0.0
+            elif k == "progress" and v.strip() == "end":
+                break
+            now = time.time()
+            if cb and now - last > cb_every:
+                last = now
+                pct = min(99.0, out_t / total_sec * 100.0) if total_sec > 0 else 0.0
+                eta = ((total_sec - out_t) / speed) if speed > 0.01 else None
+                try:
+                    cb(pct, eta, fps)
+                except Exception:
+                    pass
+        rc = proc.wait()
+        err_f.seek(0)
+        tail = "\n".join(err_f.read().splitlines()[-20:])
+        if rc != 0:
+            raise RuntimeError(f"ffmpeg [{tag}] ব্যর্থ:\n{tail or f'exit {rc}'}")
+        return rc
+    finally:
+        try:
+            if proc.poll() is None:
+                proc.kill()
+        except Exception:
+            pass
+        err_f.close()
+
+
 def _as_int(v, default):
     """স্ট্রিং/বাজে মান এলেও ভেঙে না পড়ে ইন্ট ফেরত দেয় (env ভুল হলেও সেফ)"""
     try:
@@ -127,10 +193,11 @@ def _as_float(v, default):
 
 def process_video(in_path, out_path, voice_path=None, text=None, interval_min=None,
                   show_sec=None, preset=None, crf=None, max_height=None,
-                  thumb_path=None, font_path=None) -> dict:
+                  thumb_path=None, font_path=None, progress_cb=None) -> dict:
     """ইনপুট ভিডিওর শুরুতে ইন্ট্রো কার্ড+ভয়েস জুড়ে দেয় এবং পুরো ভিডিওজুড়ে
     পিরিয়ডিক ওয়াটারমার্ক বার্ন করে। থ্রেড-সেফ পিওর ফাংশন — worker এটাকে
-    run_in_executor দিয়ে চালায়।"""
+    run_in_executor দিয়ে চালায়। progress_cb দিলে মেইন এনকোড চলাকালীন
+    cb(pct, eta_sec, fps) ডাকা হয় — ইউজারকে লাইভ % + বাকি-সময় দেখাতে।"""
     os.makedirs(BRAND_TMP_DIR, exist_ok=True)
     voice_path = voice_path or BRAND_VOICE_PATH
     text = _escape_drawtext(text or BRAND_TEXT)
@@ -231,13 +298,18 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
             f"[catv]{mark}[vt];"
             f"[cata]aformat=sample_rates=44100:channel_layouts=stereo[at]"
         )
-        _run(["ffmpeg", "-y", "-v", "error", "-i", intro_path, "-i", in_path, *ma_in,
-              "-filter_complex", fc,
-              "-map", "[vt]", "-map", "[at]",
-              "-c:v", "libx264", "-preset", preset, "-crf", str(crf),
-              "-pix_fmt", "yuv420p",
-              "-c:a", "aac", "-b:a", "160k", "-ac", "2",
-              "-movflags", "+faststart", out_path], "main")
+        main_cmd = ["ffmpeg", "-y", "-v", "error", "-i", intro_path, "-i", in_path, *ma_in,
+                    "-filter_complex", fc,
+                    "-map", "[vt]", "-map", "[at]",
+                    "-c:v", "libx264", "-preset", preset, "-crf", str(crf),
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "160k", "-ac", "2",
+                    "-movflags", "+faststart", out_path]
+        if progress_cb:
+            # লাইভ প্রোগ্রেসসহ (মোট = ইন্ট্রো + মুভি সময়কাল)
+            popen_progress(main_cmd, m["duration"] + intro_dur, progress_cb, "main")
+        else:
+            _run(main_cmd, "main")
 
         # ── ৩) যাচাই: আউটপুট দৈর্ঘ্য = ইন্ট্রো + মুভি (± ২% বা ৩ সেকেন্ড)
         out = probe_media(out_path)
@@ -283,12 +355,24 @@ def fast_concat_video(in_path, out_path, thumb_path=None, voice_path=None, text=
     অডিও mono/stereo — না হলে None ফেরত (কলার ফুল মোডে fallback করবে)।
     """
     m = probe_media(in_path)
-    ok = (m["vcodec"] == "h264" and m["pix_fmt"] == "yuv420p"
-          and m["has_audio"] and m["acodec"] == "aac"
-          and m["channels"] in (1, 2) and 0 < m["sample_rate"] <= 96000
-          and m["width"] and m["height"] and m["duration"] > 1)
+    why = []
+    if m["vcodec"] != "h264":
+        why.append(f"ভিডিও কোডেক {m['vcodec']} (দরকার h264)")
+    if m["vcodec"] == "h264" and m["pix_fmt"] != "yuv420p":
+        why.append(f"পিক্সেল-ফরম্যাট {m['pix_fmt']}")
+    if not m["has_audio"]:
+        why.append("অডিও ট্র্যাক নেই")
+    elif m["acodec"] != "aac":
+        why.append(f"অডিও কোডেক {m['acodec']} (দরকার aac)")
+    elif m["channels"] not in (1, 2):
+        why.append(f"{m['channels']}-চ্যানেল অডিও")
+    elif not (0 < m["sample_rate"] <= 96000):
+        why.append("অডিও স্যাম্পল-রেট অস্বাভাবিক")
+    if not (m["width"] and m["height"] and m["duration"] > 1):
+        why.append("ভিডিও-মেটাডেটা অসম্পূর্ণ")
+    ok = not why
     if not ok:
-        return None
+        return {"mode": "skip", "reason": "; ".join(why)}
 
     text = _escape_drawtext(text or BRAND_TEXT)
     font_path = BRAND_FONT_PATH
@@ -346,11 +430,17 @@ def fast_concat_video(in_path, out_path, thumb_path=None, voice_path=None, text=
         out = probe_media(out_path)
         want = m["duration"] + intro_dur
         if abs(out["duration"] - want) > max(3.0, want * 0.02):
-            raise RuntimeError(f"ফাস্ট-কনক্যাট যাচাই ব্যর্থ ({out['duration']:.1f}s != {want:.1f}s)")
+            # কমন কেস: ওয়েব-রি ফাইলের মাঝপথে রেজোলিউশন/প্যারামিটার বদলায়েছে —
+            # বাগ না, প্রত্যাশিত প্রত্যাখ্যান; তাই ERROR traceback না, পরিষ্কার warning
+            logger.warning(f"ফাস্ট-কনক্যাট শর্ট-ফাইল ধরা পড়েছে "
+                           f"({out['duration']:.1f}s != {want:.1f}s) — ফুল মোডে fallback")
+            return {"mode": "skip",
+                    "reason": "ফাইলের মাঝপথে কোডেক/রেজোলিউশন বদলায়েছে — "
+                              "কপি-জোড়া নিরাপদ না"}
         logger.info(f"⚡ ফাস্ট-ব্র্যান্ড শেষ: ইন্ট্রো {intro_dur}s + মুভি {m['duration'] / 60:.1f} মিনিট (কপি)")
         return {"out": out, "intro_dur": intro_dur, "mode": "fast"}
     except Exception:
-        logger.exception("ফাস্ট-কনক্যাট ব্যর্থ — ফুল মোডে fallback করা হবে")
+        logger.exception("ফাস্ট-কনক্যাট অপ্রত্যাশিত ব্যর্থতা — ফুল মোডে fallback করা হবে")
         return None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
