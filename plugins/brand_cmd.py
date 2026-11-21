@@ -289,8 +289,12 @@ async def _worker():
         except Exception as e:
             logger.exception("/brand জব ব্যর্থ")
             try:
-                await status.edit(f"❌ ব্র্যান্ডিং ব্যর্থ: {str(e)[:400]}\n\n"
-                                  "আবার চেষ্টা করতে /brand দিয়ে ফাইল পাঠাও।")
+                await status.edit(
+                    "❌ ব্র্যান্ডিং ব্যর্থ হয়েছে — এই ফাইলটা এনকোড করা গেল না\n"
+                    "(ফাইলের ভেতরে কোডেক/ইনডেক্স-সমস্যা থাকতে পারে)\n\n"
+                    "💡 ভিন্ন কোয়ালিটি/সোর্সের ফাইল দিয়ে /brand চেষ্টা করো\n"
+                    "বা ⚡/brandfast দিয়ে দেখো।\n"
+                    "(টেকনিক্যাল বিস্তারিত সার্ভার-লগে রাখা হয়েছে)")
             except Exception:
                 pass
         finally:
