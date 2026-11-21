@@ -190,12 +190,27 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
               intro_path], "intro")
 
         # ── ২) ইন্ট্রো + মুভি জোড়া + পিরিয়ডিক ওয়াটারমার্ক বার্ন
+        # ওয়াটারমার্ক: হলুদ (গোল্ড), হালকা, আর প্রতি বার ভিন্ন জায়গায় —
+        # মাঝখানে → নিচ-ডান → নিচ-বাম → উপর-ডান ঘুরে ফিরে আসে
+        # (কেউ এক কোণ ক্রপ করে ব্র্যান্ড সরাতে পারবে না)।
         period = max(1.0, float(interval_min) * 60.0)
-        enable = "lt(mod(t\\,%g)\\,%d)" % (period, int(show_sec))
-        mark = (f"drawtext=fontfile={font_path}:text='{text}':"
-                f"fontsize={max(16, H // 26)}:fontcolor=white@0.85:box=1:"
-                f"boxcolor=black@0.35:boxborderw=10:"
-                f"x=w-tw-24:y=h-th-24:enable='{enable}'")
+        spots = [
+            ("(w-tw)/2", "(h-th)/2"),   # মাঝখানে
+            ("w-tw-30",  "h-th-30"),    # নিচ-ডান কোণ
+            ("30",       "h-th-30"),    # নিচ-বাম কোণ
+            ("w-tw-30",  "30"),         # উপর-ডান কোণ
+        ]
+        marks = []
+        for i, (px, py) in enumerate(spots):
+            # এই দাগে কেবল i-তম পজিশন-টার্নে দেখাবে: floor(t/period) % 4 == i
+            enable = "if(eq(mod(floor(t/%g)\\,%d)\\,%d)\\,lt(mod(t\\,%g)\\,%d)\\,0)" % (
+                period, len(spots), i, period, int(show_sec))
+            marks.append(
+                f"drawtext=fontfile={font_path}:text='{text}':"
+                f"fontsize={max(14, H // 30)}:fontcolor=0xFFD700@0.9:box=1:"
+                f"boxcolor=black@0.25:boxborderw=8:"
+                f"x={px}:y={py}:enable='{enable}'")
+        mark = ",".join(marks)
         if m["has_audio"]:
             ma_in = []
             ma_lbl = "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[ma]"
