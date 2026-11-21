@@ -43,6 +43,28 @@ logger = logging.getLogger("branding")
 
 # ───────────────────────── প্রোব/হেল্পার ─────────────────────────
 
+def _scan_last_pts(path: str, timeout: int = 900) -> float:
+    """ভাঙা মেটাডেটার ফাইলের আসল দৈর্ঘ্য: সব ভিডিও-প্যাকেটের শেষ pts পড়ে বের করে।
+    ধীর (পুরো ফাইল স্ক্যান) — শুধু সন্দেহজনক ফাইলে ডাকা হয়।"""
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "packet=pts_time", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=timeout)
+        last = 0.0
+        for line in (proc.stdout or "").splitlines():
+            s = line.strip()
+            if s and s != "N/A":
+                try:
+                    last = max(last, float(s))
+                except ValueError:
+                    pass
+        return last
+    except Exception as e:
+        logger.warning(f"প্যাকেট-স্ক্যান ব্যর্থ: {e}")
+        return 0.0
+
+
 def probe_media(path: str, need_video: bool = True) -> dict:
     """ffprobe দিয়ে রেজোলিউশন/ফ্রেমরেট/SAR/দৈর্ঘ্য/অডিও বের করে।
     need_video=False দিলে অডিও-ফাইল (ভয়েস ক্লিপ) প্রোব করা যায়।"""
@@ -73,6 +95,20 @@ def probe_media(path: str, need_video: bool = True) -> dict:
     if sar_raw in ("N/A", "0/1", ""):
         sar_raw = "1/1"
     dur = float((data.get("format") or {}).get("duration") or (v or a or {}).get("duration") or 0)
+    if need_video and dur > 0:
+        # ওয়েব-রি ফাইলে মেটাডেটা প্রায়ই ভাঙা থাকে — ৩GB ফাইলকে ১৫ সেকেন্ড
+        # বললে বিটরেট হয় ১.৭ Gbps (অবাস্তব); তখন প্যাকেট-স্ক্যানে আসল দৈর্ঘ্য
+        try:
+            if os.path.getsize(path) / dur > 25_000_000:  # >২৫ Mbps = সন্দেহজনক
+                real = _scan_last_pts(path)
+                if real > dur + 1.0:
+                    logger.info(f"মেটাডেটা-দৈর্ঘ্য {dur:.1f}s ভাঙা ছিল — "
+                                f"প্যাকেট-স্ক্যানে আসল {real:.1f}s")
+                    dur = real
+        except OSError:
+            pass
+    elif need_video and dur <= 0:
+        dur = _scan_last_pts(path) or dur
     return {
         "width": int((v or {}).get("width", 0) or 0),
         "height": int((v or {}).get("height", 0) or 0),
@@ -213,15 +249,27 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
 
     m = probe_media(in_path)
     W, H = m["width"], m["height"]
+    # SAR (পিক্সেল-অনুপাত) নরমালাইজ: অসম SAR (যেমন 405:404) থাকলে ডিসপ্লে-মাত্রায়
+    # স্কেল করে সব ব্রাঞ্চে setsar=1 জোর করে — নাহলে concat ফিল্টার ক্র্যাশ করে
+    sar_raw = m["sar"]  # "n/d"
+    try:
+        _sn, _sd = sar_raw.split("/")
+        sar_ratio = float(_sn) / float(_sd) if float(_sd) > 0 else 1.0
+    except Exception:
+        sar_ratio = 1.0
     # উচ্চতার ক্যাপ: 1080p-র চেয়ে বড় হলে ছোট করে এনকোড (সময়/সাইজ বাঁচে)
-    scale_part = ""
     if H > max_height:
         h2 = max_height - (max_height % 2)
-        w2 = int(round(W * h2 / H / 2)) * 2
-        scale_part = f",scale={w2}:{h2}"
+        w2 = int(round(W * sar_ratio * h2 / H / 2)) * 2
+        scale_part = f",scale={w2}:{h2},setsar=1"
         W, H = w2, h2
+    elif abs(sar_ratio - 1.0) > 0.01:
+        w2 = int(round(W * sar_ratio / 2)) * 2
+        scale_part = f",scale={w2}:{H},setsar=1"
+        W = w2
+    else:
+        scale_part = ",setsar=1"
     fps_str = m["fps_str"]
-    sar = m["sar"]
 
     # ভয়েসের দৈর্ঘ্য → ইন্ট্রোর দৈর্ঘ্য (ভয়েস না থাকলেও ৫ সেকেন্ডের কার্ড দেখাবে)
     voice = None
@@ -244,11 +292,11 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
         if thumb_path and os.path.exists(thumb_path):
             vsrc = ["-loop", "1", "-framerate", "25", "-i", thumb_path]
             vf = (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-                  f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar={sar},"
+                  f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,"
                   f"{center_text},{fades}")
         else:
             vsrc = ["-f", "lavfi", "-i", f"color=c=0x0a0a12:s={W}x{H}:d={intro_dur}"]
-            vf = f"setsar={sar},{center_text},{fades}"
+            vf = f"setsar=1,{center_text},{fades}"
         if voice:
             a_in = ["-i", voice_path]
             af = f"[1:a]aresample=44100,apad=whole_dur={intro_dur},aformat=sample_rates=44100:channel_layouts=stereo[a]"
@@ -292,7 +340,7 @@ def process_video(in_path, out_path, voice_path=None, text=None, interval_min=No
             ma_in = ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
             ma_lbl = f"[2:a]atrim=0:{m['duration']},aformat=sample_rates=44100:channel_layouts=stereo[ma]"
         fc = (
-            f"[1:v]fps={fps_str},setsar={sar}{scale_part}[mv];"
+            f"[1:v]fps={fps_str}{scale_part}[mv];"
             f"{ma_lbl};"
             f"[0:v][0:a][mv][ma]concat=n=2:v=1:a=1[catv][cata];"
             f"[catv]{mark}[vt];"
