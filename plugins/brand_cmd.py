@@ -1,16 +1,17 @@
 """
-🎬 /brand + 🔗 /stream — অ্যাডমিন ফাইল-টুল (কোয়েবেই চলে)
+🎬 /brand + ⚡ /brandfast + 🔗 /stream — অ্যাডমিন ফাইল-টুল (কোয়েবেই চলে)
 ================================================================
-দুই সিস্টেম আলাদা কমান্ডে (অ্যাডমিনদের জন্য; সাধারণ ইউজার আগের মতোই):
+সিস্টেমগুলো আলাদা কমান্ডে (অ্যাডমিনদের জন্য; সাধারণ ইউজার আগের মতোই):
 
-  /brand            → ব্র্যান্ডিং মোড: ফাইল দিলে নামিয়ে → নাম/থাম্ব প্যানেল →
-                      ইন্ট্রো কার্ড+ভয়েস+ঘুরন্ত হলুদ ওয়াটারমার্ক বার্ন →
-                      ব্র্যান্ডেড ফাইল তোমাকে ফেরত (যেখানে খুশি ফরওয়ার্ড করো)
+  /brand            → ফুল ব্র্যান্ডিং: নামানো → নাম/থাম্ব প্যানেল → ইন্ট্রো কার্ড+
+                      ভয়েস+ঘুরন্ত হলুদ ওয়াটারমার্ক বার্ন → ব্র্যান্ডেড ফাইল ফেরত
+  /brandfast        → ফাস্ট ব্র্যান্ডিং: ইন্ট্রো কার্ড+ভয়েস জোড়া, মুভি রি-এনকোড নেই —
+                      CPU প্রায় শূন্য, মিনিটখানেকে শেষ (কোডেক মানলে; নাহলে ফুল মোড)
   /stream           → স্ট্রিম মোড: ফাইল দিলে স্ট্রিম লিংক+পেজ (আগের সিস্টেম)
   কমান্ড ছাড়া ফাইল  → বট হিন্ট দেবে, অটো-স্ট্রিম আর হবে না (অ্যাডমিনের ক্ষেত্রে)
 
 নোট:
-  • /brand স্ট্রিম/লিংক-সোয়াপ পাইপলাইনের বাইরে — পুরনো স্ট্রিম কিছুই বদলায় না
+  • ব্র্যান্ড-মোডগুলো স্ট্রিম/লিংক-সোয়াপ পাইপলাইনের বাইরে — পুরনো স্ট্রিম অক্ষত
   • ffmpeg nice 19-এ চলে — স্ট্রিম সবসময় CPU-তে আগে পাবে
   • টেলিগ্রাম বট-অ্যাকাউন্টের হার্ড লিমিট: ডাউনলোড/আপলোড সর্বোচ্চ 2 GB
 """
@@ -23,12 +24,12 @@ import tempfile
 import time
 from functools import partial
 
-from pyrogram import Client, filters
+from pyrogram import Client, filters, StopPropagation
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
 
 from info import ADMINS, BRAND_INTERVAL_MIN, BRAND_SHOW_SEC, BRAND_TMP_DIR
-from branding import probe_media, process_video
+from branding import probe_media, process_video, fast_concat_video
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,10 @@ AWAIT_TTL = 600           # /brand বা /stream দেওয়ার পর �
 QUEUE_MAX = 3             # একসাথে কিউতে সর্বোচ্চ কয়টা ফাইল
 
 HINT_TEXT = (
-    "⚠️ এখন সরাসরি ফাইল দিলে আর কিছু হয় না — সিস্টেম দুই কমান্ডে আলাদা করা হয়েছে:\n\n"
+    "⚠️ এখন সরাসরি ফাইল দিলে আর কিছু হয় না — সিস্টেম কমান্ডে আলাদা করা হয়েছে:\n\n"
     "🔗 **স্ট্রিম লিংক** চাইলে: আগে `/stream` লিখো → তারপর ফাইল পাঠাও\n"
-    "🎬 **ব্র্যান্ডেড ফাইল** চাইলে: আগে `/brand` লিখো → তারপর ফাইল পাঠাও")
+    "🎬 **ব্র্যান্ডেড ফাইল** চাইলে: আগে `/brand` লিখো → তারপর ফাইল পাঠাও\n"
+    "⚡ **ফাস্ট ব্র্যান্ড** চাইলে: আগে `/brandfast` লিখো → তারপর ফাইল পাঠাও")
 
 STATE: dict = {}          # user_id → {"stage": "file", "exp": ts}
 JOBS: dict = {}           # "user_id:msg_id" → জব ডিকশনারি
@@ -67,34 +69,41 @@ def _bar(pct: float, width: int = 12) -> str:
     return "[" + "█" * filled + "─" * (width - filled) + f"] {pct:.1f}%"
 
 
-class _Prog:
-    """ডাউনলোড/আপলোড প্রোগ্রেস — একই মেসেজ এডিট (৪ সেকেন্ড পরপর)"""
+def _make_prog(msg, prefix: str):
+    """ডাউনলোড/আপলোড প্রোগ্রেস — সাধারণ async def ক্লোজার।
 
-    def __init__(self, msg, prefix: str):
-        self.msg, self.prefix = msg, prefix
-        self.t0, self.last_t, self.last_cur, self.last_text = time.time(), 0.0, 0, ""
+    🐞 আগে ক্লাস-ইনস্ট্যান্স ব্যবহার করেছিলাম — pyrogram-এর
+    `inspect.iscoroutinefunction(progress)` চেক তাতে False হয়, ফলে
+    callback কখনো await হতো না এবং বার ০%-এই আটকে থাকত। সাধারণ
+    async def ফাংশন হলে pyrogram সরাসরি await করে — % দেখা যায়।
+    প্রতি ২ সেকেন্ডে আপডেট; শুরুর আপডেট সাথে সাথে, শেষে ১০০% সবসময়।
+    """
+    t0 = time.time()
+    last = {"t": 0.0, "cur": 0, "text": ""}
 
-    async def __call__(self, current: int, total: int):
+    async def prog(current: int, total: int):
         now = time.time()
-        if not (total and current >= total) and now - self.last_t < 4:
+        if not (total and current >= total) and now - last["t"] < 2:
             return
-        dt = (now - self.last_t) if self.last_t else (now - self.t0)
-        speed = max(0, (current - self.last_cur) / dt) if dt > 0 and self.last_t else 0
-        self.last_t, self.last_cur = now, current
+        dt = (now - last["t"]) if last["t"] else max(0.1, now - t0)
+        speed = max(0, (current - last["cur"]) / dt) if last["t"] else 0
+        last["t"], last["cur"] = now, current
         pct = current / total * 100 if total else 0
         sp = f" | ⚡ {_size(speed)}/s" if speed else ""
-        text = (f"{self.prefix}\n{_bar(pct)}\n"
+        text = (f"{prefix}\n{_bar(pct)}\n"
                 f"📦 সাইজ: {_size(current)} / {_size(total)}{sp}\n"
-                f"⏱ লেগেছে: {_dur(now - self.t0)}")
-        if text == self.last_text:
+                f"⏱ লেগেছে: {_dur(now - t0)}")
+        if text == last["text"]:
             return
-        self.last_text = text
+        last["text"] = text
         try:
-            await self.msg.edit(text)
+            await msg.edit(text)
         except FloodWait as e:
             await asyncio.sleep(e.value + 1)
         except Exception:
             pass
+
+    return prog
 
 
 def _video_of(m):
@@ -111,10 +120,14 @@ def _video_of(m):
 
 
 def _panel(job) -> str:
+    mode_line = ("⚡ মোড: ফাস্ট (ইন্ট্রো+ভয়েস, মুভি রি-এনকোড নেই)"
+                 if job.get("mode") == "fast"
+                 else "🎬 মোড: ফুল (ঘুরন্ত হলুদ ওয়াটারমার্ক বার্নসহ)")
     thumb_state = ("🖼 থাম্বনেইল: তোমার দেওয়া ✅" if job.get("custom_thumb")
                    else ("🖼 থাম্বনেইল: ফাইলের নিজস্ব" if job.get("thumb_path")
                          else "🖼 থাম্বনেইল: নেই (ইন্ট্রো কার্ড কালো হবে)"))
     return ("✅ ডাউনলোড সফলভাবে হয়েছে!\n\n"
+            f"{mode_line}\n"
             f"🎬 নাম: {job['name']}\n"
             f"⏱ সময়কাল: {_dur(job['duration'])}\n"
             f"📦 সাইজ: {_size(job['size'])}\n"
@@ -159,25 +172,48 @@ async def _worker():
         workdir = os.path.dirname(job["path"])
         out_path = os.path.join(workdir, "branded.mp4")
         try:
-            await status.edit(
-                "⚙️ ব্র্যান্ডিং চলছে...\n\n"
-                f"🎬 নাম: {job['name']}\n"
-                "• শুরুতে ইন্ট্রো কার্ড + ভয়েস বসবে\n"
-                f"• প্রতি {BRAND_INTERVAL_MIN:g} মিনিটে {BRAND_SHOW_SEC} সেকেন্ড "
-                "হলুদ ওয়াটারমার্ক — মাঝ → নিচ-ডান → নিচ-বাম → উপর-ডান ঘুরে\n\n"
-                "⏳ ফাইলের সাইজ অনুযায়ী সময় লাগবে (ছোট ফাইল মিনিটেই শেষ) —\n"
-                "বট বন্ধ করো না, শেষ হলে নিজেই আপলোড শুরু হবে।")
+            is_fast = job.get("mode") == "fast"
+            if is_fast:
+                await status.edit(
+                    "⚡ ফাস্ট ব্র্যান্ডিং চলছে...\n\n"
+                    f"🎬 নাম: {job['name']}\n"
+                    "• শুরুতে ইন্ট্রো কার্ড + ভয়েস বসবে\n"
+                    "• মুভি রি-এনকোড হবে না — কোয়ালিটি ১০০% অক্ষত\n\n"
+                    "⏳ মিনিটখানেকের মধ্যেই শেষ হওয়ার কথা — বট বন্ধ করো না।")
+            else:
+                await status.edit(
+                    "⚙️ ব্র্যান্ডিং চলছে...\n\n"
+                    f"🎬 নাম: {job['name']}\n"
+                    "• শুরুতে ইন্ট্রো কার্ড + ভয়েস বসবে\n"
+                    f"• প্রতি {BRAND_INTERVAL_MIN:g} মিনিটে {BRAND_SHOW_SEC} সেকেন্ড "
+                    "হলুদ ওয়াটারমার্ক — মাঝ → নিচ-ডান → নিচ-বাম → উপর-ডান ঘুরে\n\n"
+                    "⏳ ফাইলের সাইজ অনুযায়ী সময় লাগবে (ছোট ফাইল মিনিটেই শেষ) —\n"
+                    "বট বন্ধ করো না, শেষ হলে নিজেই আপলোড শুরু হবে।")
             t0 = time.time()
             free = shutil.disk_usage(workdir).free
             if free < job["size"] * 1.3:
                 raise RuntimeError(f"ডিস্কে জায়গা নেই ({free / GB:.1f}GB ফ্রি, "
                                    f"দরকার ~{job['size'] * 1.3 / GB:.1f}GB)")
-            result = await asyncio.get_running_loop().run_in_executor(
-                None, partial(process_video, thumb_path=job.get("thumb_path")),
-                job["path"], out_path)
+            loop = asyncio.get_running_loop()
+            result = None
+            if is_fast:
+                result = await loop.run_in_executor(
+                    None, partial(fast_concat_video, thumb_path=job.get("thumb_path")),
+                    job["path"], out_path)
+                if result is None:
+                    await status.edit(
+                        "ℹ️ এই ফাইলের কোডেক ফাস্ট-মোড সাপোর্ট করে না\n"
+                        "(h264 + aac হতে হয়) — 🎬 নিরাপদ ফুল মোডে\n"
+                        "(ঘুরন্ত হলুদ ওয়াটারমার্ক বার্নসহ) কাজ চলছে...")
+                    is_fast = False
+            if result is None:
+                result = await loop.run_in_executor(
+                    None, partial(process_video, thumb_path=job.get("thumb_path")),
+                    job["path"], out_path)
             o = result["out"]
-            logger.info(f"/brand বার্ন শেষ {job['name']}: ইন্ট্রো {result['intro_dur']}s, "
-                        f"মোট {o['duration'] / 60:.1f} মিনিট ({time.time() - t0:.0f}s)")
+            logger.info(f"/brand শেষ {job['name']}: মোড {'ফাস্ট' if is_fast else 'ফুল'}, "
+                        f"ইন্ট্রো {result['intro_dur']}s, মোট {o['duration'] / 60:.1f} মিনিট "
+                        f"({time.time() - t0:.0f}s)")
 
             up_thumb = os.path.join(workdir, "up_thumb.jpg")
             try:
@@ -193,14 +229,20 @@ async def _worker():
                 duration=int(o["duration"]), width=o["width"], height=o["height"],
                 thumb=up_thumb if up_thumb and os.path.exists(up_thumb) else None,
                 caption=f"✅ ব্র্যান্ডেড: {job['name']}",
-                progress=_Prog(status, "📤 আপলোড হচ্ছে..."),
+                progress=_make_prog(status, "📤 আপলোড হচ্ছে..."),
             )
             mins = (time.time() - t0) / 60
+            if is_fast:
+                detail = (f"• মোড: ⚡ ফাস্ট — ইন্ট্রো কার্ড + ভয়েস "
+                          f"{result['intro_dur']:.1f} সেকেন্ড "
+                          "(মুভি রি-এনকোড নেই, কোয়ালিটি অক্ষত)")
+            else:
+                detail = (f"• ইন্ট্রো কার্ড + ভয়েস: {result['intro_dur']:.1f} সেকেন্ড\n"
+                          f"• হলুদ ওয়াটারমার্ক: প্রতি {BRAND_INTERVAL_MIN:g} মিনিটে "
+                          f"{BRAND_SHOW_SEC} সেকেন্ড, ঘুরে ঘুরে ৪ জায়গায়")
             await status.edit(
                 f"✅ সম্পন্ন! {job['name']}\n\n"
-                f"• ইন্ট্রো কার্ড + ভয়েস: {result['intro_dur']:.1f} সেকেন্ড\n"
-                f"• হলুদ ওয়াটারমার্ক: প্রতি {BRAND_INTERVAL_MIN:g} মিনিটে "
-                f"{BRAND_SHOW_SEC} সেকেন্ড, ঘুরে ঘুরে ৪ জায়গায়\n"
+                f"{detail}\n"
                 f"• মোট সময় লেগেছে: {mins:.0f} মিনিট\n\n"
                 "📤 উপরের ভিডিওটা এখন যেখানে খুশি ফরওয়ার্ড/ব্যবহার করতে পারো 🎉")
         except Exception as e:
@@ -229,6 +271,22 @@ async def brand_cmd(c, m):
         "3️⃣ বার্ন করবে: ইন্ট্রো কার্ড + ভয়েস + ঘুরন্ত হলুদ ওয়াটারমার্ক\n"
         "4️⃣ ব্র্যান্ডেড ফাইল তোমাকে ফেরত দেবে — যেখানে খুশি ফরওয়ার্ড করো\n\n"
         "🔗 স্ট্রিম লিংক বানাতে চাইলে আলাদা কমান্ড: /stream\n"
+        "⚡ ওয়াটারমার্ক ছাড়া ফাস্ট ব্র্যান্ড চাইলে: /brandfast\n"
+        f"⏱ এই মোড বাতিল হবে {AWAIT_TTL // 60} মিনিট পর। বাতিল করতে /brandcancel")
+
+
+@Client.on_message(filters.private & filters.command("brandfast") & filters.user(ADMINS))
+async def brandfast_cmd(c, m):
+    STATE[m.from_user.id] = {"stage": "fast", "exp": time.time() + AWAIT_TTL}
+    await m.reply(
+        "⚡ **ফাস্ট ব্র্যান্ডিং মোড চালু!**\n\n"
+        "এখন মুভি/ভিডিও ফাইলটা পাঠাও (সর্বোচ্চ 2 GB)।\n\n"
+        "এই মোডে:\n"
+        "• শুরুতে ইন্ট্রো কার্ড + ভয়েস বসবে — ব্র্যান্ড দেখা যাবে\n"
+        "• মুভি রি-এনকোড হবে না — কোয়ালিটি ১০০% অক্ষত, সার্ভারের ভার প্রায় শূন্য\n"
+        "• যেকোনো সাইজের ফাইল মিনিটখানেকে শেষ\n\n"
+        "⚠️ পিক্সেলে ওয়াটারমার্ক বার্ন হবে না — ঘুরন্ত হলুদ ওয়াটারমার্কসহ চাইলে /brand\n"
+        "ℹ️ কোডেক সাপোর্ট না করলে বট নিজে থেকেই ফুল মোডে চলে যাবে\n"
         f"⏱ এই মোড বাতিল হবে {AWAIT_TTL // 60} মিনিট পর। বাতিল করতে /brandcancel")
 
 
@@ -280,7 +338,8 @@ async def brand_file(c, m):
     STATE.pop(m.from_user.id, None)
     if st["stage"] == "stream":
         return          # /stream মোড → কিছু না করে পাস → স্ট্রিম-প্লাগিন লিংক বানাবে
-    # ── এখান থেকে ব্র্যান্ড-মোড (/brand) ──
+    # ── এখান থেকে ব্র্যান্ড-মোড: /brand (ফুল) বা /brandfast (ফাস্ট) ──
+    mode = "fast" if st["stage"] == "fast" else "full"
     if m.audio:
         await m.reply("⚠️ অডিও ব্র্যান্ড করা যায় না — মুভি/ভিডিও ফাইল দাও।")
         m.stop_propagation()
@@ -313,7 +372,7 @@ async def brand_file(c, m):
     path = os.path.join(workdir, "input.bin")
     st_msg = await m.reply("📥 ডাউনলোড হচ্ছে...\n" + _bar(0))
     await c.download_media(m, file_name=path,
-                           progress=_Prog(st_msg, "📥 ডাউনলোড হচ্ছে..."))
+                           progress=_make_prog(st_msg, "📥 ডাউনলোড হচ্ছে..."))
     try:
         meta = probe_media(path)
     except Exception as e:
@@ -331,7 +390,7 @@ async def brand_file(c, m):
     name = getattr(d, "file_name", None) or f"Movie_{m.id}.mp4"
     JOBS[key] = dict(path=path, name=name, size=os.path.getsize(path),
                      duration=meta["duration"], thumb_path=thumb_path,
-                     custom_thumb=False, awaiting=None, queued=False,
+                     custom_thumb=False, awaiting=None, queued=False, mode=mode,
                      panel_msg=st_msg, cancelled=False, client=c)
     await st_msg.edit(_panel(JOBS[key]), reply_markup=_buttons(str(m.id)))
     m.stop_propagation()    # স্ট্রিম-প্লাগিন (group=4) যেন ডাবল রেসপন্স না দেয়
@@ -379,38 +438,56 @@ async def brand_photo(c, m):
 
 
 # ───────────────────────── বাটন ─────────────────────────
+# group=-1: callback.py-র ক্যাচ-অল হ্যান্ডলার (group=0, ফিল্টার ছাড়া) আগে ধরে
+# নিলে আমার হ্যান্ডলার কখনো চলতো না — বাটন চাপলে চুপচাপ স্পিনার ঘুরতো।
+# সবার আগে চলে সাথে সাথে answer করে + StopPropagation — বাটন এখন সব কাজ করবে।
 
 @Client.on_callback_query(filters.create(
-    lambda _, __, q: bool(q.data) and q.data.startswith(("bren:", "bthu:", "bcan:", "bgo:"))))
+    lambda _, __, q: bool(q.data) and q.data.startswith(("bren:", "bthu:", "bcan:", "bgo:"))),
+    group=-1)
 async def brand_cb(c, q):
-    if q.from_user.id not in ADMINS:
-        return
-    act, mid = q.data.split(":", 1)
-    key = f"{q.message.chat.id}:{mid}"
-    job = JOBS.get(key)
-    if job is None:
-        await q.answer("এই জব আর নেই", show_alert=True)
-        return
-    if act == "bren":
-        job["awaiting"] = "name"
-        await q.message.edit("✏️ নতুন নাম লিখে পাঠাও (এক্সটেনশনসহ, যেমন: movie.mp4)।\n"
-                             "না বদলাতে চাইলে skip লিখো।")
-        await q.answer()
-    elif act == "bthu":
-        job["awaiting"] = "thumb"
-        await q.message.edit("🖼 থাম্বনেইলের ছবি পাঠাও (JPG/PNG)।")
-        await q.answer()
-    elif act == "bcan":
-        job["cancelled"] = True
-        _cleanup(key)
-        await q.message.edit("❌ বাতিল করা হলো।")
-        await q.answer("বাতিল")
-    elif act == "bgo":
-        if job.get("queued"):
-            await q.answer("ইতিমধ্যে কিউতে আছে", show_alert=True)
-            return
-        job["queued"] = True
-        _POS["n"] += 1
-        await QUEUE.put(key)
-        await q.message.edit(f"🚀 কিউতে বসলো! (আগে {_POS['n'] - 1} টা আছে)\n\n{_panel(job)}")
-        await q.answer("কিউতে বসলো ✅")
+    try:
+        if q.from_user.id not in ADMINS:
+            return await q.answer("এটা অ্যাডমিনের বাটন।", show_alert=True)
+        if not q.message:
+            return await q.answer("মেসেজটা আর নেই — /brand দিয়ে নতুন করে করো",
+                                  show_alert=True)
+        act, mid = q.data.split(":", 1)
+        key = f"{q.message.chat.id}:{mid}"
+        job = JOBS.get(key)
+        if job is None:
+            return await q.answer("এই জব আর নেই — বট রিস্টার্ট হয়ে থাকতে পারে; "
+                                  "/brand দিয়ে নতুন করে করো", show_alert=True)
+        if act == "bren":
+            job["awaiting"] = "name"
+            await q.message.edit("✏️ নতুন নাম লিখে পাঠাও (এক্সটেনশনসহ, যেমন: movie.mp4)।\n"
+                                 "না বদলাতে চাইলে skip লিখো।")
+            await q.answer()
+        elif act == "bthu":
+            job["awaiting"] = "thumb"
+            await q.message.edit("🖼 থাম্বনেইলের ছবি পাঠাও (JPG/PNG)।")
+            await q.answer()
+        elif act == "bcan":
+            job["cancelled"] = True
+            _cleanup(key)
+            await q.message.edit("❌ বাতিল করা হলো।")
+            await q.answer("বাতিল")
+        elif act == "bgo":
+            if job.get("queued"):
+                return await q.answer("ইতিমধ্যে কিউতে আছে", show_alert=True)
+            _ensure_worker()
+            job["queued"] = True
+            _POS["n"] += 1
+            await QUEUE.put(key)
+            await q.message.edit(f"🚀 কিউতে বসলো! (আগে {_POS['n'] - 1} টা আছে)\n\n{_panel(job)}")
+            await q.answer("কিউতে বসলো ✅")
+        raise StopPropagation   # ক্যাচ-অল যেন আর ধরে না
+    except StopPropagation:
+        raise
+    except Exception as e:
+        # যেকোনো এররে ইউজার স্পিনার না দেখে কারণটা চোখে দেখুক
+        logger.exception("/brand বাটন এরর")
+        try:
+            await q.answer(f"❌ {str(e)[:180]}", show_alert=True)
+        except Exception:
+            pass
