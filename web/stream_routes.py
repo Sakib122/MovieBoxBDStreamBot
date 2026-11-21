@@ -18,7 +18,6 @@ from utils import temp, get_readable_time
 from web.utils import StartTime, __version__
 import aiofiles
 import jinja2
-import branding   # 🎬 ফাইলের ভেতরে ব্র্যান্ডিং (বার্ন-ইন) — branding.py
 from database.users_db import db
 
 routes = web.RouteTableDef()
@@ -367,8 +366,6 @@ async def stream_handler(request: web.Request):
         else:
             id = int(re.search(r"(\d+)(?:\/\S+)?", path).group(1))
             secure_hash = request.rel_url.query.get("hash")
-        # 🎬 ব্র্যান্ডেড ভার্সন প্রস্তুত থাকলে ওটাই সার্ভ করো (আসল হ্যাশ মিললেই — লিংক জালিয়াতি ঠেকাতে)
-        id, secure_hash, _is_branded = await branding.resolve(id, secure_hash)
         # ⚡ HEAD = বডি কেউ চায় না — টেলিগ্রাম স্ট্রিম শুরু না করে শুধু হেডার
         if request.method == "HEAD":
             return await media_streamer_head(request, id, secure_hash)
