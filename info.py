@@ -37,6 +37,25 @@ DB_URL = environ.get('DATABASE_URI', "mongodb+srv://Testbot:Testbot@cluster0.5iu
 DB_NAME = environ.get('DATABASE_NAME', "FlixBoxsStreamBot")
 
 # =========================================================
+# 🎬 MOVIEBOXBD ব্র্যান্ডিং (ফাইলের ভেতরে বার্ন-ইন) — branding.py
+# =========================================================
+BRAND_ENABLED = is_enabled(environ.get('BRAND_ENABLED', 'true'), True)
+BRAND_TEXT = environ.get('BRAND_TEXT', 'MovieBoxBD.xyz')
+BRAND_VOICE_PATH = environ.get('BRAND_VOICE_PATH', 'assets/brand_voice.mp3')
+BRAND_FONT_PATH = environ.get('BRAND_FONT_PATH', 'assets/DejaVuSans-Bold.ttf')
+BRAND_INTERVAL_MIN = float(environ.get('BRAND_INTERVAL_MIN', '12'))    # কত মিনিট পরপর ওয়াটারমার্ক
+BRAND_SHOW_SEC = int(environ.get('BRAND_SHOW_SEC', '5'))              # কত সেকেন্ড ভাসবে
+# ফ্রি কোয়েব-সেফ ডিফল্ট (ভালো CPU-সার্ভারে দিন: BRAND_PRESET=veryfast, BRAND_MAX_HEIGHT=1080)
+BRAND_PRESET = environ.get('BRAND_PRESET', 'ultrafast')               # এনকোড স্পিড — ফ্রি ইনস্ট্যান্সে দ্রুততম
+BRAND_CRF = int(environ.get('BRAND_CRF', '23'))                       # কোয়ালিটি (কম = ভালো, বেশি সময়)
+BRAND_MAX_HEIGHT = int(environ.get('BRAND_MAX_HEIGHT', '720'))        # এর চেয়ে বড় হলে স্কেল — ফ্রি ইনস্ট্যান্সে 720 নিরাপদ
+BRAND_WORKERS = int(environ.get('BRAND_WORKERS', '1'))                # একসাথে কয়টা মুভি — ফ্রি ইনস্ট্যান্সে ১-ই থাক
+BRAND_MIN_SIZE_MB = int(environ.get('BRAND_MIN_SIZE_MB', '3'))        # এর চেয়ে ছোট ফাইল স্কিপ
+BRAND_MAX_SIZE_GB = float(environ.get('BRAND_MAX_SIZE_GB', '1.5'))    # এর চেয়ে বড় ফাইল স্কিপ (ফ্রি ডিস্ক ছোট)
+BRAND_TMP_DIR = environ.get('BRAND_TMP_DIR', '/tmp/mbxbrand')         # কাজের ডিরেক্টরি
+BRAND_NICE = is_enabled(environ.get('BRAND_NICE', 'true'), True)      # ffmpeg সবচেয়ে কম প্রায়োরিটিতে — স্ট্রিম আগে পাবে
+
+# =========================================================
 # 📢 CHANNELS & LOGS
 # =========================================================
 # Mandatory Channels

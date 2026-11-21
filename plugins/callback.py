@@ -19,6 +19,7 @@ from info import (
 )
 from datetime import datetime
 from web.utils.file_properties import get_hash
+import branding
 from utils import temp, get_readable_time, get_size
 from web.utils import StartTime, __version__
 
@@ -311,6 +312,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
         if not file_data:
             return await query.answer("⚠️ Nᴏ ᴍᴏʀᴇ ғɪʟᴇꜱ.", show_alert=True)
         try:
+            # 🎬 ব্র্যান্ডেড ভার্সন প্রস্তুত থাকলে সেটাই পাঠাও
+            file_id = await branding.swap_id(file_id)
             original_message = await client.get_messages(BIN_CHANNEL, file_id)
             media = original_message.document or original_message.video or original_message.audio
             caption = None

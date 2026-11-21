@@ -14,6 +14,7 @@ from utils import temp
 from web.bot import WebavBot
 from utils import humanbytes
 from web.utils.file_properties import get_file_ids, get_media_from_message
+import branding   # 🎬 ফাইলের ভেতরে ব্র্যান্ডিং (বার্ন-ইন) — branding.py
 from web.server.exceptions import InvalidHash
 
 
@@ -62,6 +63,10 @@ async def render_page(id, secure_hash, src=None):
 
     media = get_media_from_message(file)
 
+    # 🎬 ব্র্যান্ডেড ভার্সন প্রস্তুত থাকলে সেটাই সার্ভ করো — পুরনো লিংকও ব্র্যান্ডেড হয়ে যায়।
+    # (ডিসপ্লে-নাম আর থাম্বনেইল আসল ফাইল থেকেই — পোস্টার সুন্দর থাকে)
+    branded_id, branded_hash, is_branded = await branding.resolve(id, secure_hash)
+
     # --- নাম নির্ধারণ ---
     # ⚡ ইউজার মুভি স্ক্যান করার সময় যে নাম লিখে (ক্যাপশন), সেটাই মূল নাম হবে।
     # ক্যাপশন না থাকলে আসল ফাইলের টেকনিক্যাল নাম (পুরনো নিয়ম)।
@@ -77,7 +82,7 @@ async def render_page(id, secure_hash, src=None):
     url_name = _url_safe_name(display_name, raw_file_name, id)
     src = urllib.parse.urljoin(
         URL,
-        f"{id}/{url_name}?hash={secure_hash}",
+        f"{branded_id}/{url_name}?hash={branded_hash}",
     )
 
     # --- 🖼️ মুভির ছবি (টেলিগ্রাম নিজেই প্রতিটি ভিডিওর স্ক্রিনশট বানায়) ---
@@ -130,4 +135,5 @@ async def render_page(id, secure_hash, src=None):
         file_get=file_get_link,
         file_unique_id=file_data.unique_id,
         thumb_url=thumb_url,
+        branded=("true" if is_branded else "false"),   # প্লেয়ার এটা দেখে ইন্ট্রো ভয়েস চালাবে কি না
     )

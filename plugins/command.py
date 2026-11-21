@@ -21,6 +21,7 @@ from plugins.batch import decode
 from web.utils import StartTime, __version__
 from plugins.check_verification import av_x_verification, verify_user_on_start
 from utils import temp, get_size, get_readable_time
+import branding   # 🎬 ফাইলের ভেতরে ব্র্যান্ডিং (বার্ন-ইন) — branding.py
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,7 @@ async def start(client, message):
                 )
                 for i in range(start_id, end_id + 1):
                     try:
+                        i = await branding.swap_id(i)   # 🎬 ব্র্যান্ডেড ভার্সন থাকলে সেটাই
                         msg_obj = await client.get_messages(int(BIN_CHANNEL), i)
                         if not msg_obj or msg_obj.empty: continue
                         
@@ -253,6 +255,8 @@ async def start(client, message):
                 _, file_id = argument.split("_", 1)
             except ValueError:
                 return await message.reply("<b>⚠️ 𝘐𝘯𝘷𝘢𝘭𝘪𝘥 𝘍𝘪𝘭𝘦 𝘓𝘪𝘯𝘬!</b>")
+            # 🎬 ব্র্যান্ডেড ভার্সন প্রস্তুত থাকলে সেটাই পাঠাও
+            file_id = str(await branding.swap_id(int(file_id)))
             original_message = await client.get_messages(int(BIN_CHANNEL), int(file_id))
             media = original_message.document or original_message.video or original_message.audio
             caption = None
