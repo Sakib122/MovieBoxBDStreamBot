@@ -1,16 +1,16 @@
 """
-🎬 /brand — ম্যানুয়াল ব্র্যান্ডিং রোবট (শুধু ADMINS, কোয়েবেই চলে)
+🎬 /brand + 🔗 /stream — অ্যাডমিন ফাইল-টুল (কোয়েবেই চলে)
 ================================================================
-ব্যবহার:
-  /brand            → বট বলবে "ফাইল পাঠাও"
-  মুভি/ভিডিও পাঠাও  → লাইভ ডাউনলোড প্রোগ্রেস (বার + স্পিড + সাইজ)
-  প্যানেল           → [✏️ Rename] [🖼 Thumbnail] [❌ বাতিল] / [🚀 Done]
-  Done             → বার্ন: শুরুতে ইন্ট্রো কার্ড+ভয়েস + পুরো ভিডিওতে ঘুরে ঘুরে
-                     হলুদ ওয়াটারমার্ক (মাঝ → নিচ-ডান → নিচ-বাম → উপর-ডান)
-  শেষ              → ব্র্যান্ডেড ফাইল তোমাকে ফেরত — যেখানে খুশি ফরওয়ার্ড করো
+দুই সিস্টেম আলাদা কমান্ডে (অ্যাডমিনদের জন্য; সাধারণ ইউজার আগের মতোই):
+
+  /brand            → ব্র্যান্ডিং মোড: ফাইল দিলে নামিয়ে → নাম/থাম্ব প্যানেল →
+                      ইন্ট্রো কার্ড+ভয়েস+ঘুরন্ত হলুদ ওয়াটারমার্ক বার্ন →
+                      ব্র্যান্ডেড ফাইল তোমাকে ফেরত (যেখানে খুশি ফরওয়ার্ড করো)
+  /stream           → স্ট্রিম মোড: ফাইল দিলে স্ট্রিম লিংক+পেজ (আগের সিস্টেম)
+  কমান্ড ছাড়া ফাইল  → বট হিন্ট দেবে, অটো-স্ট্রিম আর হবে না (অ্যাডমিনের ক্ষেত্রে)
 
 নোট:
-  • এটা স্ট্রিম/লিংক-সোয়াপ পাইপলাইনের বাইরে — পুরনো স্ট্রিম কিছুই বদলায় না
+  • /brand স্ট্রিম/লিংক-সোয়াপ পাইপলাইনের বাইরে — পুরনো স্ট্রিম কিছুই বদলায় না
   • ffmpeg nice 19-এ চলে — স্ট্রিম সবসময় CPU-তে আগে পাবে
   • টেলিগ্রাম বট-অ্যাকাউন্টের হার্ড লিমিট: ডাউনলোড/আপলোড সর্বোচ্চ 2 GB
 """
@@ -35,8 +35,13 @@ logger = logging.getLogger(__name__)
 GB = 1024 ** 3
 MB = 1024 ** 2
 BOT_LIMIT_GB = 2.0        # টেলিগ্রাম বট-অ্যাকাউন্টের হার্ড লিমিট
-AWAIT_TTL = 600           # /brand দেওয়ার পর কত সেকেন্ডের ভেতরে ফাইল পাঠাতে হবে
+AWAIT_TTL = 600           # /brand বা /stream দেওয়ার পর কত সেকেন্ডের ভেতরে ফাইল পাঠাতে হবে
 QUEUE_MAX = 3             # একসাথে কিউতে সর্বোচ্চ কয়টা ফাইল
+
+HINT_TEXT = (
+    "⚠️ এখন সরাসরি ফাইল দিলে আর কিছু হয় না — সিস্টেম দুই কমান্ডে আলাদা করা হয়েছে:\n\n"
+    "🔗 **স্ট্রিম লিংক** চাইলে: আগে `/stream` লিখো → তারপর ফাইল পাঠাও\n"
+    "🎬 **ব্র্যান্ডেড ফাইল** চাইলে: আগে `/brand` লিখো → তারপর ফাইল পাঠাও")
 
 STATE: dict = {}          # user_id → {"stage": "file", "exp": ts}
 JOBS: dict = {}           # "user_id:msg_id" → জব ডিকশনারি
@@ -223,6 +228,17 @@ async def brand_cmd(c, m):
         "2️⃣ নাম ও থাম্বনেইল বদলানোর বাটন দেবে\n"
         "3️⃣ বার্ন করবে: ইন্ট্রো কার্ড + ভয়েস + ঘুরন্ত হলুদ ওয়াটারমার্ক\n"
         "4️⃣ ব্র্যান্ডেড ফাইল তোমাকে ফেরত দেবে — যেখানে খুশি ফরওয়ার্ড করো\n\n"
+        "🔗 স্ট্রিম লিংক বানাতে চাইলে আলাদা কমান্ড: /stream\n"
+        f"⏱ এই মোড বাতিল হবে {AWAIT_TTL // 60} মিনিট পর। বাতিল করতে /brandcancel")
+
+
+@Client.on_message(filters.private & filters.command("stream") & filters.user(ADMINS))
+async def stream_cmd(c, m):
+    STATE[m.from_user.id] = {"stage": "stream", "exp": time.time() + AWAIT_TTL}
+    await m.reply(
+        "🔗 **স্ট্রিম-লিংক মোড চালু!**\n\n"
+        "এখন মুভি/ভিডিও ফাইলটা পাঠাও — আগের মতোই স্ট্রিম লিংক + পেজ বানিয়ে দেবে।\n\n"
+        "🎬 ব্র্যান্ডেড ফাইল চাইলে আলাদা কমান্ড: /brand\n"
         f"⏱ এই মোড বাতিল হবে {AWAIT_TTL // 60} মিনিট পর। বাতিল করতে /brandcancel")
 
 
@@ -242,7 +258,7 @@ async def brand_ctl(c, m):
             n += 1
     parts = []
     if st:
-        parts.append("ফাইল-অপেক্ষা বাতিল")
+        parts.append(f"{'ব্র্যান্ড' if st.get('stage') == 'file' else 'স্ট্রিম'}-মোড বাতিল")
     if n:
         parts.append(f"চলতে জব {n} টা বাতিল")
     await m.reply("🛑 " + (" • ".join(parts) if parts else "বাতিল করার কিছু ছিল না।"))
@@ -250,18 +266,30 @@ async def brand_ctl(c, m):
 
 # ───────────────────────── ফাইল গ্রহণ (group=2 → স্ট্রিম-প্লাগিনের আগে) ─────────────────────────
 
-@Client.on_message(filters.private & (filters.video | filters.document), group=2)
+@Client.on_message(filters.private & (filters.video | filters.document | filters.audio), group=2)
 async def brand_file(c, m):
     if m.from_user is None or m.from_user.id not in ADMINS:
-        return
+        return                                  # সাধারণ ইউজার → আগের সিস্টেম অক্ষত
     st = STATE.get(m.from_user.id)
-    if not st or st.get("stage") != "file" or st["exp"] < time.time():
-        return                                  # ব্র্যান্ড-মোড নেই → স্ট্রিম স্বাভাবিক চলবে
+    if not st or st["exp"] < time.time():
+        # অ্যাডমিন কমান্ড ছাড়া ফাইল দিলে আর অটো-স্ট্রিম হবে না —
+        # আগে /stream বা /brand দিতে হবে (সিস্টেম আলাদা করার নিয়ম)
+        await m.reply(HINT_TEXT)
+        m.stop_propagation()                    # স্ট্রিম-প্লাগিন (group=4) ফেলে দেবে না
+        return
     STATE.pop(m.from_user.id, None)
+    if st["stage"] == "stream":
+        return          # /stream মোড → কিছু না করে পাস → স্ট্রিম-প্লাগিন লিংক বানাবে
+    # ── এখান থেকে ব্র্যান্ড-মোড (/brand) ──
+    if m.audio:
+        await m.reply("⚠️ অডিও ব্র্যান্ড করা যায় না — মুভি/ভিডিও ফাইল দাও।")
+        m.stop_propagation()
+        return
     d = _video_of(m)
     if d is None:
         await m.reply("⚠️ এটা ভিডিও না — মুভি/ভিডিও ফাইল পাঠাও (mp4/mkv/avi...)। "
                       "আবার /brand দিয়ে চেষ্টা করো।")
+        m.stop_propagation()
         return
     size = d.file_size or 0
     if size > BOT_LIMIT_GB * GB:
@@ -278,6 +306,9 @@ async def brand_file(c, m):
         await m.reply("⏳ এই ফাইল ইতিমধ্যে চলছে।")
         return
     _ensure_worker()
+    # 🐞 ফিক্স (লগ: FileNotFoundError /tmp/mbxbrand/...): ফোল্ডার না থাকলে
+    # নিজে বানিয়ে নে — ফ্রেশ-স্টার্টে branding-ওয়ার্কার তখনো চালু না হলেও কাজ করবে
+    os.makedirs(BRAND_TMP_DIR, exist_ok=True)
     workdir = tempfile.mkdtemp(dir=BRAND_TMP_DIR, prefix=f"brand_{m.id}_")
     path = os.path.join(workdir, "input.bin")
     st_msg = await m.reply("📥 ডাউনলোড হচ্ছে...\n" + _bar(0))
