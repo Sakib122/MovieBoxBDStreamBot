@@ -81,6 +81,12 @@ def probe_media(path: str, need_video: bool = True) -> dict:
         "sar": sar_raw,
         "duration": dur,
         "has_audio": a is not None,
+        # ফাস্ট-মোডের কোডেক-যাচাইয়ের জন্য
+        "vcodec": (v or {}).get("codec_name"),
+        "acodec": (a or {}).get("codec_name"),
+        "pix_fmt": (v or {}).get("pix_fmt"),
+        "sample_rate": int((a or {}).get("sample_rate", 0) or 0),
+        "channels": int((a or {}).get("channels", 0) or 0),
     }
 
 
@@ -262,6 +268,92 @@ def _ensure_workers():
         _worker_task = asyncio.create_task(_worker_loop())
         asyncio.create_task(_requeue_pending())
         logger.info(f"🎬 ব্র্যান্ডিং ওয়ার্কার চালু হলো ({BRAND_WORKERS} টা)")
+
+
+# ───────────────────────── ⚡ ফাস্ট মোড (রি-এনকোড ছাড়া) ─────────────────────────
+
+def fast_concat_video(in_path, out_path, thumb_path=None, voice_path=None, text=None):
+    """⚡ ফাস্ট ব্র্যান্ডিং: শুরুতে ইন্ট্রো কার্ড + ভয়েস জোড়া, মুভি কপি-হয় (রি-এনকোড নেই)।
+
+    - সার্ভারের CPU প্রায় লাগে না (শুধু ~৫ সেকেন্ডের ইন্ট্রো এনকোড + দ্রুত কপি)
+    - মুভির কোয়ালিটি ১০০% অক্ষত (একটা বিটও বদলায় না)
+    - পিক্সেলে ওয়াটারমার্ক বার্ন হয় না — সেটা শুধু ফুল মোডে
+
+    ফাস্ট-কনক্যাট শুধু তখনই নিরাপদ যখন মুভি h264 + aac + yuv420p এবং
+    অডিও mono/stereo — না হলে None ফেরত (কলার ফুল মোডে fallback করবে)।
+    """
+    m = probe_media(in_path)
+    ok = (m["vcodec"] == "h264" and m["pix_fmt"] == "yuv420p"
+          and m["has_audio"] and m["acodec"] == "aac"
+          and m["channels"] in (1, 2) and 0 < m["sample_rate"] <= 96000
+          and m["width"] and m["height"] and m["duration"] > 1)
+    if not ok:
+        return None
+
+    text = _escape_drawtext(text or BRAND_TEXT)
+    font_path = BRAND_FONT_PATH
+    if not os.path.exists(font_path):
+        raise RuntimeError(f"ফন্ট ফাইল নেই: {font_path} (assets/DejaVuSans-Bold.ttf রাখুন)")
+    voice_path = voice_path or BRAND_VOICE_PATH
+    voice = probe_media(voice_path, need_video=False) if (
+        voice_path and os.path.exists(voice_path)) else None
+    intro_dur = round((voice["duration"] + 0.8) if (voice and voice.get("duration")) else 5.0, 2)
+
+    W, H = m["width"], m["height"]
+    fps_str, sar = m["fps_str"], m["sar"]
+    layout = "mono" if m["channels"] == 1 else "stereo"
+    sr = m["sample_rate"]
+
+    tmp = tempfile.mkdtemp(dir=BRAND_TMP_DIR, prefix="fast_")
+    intro_path = os.path.join(tmp, "intro.mp4")
+    list_path = os.path.join(tmp, "list.txt")
+    try:
+        center_text = (f"drawtext=fontfile={font_path}:text='{text}':"
+                       f"fontsize={max(28, H // 12)}:fontcolor=white:box=1:"
+                       f"boxcolor=black@0.45:boxborderw=18:"
+                       f"x=(w-tw)/2:y=(h-th)/2")
+        fades = f"fade=t=in:st=0:d=0.5,fade=t=out:st={max(0.0, intro_dur - 0.6)}:d=0.6"
+        if thumb_path and os.path.exists(thumb_path):
+            vsrc = ["-loop", "1", "-framerate", "25", "-i", thumb_path]
+            vf = (f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                  f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar={sar},"
+                  f"{center_text},{fades}")
+        else:
+            vsrc = ["-f", "lavfi", "-i", f"color=c=0x0a0a12:s={W}x{H}:d={intro_dur}"]
+            vf = f"setsar={sar},{center_text},{fades}"
+        if voice:
+            a_in = ["-i", voice_path]
+            af = (f"[1:a]aresample={sr},apad=whole_dur={intro_dur},"
+                  f"aformat=sample_rates={sr}:channel_layouts={layout}[a]")
+        else:
+            a_in = ["-f", "lavfi", "-i", f"anullsrc=channel_layout={layout}:sample_rate={sr}"]
+            af = f"[1:a]atrim=0:{intro_dur},aformat=sample_rates={sr}:channel_layouts={layout}[a]"
+        # ইন্ট্রো মুভির কোডেক-প্যারামের হুবহু কপি হতে হবে — নাহলে -c copy জোড়া ভাঙবে
+        _run(["ffmpeg", "-y", "-v", "error", *vsrc, *a_in,
+              "-filter_complex", f"[0:v]{vf}[v];{af}",
+              "-map", "[v]", "-map", "[a]", "-t", str(intro_dur),
+              "-r", fps_str, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+              "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+              "-ac", str(m["channels"]), "-ar", str(sr),
+              intro_path], "fast-intro")
+
+        with open(list_path, "w", encoding="utf-8") as f:
+            f.write(f"file '{intro_path}'\nfile '{os.path.abspath(in_path)}'\n")
+        _run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+              "-i", list_path, "-c", "copy", "-movflags", "+faststart",
+              out_path], "fast-concat")
+
+        out = probe_media(out_path)
+        want = m["duration"] + intro_dur
+        if abs(out["duration"] - want) > max(3.0, want * 0.02):
+            raise RuntimeError(f"ফাস্ট-কনক্যাট যাচাই ব্যর্থ ({out['duration']:.1f}s != {want:.1f}s)")
+        logger.info(f"⚡ ফাস্ট-ব্র্যান্ড শেষ: ইন্ট্রো {intro_dur}s + মুভি {m['duration'] / 60:.1f} মিনিট (কপি)")
+        return {"out": out, "intro_dur": intro_dur, "mode": "fast"}
+    except Exception:
+        logger.exception("ফাস্ট-কনক্যাট ব্যর্থ — ফুল মোডে fallback করা হবে")
+        return None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def enqueue(orig_id):
