@@ -20,7 +20,6 @@ class Database:
         self.misc = mydb.misc
         self.verify_id = mydb.verify_id
         self.protected_links = mydb.protected_links
-        self.branded_files = mydb.branded_files   # 🎬 ব্র্যান্ডিং ম্যাপিং (orig → branded)
 
     def new_user(self, id, name):
         return {
