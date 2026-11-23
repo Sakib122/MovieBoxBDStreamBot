@@ -268,6 +268,10 @@ async def api_track(request):
         )
         if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি/EP বসিয়ে দাও
             label = await _play_label(iid, label, now)
+            # 👀 (প্যানেল-ফিক্স) এই ইউজার এখন কী দেখছে — ইনস্টল-ডকেও মনে রাখো,
+            # তাহলেই প্যানেলের "👀 কে কী দেখছে (লাইভ)" লিস্ট কাজ করবে
+            await installs.update_one({"_id": iid},
+                                      {"$set": {"last_play": label[:120], "last_play_ts": now}})
         if event != "beat":   # 💓 হার্টবিট ইভেন্ট-লিস্টে জমা হয় না — শুধু 'last' টাইম আপডেট হয়
             await events.insert_one({"id": iid, "event": event, "label": label,
                                      "ver": ver, "ts": now})
@@ -277,12 +281,30 @@ async def api_track(request):
 
 @stats_routes.get("/api/live")
 async def api_live(request):
-    """🔴 লাইভ কাউন্ট — প্যানেলের কার্ড প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয় এটা দিয়ে"""
+    """🔴 লাইভ — কাউন্ট + 👀 কে কী দেখছে (প্যানেল প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয় এটা দিয়ে)"""
     if request.cookies.get(COOKIE) != TOKEN:
         return web.json_response({"live": 0})
     try:
-        n = await installs.count_documents({"last": {"$gte": time.time() - 60}})
-        return web.json_response({"live": n})
+        now = time.time()
+        n = await installs.count_documents({"last": {"$gte": now - 60}})
+        # 👀 লাইভ ইউজারদের হালকা প্রোফাইল — ফোনের মডেল + এই সেশনের শেষ প্লে/ভিউ।
+        # 🔒 ইউজার-আইডি কখনোই প্যানেলে যায় না — শুধু মডেল, ভার্সন আর মুভির নাম।
+        cur = installs.find({"last": {"$gte": now - 60}},
+                            {"model": 1, "ver": 1, "last_play": 1, "last_play_ts": 1,
+                             "last_view": 1, "last_view_ts": 1, "last": 1}
+                            ).sort("last", -1).limit(30)
+        users = []
+        for u in await cur.to_list(30):
+            users.append({
+                "model": str(u.get("model") or ""),
+                "ver": str(u.get("ver") or ""),
+                "play": str(u.get("last_play") or ""),
+                "play_ts": float(u.get("last_play_ts") or 0),
+                "view": str(u.get("last_view") or ""),
+                "view_ts": float(u.get("last_view_ts") or 0),
+                "last": float(u.get("last") or 0),
+            })
+        return web.json_response({"live": n, "users": users})
     except Exception:
         return web.json_response({"live": 0})
 
@@ -405,12 +427,38 @@ function mvSort(key){
   });
   gs.forEach(function(g){ tbl.appendChild(g); });
 }
+function escLive(s){ return String(s||'').replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 setInterval(async () => {
   try {
     const r = await fetch('/api/live');
     const j = await r.json();
     const el = document.getElementById('liveN');
     if (el && el.textContent !== String(j.live)) el.textContent = j.live;
+    /* 👀 কে কী দেখছে (লাইভ) — কাউন্টের সাথে লিস্টও প্রতি ৩০ সেকেন্ডে রিফ্রেশ */
+    const box = document.getElementById('liveUsersBox');
+    const lu = document.getElementById('liveUsers');
+    if (!box || !lu) return;
+    const us = j.users || [];
+    if (!us.length) { box.style.display = 'none'; lu.innerHTML = ''; return; }
+    const nowSec = Date.now() / 1000;
+    box.style.display = '';
+    lu.innerHTML = us.map(function(u){
+      const secs = Math.max(0, Math.round(nowSec - (u.last || 0)));
+      const ago = secs < 60 ? secs + ' সেকেন্ড আগে' : Math.round(secs / 60) + ' মিনিট আগে';
+      let what;
+      if (u.play && nowSec - (u.play_ts || 0) <= 1800)
+        what = '<b style="color:#39D98A">▶ ' + escLive(u.play) + '</b>';
+      else if (u.view && nowSec - (u.view_ts || 0) <= 1800)
+        what = '<span style="color:#8FA3FF">🔍 ' + escLive(u.view) + ' (দেখছে)</span>';
+      else
+        what = '<span style="color:#8B94B8">🏠 ব্রাউজ করছে</span>';
+      const who = u.model ? escLive(u.model) : 'অজানা ফোন';
+      const vv = u.ver ? ' <span style="color:#8B94B8">v' + escLive(u.ver) + '</span>' : '';
+      return '<div style="padding:8px 0;border-top:1px solid #232845;font-size:14px">'
+        + '<b>📱 ' + who + '</b>' + vv + ' — ' + what
+        + '<span style="color:#8B94B8;float:right">' + ago + '</span></div>';
+    }).join('');
   } catch (e) {}
 }, 30000);
 """
@@ -597,7 +645,11 @@ async def admin_home(request):
       <div class="card"><div class="n" data-n="{new_today}">{new_today}</div><div class="t">✨ আজ নতুন জয়েন</div></div>
       <div class="card"><div class="n" data-n="{total}">{total}</div><div class="t">👥 মোট ইউজার</div></div>
     </div>
-    <div class="sub">🔴 লাইভ সংখ্যা প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
+    <div class="box" id="liveUsersBox" style="display:none;margin-top:10px">
+      <div style="font-weight:700;margin-bottom:4px">👀 কে কী দেখছে — লাইভ (১ মিনিটে)</div>
+      <div id="liveUsers"></div>
+    </div>
+    <div class="sub">🔴 লাইভ সংখ্যা আর "👀 কে কী দেখছে" লিস্ট প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
 
     <h2>🎬 আপলোড হওয়া মুভি/সিরিজ — ব্লগের সবগুলো</h2>
     {movies_html}
