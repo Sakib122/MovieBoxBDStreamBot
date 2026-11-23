@@ -208,6 +208,21 @@ def _looks_link(label: str) -> bool:
     return False
 
 
+# 🎬 হেল্পার ২.৫ — লেবেলে কি আসল নাম আছে? ('মুভির নাম (720p)' → হ্যাঁ,
+# '720p WEB-DL · 1.20 GB' → না)
+def _has_name(label: str) -> bool:
+    s = (label or "").strip()
+    if not s:
+        return False
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)                             # শেষের (…) বাদ
+    s = re.sub(r"^(ep\s*\d+)\b[·:\- ]*", "", s, flags=re.IGNORECASE)   # EP 128 …
+    s = re.sub(r"\b\d{3,4}\s?p\b.*$", "", s, flags=re.IGNORECASE).strip()   # 720p …
+    s = re.sub(r"\b\d+(\.\d+)?\s?(mb|gb|kb)\b.*$", "", s, flags=re.IGNORECASE).strip()
+    s = re.sub(r"^(web[- ]?dl|hdrip|webrip|bluray|hdtv|hdr)\b[·:\- ]*", "",
+               s, flags=re.IGNORECASE).strip()
+    return len(s) >= 3
+
+
 # 🎬 হেল্পার ৩ — প্লে-লেবেলের সাথে আসল মুভি/সিরিজের নাম জুড়ে দেয়
 async def _play_label(iid: str, label: str, now: float) -> str:
     """প্লে-এর ঠিক আগে একই ফোন যে মুভির ডিটেইল খুলেছিল (view ইভেন্ট) —
@@ -270,10 +285,23 @@ async def api_track(request):
             await installs.update_one({"_id": iid},
                                       {"$unset": {"last_play": "", "last_play_ts": ""}})
             return web.json_response({"ok": True})
-        if event == "watch":   # 👀 প্লেয়ার-হার্টবিট (৬০ সে) — গোনা হয় না, শুধু
+        if event == "watch":   # 👀 প্লেয়ার-হার্টবিট (৪৫ সে) — গোনা হয় না, শুধু
             # "এই ফোন এখনো এই মুভিটা দেখছে" স্টেটটা সতেজ রাখে
+            # 🎬 (প্যানেল-ফিক্স) হার্টবিটের কাঁচা লেবেল ('720p WEB-DL · 1.20 GB')
+            #   আসল মুভির নাম মুছে দেয় — নাম-বিহীন লেবেল হলে আগের নামটাই রাখো,
+            #   না থাকলে play/view-ইতিহাস থেকে রিজলভ করো
+            if _has_name(label):
+                wlabel = label
+            else:
+                prev = await installs.find_one({"_id": iid},
+                                               {"last_play": 1, "last_play_ts": 1})
+                keep = str((prev or {}).get("last_play") or "").strip()
+                if _has_name(keep) and now - float((prev or {}).get("last_play_ts") or 0) <= 7200:
+                    wlabel = keep   # ২ ঘণ্টার ভিতরের নাম-যুক্ত লেবেল — সেটাই থাক
+                else:
+                    wlabel = await _play_label(iid, label, now)   # view-ইতিহাস থেকে রিজলভ
             await installs.update_one({"_id": iid},
-                                      {"$set": {"last_play": label[:120], "last_play_ts": now}})
+                                      {"$set": {"last_play": wlabel[:120], "last_play_ts": now}})
             return web.json_response({"ok": True})
         if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি/EP বসিয়ে দাও
             label = await _play_label(iid, label, now)
@@ -291,7 +319,7 @@ async def api_track(request):
 
 @stats_routes.get("/api/live")
 async def api_live(request):
-    """🔴 লাইভ — কাউন্ট + 👀 কে কী দেখছে (প্যানেল প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয় এটা দিয়ে)"""
+    """🔴 লাইভ — কাউন্ট + 👀 কে কী দেখছে (প্যানেল প্রতি ১ মিনিটে নিজে নিজে আপডেট হয় এটা দিয়ে; রিফ্রেশে সাথে সাথে)"""
     if request.cookies.get(COOKIE) != TOKEN:
         return web.json_response({"live": 0})
     try:
@@ -537,13 +565,13 @@ function mvSort(key){
 }
 function escLive(s){ return String(s||'').replace(/[&<>"']/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-setInterval(async () => {
+async function liveTick() {
   try {
     const r = await fetch('/api/live');
     const j = await r.json();
     const el = document.getElementById('liveN');
     if (el && el.textContent !== String(j.live)) el.textContent = j.live;
-    /* 👀 কে কী দেখছে (লাইভ) — কাউন্টের সাথে লিস্টও প্রতি ৩০ সেকেন্ডে রিফ্রেশ */
+    /* 👀 কে কী দেখছে (লাইভ) — কাউন্টের সাথে লিস্টও প্রতি ১ মিনিটে রিফ্রেশ */
     const box = document.getElementById('liveUsersBox');
     const lu = document.getElementById('liveUsers');
     if (!box || !lu) return;
@@ -583,7 +611,12 @@ setInterval(async () => {
     }
     lu.innerHTML = html;
   } catch (e) {}
-}, 30000);
+}
+/* 🚀 পেজ খুললেই/রিফ্রেশ দিলেই সাথে সাথে প্রথম ফেচ — হার্টবিট থেকে টাটকা রেজাল্ট (১-৫ সেকেন্ডে) */
+liveTick();
+/* 👀 তারপর প্রতি ১ মিনিটে নিজে নিজে — লাইভ-উইন্ডো '১ মিনিট'-এর সাথে ম্যাচিং, তাতে কাউন্ট মিলবে;
+   মাঝপথে নতুন কেউ জয়েন করলেও পরের টিকে চলে আসবে */
+setInterval(liveTick, 60000);
 """
 
 
@@ -772,7 +805,7 @@ async def admin_home(request):
       <div style="font-weight:700;margin-bottom:4px">👀 কে কী দেখছে — লাইভ (১ মিনিটে)</div>
       <div id="liveUsers"></div>
     </div>
-    <div class="sub">🔴 লাইভ সংখ্যা আর "👀 কে কী দেখছে" লিস্ট প্রতি ৩০ সেকেন্ডে নিজে নিজে আপডেট হয়।</div>
+    <div class="sub">🔴 লাইভ সংখ্যা আর "👀 কে কী দেখছে" লিস্ট প্রতি ১ মিনিটে নিজে নিজে আপডেট হয় · পেজ রিফ্রেশ দিলেই সাথে সাথে হার্টবিট থেকে টাটকা রেজাল্ট।</div>
 
     <h2>🎬 আপলোড হওয়া মুভি/সিরিজ — ব্লগের সবগুলো</h2>
     {movies_html}
