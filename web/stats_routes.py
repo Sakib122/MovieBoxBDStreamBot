@@ -266,13 +266,23 @@ async def api_track(request):
              "$setOnInsert": {"first": now}},
             upsert=True,
         )
+        if event == "watch_stop":   # 🎬 প্লে বন্ধ (v4.1 অ্যাপ) — "▶ দেখছে" স্টেট এখনই নামাও
+            await installs.update_one({"_id": iid},
+                                      {"$unset": {"last_play": "", "last_play_ts": ""}})
+            return web.json_response({"ok": True})
+        if event == "watch":   # 👀 প্লেয়ার-হার্টবিট (৬০ সে) — গোনা হয় না, শুধু
+            # "এই ফোন এখনো এই মুভিটা দেখছে" স্টেটটা সতেজ রাখে
+            await installs.update_one({"_id": iid},
+                                      {"$set": {"last_play": label[:120], "last_play_ts": now}})
+            return web.json_response({"ok": True})
         if event == "play":   # 🎬 প্লে-রিপোর্টে আসল মুভির নাম + কোয়ালিটি/EP বসিয়ে দাও
             label = await _play_label(iid, label, now)
             # 👀 (প্যানেল-ফিক্স) এই ইউজার এখন কী দেখছে — ইনস্টল-ডকেও মনে রাখো,
             # তাহলেই প্যানেলের "👀 কে কী দেখছে (লাইভ)" লিস্ট কাজ করবে
             await installs.update_one({"_id": iid},
                                       {"$set": {"last_play": label[:120], "last_play_ts": now}})
-        if event != "beat":   # 💓 হার্টবিট ইভেন্ট-লিস্টে জমা হয় না — শুধু 'last' টাইম আপডেট হয়
+        if event not in ("beat", "watch", "watch_stop"):   # 💓 beat/watch/watch_stop জমা হয় না — শুধু 'last'/'last_play' সতেজ হয়
+            # (আগে watch প্রতি ৪৫ সেকেন্ডে events-এ জমাত — Mongo-ব্লোটের আসল কারণ)
             await events.insert_one({"id": iid, "event": event, "label": label,
                                      "ver": ver, "ts": now})
         return web.json_response({"ok": True})
@@ -304,7 +314,14 @@ async def api_live(request):
                 "view_ts": float(u.get("last_view_ts") or 0),
                 "last": float(u.get("last") or 0),
             })
-        return web.json_response({"live": n, "users": users})
+        # 🎬 স্ট্রিম-সার্ভারের আসল প্রমাণ — শেষ ২ মিনিটে যা সত্যিই স্ট্রিম হয়েছে
+        try:
+            from .stream_routes import recent_streams
+            streams = [{"title": t, "ts": ts}
+                       for t, ts in sorted(recent_streams(120), key=lambda x: -x[1])][:12]
+        except Exception:
+            streams = []
+        return web.json_response({"live": n, "users": users, "streams": streams})
     except Exception:
         return web.json_response({"live": 0})
 
@@ -314,15 +331,106 @@ async def api_latest(request):
         doc = await appcfg.find_one({"_id": "update"})
         if not doc:
             return web.json_response({"code": 0})
+        # 🛡 (v4.3) ভার্সন-সচেতন আপডেট-লিঙ্ক:
+        #   নতুন অ্যাপ (৪.৩+) ?code= পাঠায় → সরাসরি APK (একই সাইনিং → ওভর-ইনস্টল ✓)
+        #   পুরনো অ্যাপ (২.x–৪.২) প্যারাম পাঠায় না → গাইড-পেজ লিঙ্ক — ওরা APK-তে
+        #   ট্যাপ করলে ভয়ংকর "App not installed"-এর বদলে বাংলা গাইড খুলবে
+        #   (ভিন্ন-সাইনিং APK Android কখনোই ওভর-ইনস্টল করতে দেয় না — OS-লেভেল নিয়ম)
+        url = str(doc.get("url", ""))
+        if request.query.get("code") is None:
+            try:
+                base = request.url.origin()
+            except Exception:
+                base = ""
+            if base:
+                url = base + "/update-guide"
         return web.json_response({
             "code": int(doc.get("code", 0)),
             "name": str(doc.get("name", "")),
-            "url": str(doc.get("url", "")),
+            "url": url,
             "msg": str(doc.get("msg", "")),
             "ts": float(doc.get("ts", 0)),   # 🆕 ঘোষণার সময় — প্রতিবার নতুন ঘোষণা = নতুন পিং
         })
     except Exception:
         return web.json_response({"code": 0})
+
+
+# ────────────────────────── 🆕 আপডেট গাইড-পেজ (পুরনো-ভার্সন ইউজারদের জন্য) ──────────────────────────
+
+_GUIDE_CSS = """
+*{box-sizing:border-box}
+body{background:#070A14;color:#E9EEFF;font-family:'Noto Sans Bengali','SolaimanLipi',sans-serif;margin:0;padding:28px 16px 50px;
+background-image:radial-gradient(800px 460px at 85% -5%,rgba(124,108,255,.16),transparent 60%),radial-gradient(640px 400px at -5% 20%,rgba(0,229,160,.10),transparent 60%)}
+.wrap{max-width:470px;margin:0 auto}
+.badge{display:inline-block;background:linear-gradient(90deg,#00E5A0,#7C6CFF);color:#04121B;font-weight:700;font-size:13px;padding:4px 12px;border-radius:999px;margin-bottom:10px}
+h1{font-size:22px;line-height:1.35;margin:0 0 6px}
+.sub{color:#8B94B8;font-size:14px;margin:0 0 18px}
+.why{background:linear-gradient(160deg,#151B33,#10142A);border:1px solid #2A3458;border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.7;color:#C9D2F5;margin-bottom:18px}
+.why b{color:#FFD666}
+.step{background:linear-gradient(160deg,#151B33,#10142A);border:1px solid #232B4A;border-radius:14px;padding:16px;margin-bottom:14px}
+.step h2{font-size:16px;margin:0 0 6px;color:#E9EEFF}
+.step p{font-size:14px;color:#8B94B8;line-height:1.7;margin:0 0 12px}
+.btn{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:16px;padding:13px 16px;border-radius:12px}
+.btn-del{background:#3A1622;color:#FF7A93;border:1px solid #6E2B3C}
+.btn-apk{background:linear-gradient(90deg,#00E5A0,#7C6CFF);color:#04121B;font-size:17px}
+.hint{font-size:12.5px;color:#69719A;line-height:1.65;margin:10px 0 0}
+.foot{font-size:12.5px;color:#5A6288;text-align:center;margin-top:22px;line-height:1.7}
+"""
+
+_GUIDE_HTML = """<!DOCTYPE html>
+<html lang="bn"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieBoxBD আপডেট গাইড</title>
+<style>__GUIDE_CSS__</style></head>
+<body><div class="wrap">
+<span class="badge">🚀 অফিসিয়াল আপডেট</span>
+<h1>MovieBoxBD __VER__ এসেছে! 🎉</h1>
+<p class="sub">নতুন ফিচার, ফাস্ট স্ট্রিমিং আর নতুন সিকিউরিটি সিস্টেম।</p>
+
+<div class="why">🔑 <b>একটা ছোট্ট বিষয়:</b> নতুন সিকিউরিটি সাইনিং সিস্টেমের জন্য এই <b>একবারই</b> পুরনোটা রিমুভ করে ইনস্টল করতে হবে। এরপর থেকে সব আপডেট অ্যাপের ভেতর থেকেই <b>এক ট্যাপে</b> হয়ে যাবে — আর কখনো এই ঝামেলা নেই! 💚</div>
+
+<div class="step">
+<h2>১️⃣ পুরনো MovieBoxBD রিমুভ করো</h2>
+<p>নিচের বাটনে ট্যাপ করলেই ফোন রিমুভ-কনফার্মেশন দেখাবে — OK চাপো।</p>
+<a class="btn btn-del" href="intent:#Intent;action=android.intent.action.DELETE;package=com.movieboxbd.app;S.browser_fallback_url=movieboxbd%3A%2F%2Fguide;end">🗑️ এক ট্যাপে রিমুভ</a>
+<p class="hint">বাটন কাজ না করলে: ফোনের <b>সেটিংস → অ্যাপস → MovieBoxBD → আনইনস্টল</b></p>
+</div>
+
+<div class="step">
+<h2>২️⃣ নতুন APK ডাউনলোড করো</h2>
+<p>ডাউনলোড শেষে নোটিফিকেশন বা ডাউনলোড-লিস্ট থেকে ফাইলটায় ট্যাপ করো।</p>
+<a class="btn btn-apk" href="__APK_URL__">⬇️ __VER__ ডাউনলোড করো</a>
+</div>
+
+<div class="step">
+<h2>৩️⃣ ইনস্টল করে ওপেন করো ✅</h2>
+<p>ইনস্টলার খুললে <b>Install</b> চাপো। "অজানা উৎস/Unknown sources" চাইলে <b>Allow</b> করো (একবারই)। ইনস্টল শেষে <b>Open</b> — ব্যস, নতুন ভার্সন রেডি! 🎬</p>
+</div>
+
+<p class="foot">এটি MovieBoxBD-এর অফিসিয়াল সার্ভারের পেজ।<br>শুধুমাত্র অ্যাপের আপডেট-নোটিফিকেশন/পপআপ থেকে আসা লিঙ্কেই বিশ্বাস করো।</p>
+</div></body></html>"""
+
+
+@stats_routes.get("/update-guide", allow_head=True)
+async def update_guide(request):
+    """🆕 পুরনো-ভার্সন ইউজাররা "আপডেট" ট্যাপ করলে ব্রাউজারে এই বাংলা গাইড খুলবে।
+    APK-লিঙ্ক সবসময় প্যানেলের বর্তমান ঘোষণা থেকে নেয় — আলাদা কিছু করতে হবে না।"""
+    try:
+        doc = await appcfg.find_one({"_id": "update"})
+    except Exception:
+        doc = None
+    apk = str(doc.get("url", "")).strip() if doc else ""
+    ver = str(doc.get("name", "")).strip() if doc else ""
+    if not apk:
+        body = ('<div class="wrap"><span class="badge">MovieBoxBD</span>'
+                '<h1>এই মুহূর্তে কোনো নতুন আপডেট নেই 🙂</h1>'
+                '<p class="sub">নতুন ভার্সন এলে অ্যাপে নোটিফিকেশন পাবে। চালিয়ে যাও, মজে থেকো! 🎬</p></div>')
+        html = ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8">'
+                '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                '<title>MovieBoxBD</title><style>' + _GUIDE_CSS + '</style></head><body>' + body + '</body></html>')
+    else:
+        html = _GUIDE_HTML.replace("__GUIDE_CSS__", _GUIDE_CSS).replace("__APK_URL__", apk).replace("__VER__", ver or "নতুন ভার্সন")
+    return web.Response(text=html, content_type="text/html", charset="utf-8")
 
 
 # ────────────────────────── অ্যাডমিন UI ──────────────────────────
@@ -443,12 +551,14 @@ setInterval(async () => {
     if (!us.length) { box.style.display = 'none'; lu.innerHTML = ''; return; }
     const nowSec = Date.now() / 1000;
     box.style.display = '';
-    lu.innerHTML = us.map(function(u){
+    let html = us.map(function(u){
       const secs = Math.max(0, Math.round(nowSec - (u.last || 0)));
       const ago = secs < 60 ? secs + ' সেকেন্ড আগে' : Math.round(secs / 60) + ' মিনিট আগে';
       let what;
       if (u.play && nowSec - (u.play_ts || 0) <= 1800)
         what = '<b style="color:#39D98A">▶ ' + escLive(u.play) + '</b>';
+      else if (u.play && nowSec - (u.play_ts || 0) <= 10800)
+        what = '<span style="color:#6B76A8">▶ ' + escLive(u.play) + ' (আগে প্লে)</span>';
       else if (u.view && nowSec - (u.view_ts || 0) <= 1800)
         what = '<span style="color:#8FA3FF">🔍 ' + escLive(u.view) + ' (দেখছে)</span>';
       else
@@ -459,6 +569,19 @@ setInterval(async () => {
         + '<b>📱 ' + who + '</b>' + vv + ' — ' + what
         + '<span style="color:#8B94B8;float:right">' + ago + '</span></div>';
     }).join('');
+    /* 🎬 স্ট্রিম-সার্ভারের সত্যিকারের প্লে-প্রমাণ — অ্যাপ-ভার্সন যা-ই হোক */
+    const sts = j.streams || [];
+    if (sts.length) {
+      html += '<div style="margin-top:8px;font-weight:700;color:#39D98A">🎬 এখন স্ট্রিম হচ্ছে (সত্যিকারের প্লে)</div>';
+      html += sts.map(function(st){
+        const s2 = Math.max(0, Math.round(nowSec - (st.ts || 0)));
+        const ag2 = s2 < 60 ? s2 + ' সেকেন্ড আগে পুল' : Math.round(s2 / 60) + ' মিনিট আগে পুল';
+        return '<div style="padding:7px 0;border-top:1px solid #232845;font-size:14px">'
+          + '<b style="color:#39D98A">▶ ' + escLive(st.title) + '</b>'
+          + '<span style="color:#8B94B8;float:right">' + ag2 + '</span></div>';
+      }).join('');
+    }
+    lu.innerHTML = html;
   } catch (e) {}
 }, 30000);
 """
