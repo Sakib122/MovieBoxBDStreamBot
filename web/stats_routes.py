@@ -717,6 +717,16 @@ a{color:#00E5A0}
 .pbadge{display:inline-block;background:#3A2E10;color:#FFD666;border:1px solid #6B571F;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;white-space:nowrap}
 .pinbtn{background:linear-gradient(135deg,#FFC24B,#E8912D);color:#2B1B00;font-weight:700}
 .pinbtn:hover{box-shadow:0 6px 14px rgba(255,194,75,.3)}
+/* ── 📌 v5.4.1 পিন-মোডাল (প্রম্পট ব্লক হলেও কাজ করবে — পুরোটাই DOM) ── */
+.pmwrap{display:none;position:fixed;inset:0;background:rgba(4,7,18,.72);z-index:99;align-items:center;justify-content:center;padding:16px}
+.pmwrap.open{display:flex}
+.pmbox{background:#11162A;border:1px solid #2A3358;border-radius:16px;padding:20px;width:100%;max-width:420px;box-shadow:0 24px 60px rgba(0,0,0,.5);animation:fadeUp .25s ease both}
+.pmtitle{font-weight:700;font-size:15.5px;color:#E9EEFF;margin-bottom:6px;word-break:break-word}
+.pmsub{font-size:13px;color:#8B94B8;margin-bottom:12px;word-break:break-word}
+.pmnum{width:100%;margin:0 0 12px;padding:10px;text-align:center;font-size:18px;font-weight:700}
+.pmrow{display:flex;gap:8px}
+.pmrow .mini{flex:1;padding:10px;font-size:14px}
+.pmcancel{background:#1A2140;color:#8B94B8}
 """
 
 
@@ -762,21 +772,69 @@ function mvSort(key){
   });
   gs.forEach(function(g){ tbl.appendChild(g); });
 }
+/* 📌 পিন-মোডাল (v5.4.1) — প্রম্পট/কনফার্ম নেই, পুরোটাই DOM — তাই ব্রাউজার ব্লক করতে পারে না।
+   Chrome ৯২+ ক্রস-ওরিজিন iframe-এ prompt()/confirm() চুপচাপ ব্লক করে — ওইজন্যেই পিন-বাটন
+   আগে কাজ করত না; এখন এই মোডাল সব ব্রাউজারে/iframe-এও কাজ করবে। */
+var pmMode = '', pmPid = '', pmTitleTxt = '', pmCat = '', pmIdx = '';
 function pinAsk(el){
-  /* 📌 মুভি টেবিলের পিন-বাটন — নাম্বার জিজ্ঞেস করে লুকানো ফর্মে সাবমিট (v5.4) */
-  var t = el.getAttribute('data-title') || '';
-  var p = prompt('📌 কোন নাম্বার পিনে রাখবে? (১–১০)\n\n' + t + '\n\nওই নাম্বারে বসালে পরেরগুলো এক ঘর করে সরে যাবে', '1');
-  if(!p) return false;
-  p = parseInt(p, 10);
-  if(!(p >= 1 && p <= 10)){ alert('১ থেকে ১০-এর মধ্যে নাম্বার দাও'); return false; }
-  var f = document.createElement('form');
-  f.method = 'POST'; f.action = '/admin/pin/add';
-  function mk(n, v){ var i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i); }
-  mk('pid', el.getAttribute('data-pid') || '');
-  mk('title', t);
-  mk('pos', String(p));
-  document.body.appendChild(f); f.submit(); return false;
+  pmMode = 'pin'; pmPid = el.getAttribute('data-pid') || ''; pmTitleTxt = el.getAttribute('data-title') || '';
+  document.getElementById('pmTitle').textContent = '📌 পিন করো';
+  document.getElementById('pmSub').textContent = pmTitleTxt + ' — কোন নাম্বারে বসাবে? (১–১০ · ওই নাম্বারে বসালে পরেরগুলো এক ঘর করে সরবে)';
+  var n = document.getElementById('pmNum');
+  n.style.display = ''; n.value = '1';
+  document.getElementById('pmOk').textContent = '📌 পিন করো';
+  document.getElementById('pmWrap').classList.add('open');
+  setTimeout(function(){ try { n.focus(); n.select(); } catch(e){} }, 80);
+  return false;
 }
+function unpinAsk(el){
+  pmMode = 'unpin'; pmPid = el.getAttribute('data-pid') || ''; pmTitleTxt = el.getAttribute('data-title') || '';
+  document.getElementById('pmTitle').textContent = '✕ পিন তুলে দেবে?';
+  document.getElementById('pmSub').textContent = pmTitleTxt + ' — অ্যাপের হোম থেকেও উঠে যাবে';
+  document.getElementById('pmNum').style.display = 'none';
+  document.getElementById('pmOk').textContent = '✕ হ্যাঁ, তুলে দাও';
+  document.getElementById('pmWrap').classList.add('open');
+  return false;
+}
+function delAsk(el){
+  pmMode = 'adsdel'; pmPid = ''; pmTitleTxt = '';
+  pmCat = el.getAttribute('data-cat') || ''; pmIdx = el.getAttribute('data-idx') || '';
+  document.getElementById('pmTitle').textContent = '✕ লিংকটা মুছে ফেলবে?';
+  document.getElementById('pmSub').textContent = 'মুছলে অ্যাপের রোটেশন থেকেও বাদ যাবে — পুল খালি হলে অ্যাপের বিল্ট-ইন ডিফল্ট চলে';
+  document.getElementById('pmNum').style.display = 'none';
+  document.getElementById('pmOk').textContent = '✕ হ্যাঁ, মুছে দাও';
+  document.getElementById('pmWrap').classList.add('open');
+  return false;
+}
+function pmClose(){ document.getElementById('pmWrap').classList.remove('open'); return false; }
+function pmOutside(e){ if (e.target && e.target.id === 'pmWrap') pmClose(); }
+function pmGo(action, fields){
+  var f = document.createElement('form');
+  f.method = 'POST'; f.action = action; f.style.display = 'none';
+  for (var k in fields){ var i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = fields[k]; f.appendChild(i); }
+  document.body.appendChild(f); f.submit();
+}
+function pmSubmit(){
+  if (pmMode === 'pin'){
+    var p = parseInt(document.getElementById('pmNum').value, 10);
+    if (!(p >= 1 && p <= 10)){
+      document.getElementById('pmSub').textContent = '⚠️ ১ থেকে ১০-এর মধ্যে নাম্বার দাও';
+      return;
+    }
+    pmGo('/admin/pin/add', { pid: pmPid, title: pmTitleTxt, pos: String(p) });
+  } else if (pmMode === 'unpin'){
+    pmGo('/admin/pin/delete', { pid: pmPid });
+  } else if (pmMode === 'adsdel'){
+    pmGo('/admin/ads/delete', { cat: pmCat, idx: pmIdx });
+  }
+  pmClose();
+}
+document.addEventListener('keydown', function(e){
+  var w = document.getElementById('pmWrap');
+  if (!w || !w.classList.contains('open')) return;
+  if (e.key === 'Enter'){ e.preventDefault(); pmSubmit(); }
+  if (e.key === 'Escape'){ pmClose(); }
+});
 function escLive(s){ return String(s||'').replace(/[&<>"']/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 async function liveTick() {
@@ -883,10 +941,10 @@ def _movies_html(vnorm, pins: list) -> str:
         # 📌 পিন-সেল: পিন থাকলে গোল্ড ব্যাজ + নাম্বার-বদলানো বাটন + তুলার ✕; না থাকলে শুধু 📌
         is_pinned = p["pid"] in pin_by_pid
         badge = (f"<span class='pbadge'>📌 #{pin_by_pid[p['pid']]}</span>" if is_pinned else "")
-        unpin = (f"<form class='inline' method='post' action='/admin/pin/delete' "
-                 f"onsubmit=\"return confirm('পিন তুলে দেবে? — অ্যাপ থেকেও উঠে যাবে')\">"
-                 f"<input type='hidden' name='pid' value='{html.escape(p['pid'], quote=True)}'>"
-                 f"<button type='submit' class='delbtn' title='পিন তুলো'>✕</button></form>"
+        # 📌 v5.4.1: ✕ বাটনে confirm() নেই — DOM-মোডাল (ব্রাউজার-ব্লক-প্রুফ)
+        unpin = (f"<button class='delbtn' data-pid='{html.escape(p['pid'], quote=True)}' "
+                 f"data-title='{html.escape(title, quote=True)}' onclick='return unpinAsk(this)' "
+                 f"title='পিন তুলো'>✕</button>"
                  if is_pinned else "")
         pincell = (f"<td style='white-space:nowrap'>"
                    f"<div style='display:flex;align-items:center;gap:4px'>"
@@ -940,6 +998,7 @@ def _pinned_html(pins: list) -> str:
     for it in pins:
         pid_e = html.escape(str(it.get("pid", "")), quote=True)
         title_e = html.escape(str(it.get("title", "")))
+        title_attr = html.escape(str(it.get("title", "")), quote=True)
         pos = str(it.get("pos", "?"))
         rows.append(
             f"<div class='prow'>"
@@ -949,13 +1008,27 @@ def _pinned_html(pins: list) -> str:
             f"<input type='number' name='pos' value='{pos}' min='1' max='10' class='pnum' title='নতুন নাম্বার'>"
             f"<button type='submit' class='mini' title='নাম্বার সেভ করো'>💾</button></form>"
             f"<div class='ptitle'>{title_e}</div>"
-            f"<form method='post' action='/admin/pin/delete' "
-            f"onsubmit=\"return confirm('পিন তুলে দেবে? — অ্যাপ থেকেও উঠে যাবে')\">"
-            f"<input type='hidden' name='pid' value='{pid_e}'>"
-            f"<button type='submit' class='delbtn' title='পিন তুলো'>✕</button></form>"
+            f"<button class='delbtn' data-pid='{pid_e}' data-title='{title_attr}' "
+            f"onclick='return unpinAsk(this)' title='পিন তুলো'>✕</button>"
             f"</div>"
         )
     return "".join(rows)
+
+
+# ──────────────── 📌 v5.4.1 — পিন-মোডাল HTML (admin পেজের body-তে একবারই বসে) ────────────────
+PIN_MODAL_HTML = """
+<div class="pmwrap" id="pmWrap" onclick="pmOutside(event)">
+  <div class="pmbox">
+    <div class="pmtitle" id="pmTitle"></div>
+    <div class="pmsub" id="pmSub"></div>
+    <input class="pmnum" id="pmNum" type="number" min="1" max="10" value="1" inputmode="numeric">
+    <div class="pmrow">
+      <button class="mini pinbtn" id="pmOk" type="button" onclick="pmSubmit()">📌 পিন করো</button>
+      <button class="mini pmcancel" type="button" onclick="return pmClose()">বাতিল</button>
+    </div>
+  </div>
+</div>
+"""
 
 
 @stats_routes.get("/admin")
@@ -1078,10 +1151,9 @@ async def admin_home(request):
                 + "<a href='" + html.escape(u, quote=True) + "' target='_blank' rel='noopener'>"
                 + html.escape(u) + "</a>"
                 + badge
-                + "<form method='post' action='/admin/ads/delete' onsubmit=\"return confirm('লিংকটা মুছে ফেলবে?')\">"
-                + "<input type='hidden' name='cat' value='" + cat + "'>"
-                + "<input type='hidden' name='idx' value='" + str(i) + "'>"
-                + "<button type='submit' class='delbtn' title='মুছে ফেলো'>✕</button></form></div>"
+                # 📌 v5.4.1: confirm() নেই — DOM-মোডাল (ব্রাউজার confirm ব্লক করলেও মুছবে)
+                + "<button class='delbtn' data-cat='" + cat + "' data-idx='" + str(i) + "' "
+                + "onclick='return delAsk(this)' title='মুছে ফেলো'>✕</button></div>"
             )
         return "".join(rows)
 
@@ -1252,6 +1324,7 @@ async def admin_home(request):
     </form>
 
     {ads_html}
+    {PIN_MODAL_HTML}
     <script>{ADMIN_JS}</script>
     """
     return _page("অ্যাডমিন প্যানেল", body)
