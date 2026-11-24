@@ -94,6 +94,78 @@ async def _ensure_ads_seeded() -> bool:
         # একসাথে দুটো কল গেলে _id-ইউনিক কনফ্লিক্ট আসতে পারে — শান্তভাবে পাস
         return False
 
+# ──────────────────── 📌 v5.4 পিন করা মুভি (অ্যাপ হোমে "এখন সবাই দেখছে" রো) ────────────────────
+# স্টোরেজ: mbx_app_config {_id:"pinned"} → {"items":[{"pid","title","pos"}], "ts"}
+# pos সবসময় ১..N করে রিনরমাল থাকে (insert-shift): ১ নাম্বারে বসালে পরেরগুলো এক ঘর করে সরে।
+PIN_MAX = 10
+
+
+async def _pin_load() -> list:
+    """📌 পিন-লিস্ট পড়া — ডক না থাকলে/এরর হলে খালি লিস্ট (কিছুই আটকায় না)"""
+    try:
+        doc = await appcfg.find_one({"_id": "pinned"}) or {}
+        return list(doc.get("items") or [])
+    except Exception:
+        return []
+
+
+def _pin_norm(items: list) -> list:
+    """পিন-লিস্ট পরিষ্কার: pos ১..N পুনর্গণনা, ডুপ্লিকেট pid বাদ, সর্বোচ্চ PIN_MAX (১০)"""
+    out, seen = [], set()
+    try:
+        items = sorted(items, key=lambda x: max(1, min(999, int(x.get("pos", 99) or 99))))
+    except Exception:
+        pass
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        pid = str(it.get("pid", "")).strip()[:24]
+        title = str(it.get("title", "")).strip()[:160]
+        if not pid or not title or pid in seen:
+            continue
+        seen.add(pid)
+        out.append({"pid": pid, "title": title, "pos": len(out) + 1})
+        if len(out) >= PIN_MAX:
+            break
+    return out
+
+
+async def _pin_insert(pid: str, title: str, pos) -> tuple:
+    """📌 নতুন পিন বসানো / নাম্বার বদলানো — insert-shift:
+    N নাম্বারে বসালে N থেকে পরেরগুলো এক ঘর করে সরে; ১০-এর বেশি হলে শেষটা বেরিয়ে যায়।
+    রিটার্ন: (নতুন লিস্ট, উঠে-যাওয়া মুভির নাম বা "")"""
+    before = _pin_norm(await _pin_load())
+    items = [dict(it) for it in before if str(it.get("pid", "")) != str(pid)]
+    try:
+        p = int(str(pos or "1"))
+    except Exception:
+        p = 1
+    p = max(1, min(PIN_MAX, p))
+    out, slot, placed = [], 1, False
+    for it in items:
+        if not placed and slot == p:
+            out.append({"pid": str(pid)[:24], "title": str(title)[:160], "pos": slot})
+            placed = True
+            slot += 1
+        if slot > PIN_MAX:
+            break
+        out.append({"pid": str(it.get("pid", ""))[:24], "title": str(it.get("title", ""))[:160],
+                    "pos": slot})
+        slot += 1
+    if not placed and slot <= PIN_MAX:
+        out.append({"pid": str(pid)[:24], "title": str(title)[:160], "pos": slot})
+    out = _pin_norm(out)
+    dropped = ""
+    keep = {str(it.get("pid", "")) for it in out}
+    for it in before:   # আগে ছিল কিন্তু এখন নেই = শেষ ঘর থেকে উঠে গেল
+        if str(it.get("pid", "")) not in keep and str(it.get("pid", "")) != str(pid):
+            dropped = str(it.get("title", ""))[:120]
+            break
+    await appcfg.update_one({"_id": "pinned"},
+                            {"$set": {"items": out, "ts": time.time()}}, upsert=True)
+    return out, dropped
+
+
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "moviebox@2026")
 COOKIE = "mbx_admin"
 TOKEN = hashlib.sha256(("mbx-admin:" + ADMIN_PASSWORD).encode()).hexdigest()[:40]
@@ -489,6 +561,17 @@ async def api_ads_config(request):
         return web.json_response({"ok": False})
 
 
+@stats_routes.get("/api/app/pinned")
+async def api_pinned(request):
+    """📌 অ্যাপের হোমে "এখন সবাই দেখছে" রো — প্যানেলে পিন করা মুভি, pos অনুযায়ী সাজানো।
+    পিন খালি/এরর হলেও ok:true + খালি লিস্ট যায় — অ্যাপ ওই রোটা দেখাবেই না, কিছুই আটকায় না।"""
+    try:
+        items = _pin_norm(await _pin_load())
+    except Exception:
+        items = []
+    return web.json_response({"ok": True, "items": items})
+
+
 # ────────────────────────── 🆕 আপডেট গাইড-পেজ (পুরনো-ভার্সন ইউজারদের জন্য) ──────────────────────────
 
 _GUIDE_CSS = """
@@ -625,6 +708,15 @@ a{color:#00E5A0}
 .cur{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:14px;margin-bottom:10px;font-size:14px;color:#8B94B8}
 .loginbox{max-width:380px;margin:70px auto 0;text-align:center;background:#11162A;border:1px solid #232B4A;border-radius:16px;padding:32px 26px;animation:fadeUp .5s ease both;box-shadow:0 22px 55px rgba(0,0,0,.45)}
 @media(max-width:640px){body{padding:14px 10px 40px}}
+/* ── 📌 পিন করা মুভি (v5.4) ── */
+.prow{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #1A2138;border-radius:10px;background:#0B0F1F;margin-bottom:6px}
+.prow .pform{display:flex;gap:6px;margin:0;padding:0;border:none;max-width:none;background:none;display:inline-flex}
+.pidx{color:#FFD666;font-weight:700;min-width:30px;text-align:center}
+.pnum{width:62px;margin:0;padding:7px 6px;text-align:center;font-weight:700}
+.prow .ptitle{flex:1;font-size:13.5px;color:#E9EEFF;word-break:break-word;min-width:0}
+.pbadge{display:inline-block;background:#3A2E10;color:#FFD666;border:1px solid #6B571F;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+.pinbtn{background:linear-gradient(135deg,#FFC24B,#E8912D);color:#2B1B00;font-weight:700}
+.pinbtn:hover{box-shadow:0 6px 14px rgba(255,194,75,.3)}
 """
 
 
@@ -669,6 +761,21 @@ function mvSort(key){
     return (b.getAttribute('data-d')||'').localeCompare(a.getAttribute('data-d')||'');
   });
   gs.forEach(function(g){ tbl.appendChild(g); });
+}
+function pinAsk(el){
+  /* 📌 মুভি টেবিলের পিন-বাটন — নাম্বার জিজ্ঞেস করে লুকানো ফর্মে সাবমিট (v5.4) */
+  var t = el.getAttribute('data-title') || '';
+  var p = prompt('📌 কোন নাম্বার পিনে রাখবে? (১–১০)\n\n' + t + '\n\nওই নাম্বারে বসালে পরেরগুলো এক ঘর করে সরে যাবে', '1');
+  if(!p) return false;
+  p = parseInt(p, 10);
+  if(!(p >= 1 && p <= 10)){ alert('১ থেকে ১০-এর মধ্যে নাম্বার দাও'); return false; }
+  var f = document.createElement('form');
+  f.method = 'POST'; f.action = '/admin/pin/add';
+  function mk(n, v){ var i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i); }
+  mk('pid', el.getAttribute('data-pid') || '');
+  mk('title', t);
+  mk('pos', String(p));
+  document.body.appendChild(f); f.submit(); return false;
 }
 function escLive(s){ return String(s||'').replace(/[&<>"']/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -728,9 +835,10 @@ setInterval(liveTick, 60000);
 
 
 # ──────────────── 🆕 v4 — মুভি টেবিল (বাটন-মুক্ত, পেজ-ভিউ অটো-কাউন্ট) ────────────────
-def _movies_html(vnorm) -> str:
+def _movies_html(vnorm, pins: list) -> str:
     """ব্লগের সব পোস্টের টেবিল — এডিট/লুকাও নেই,
-    ভিউ = মুভির পেজ খুললেই অটোমেটিক গোনা হয় (আগের সিস্টেম)"""
+    ভিউ = মুভির পেজ খুললেই অটোমেটিক গোনা হয় (আগের সিস্টেম)
+    📌 v5.4: প্রতি সারিতে পিন-বাটন — চেপে ১–১০ নাম্বার দিলেই অ্যাপের হোমে পিন হয়ে যায়"""
     if not BLOG_URL:
         return ("<div class='box'>⚙️ ব্লগ-টেবিল চালু করতে Koyeb-এ "
                 "<b style='color:#E9EEFF'>BLOG_URL</b> এনভায়রনমেন্ট ভ্যারিয়েবলে তোমার ব্লগের "
@@ -751,6 +859,14 @@ def _movies_html(vnorm) -> str:
     for k, c in vnorm.items():
         idx.setdefault(k.split(" ", 1)[0], []).append((k, c))
 
+    # 📌 পিন করা pid → pos (টেবিলে ব্যাজ দেখাতে)
+    pin_by_pid = {}
+    for it in pins:
+        try:
+            pin_by_pid[str(it.get("pid", ""))] = int(it.get("pos", 0) or 0)
+        except Exception:
+            pass
+
     groups = []
     for p in _blog_state["posts"]:
         title = p["title"]
@@ -764,6 +880,20 @@ def _movies_html(vnorm) -> str:
         cat = html.escape(cat)
         t_show = html.escape(title[:90] + ("…" if len(title) > 90 else ""))
 
+        # 📌 পিন-সেল: পিন থাকলে গোল্ড ব্যাজ + নাম্বার-বদলানো বাটন + তুলার ✕; না থাকলে শুধু 📌
+        is_pinned = p["pid"] in pin_by_pid
+        badge = (f"<span class='pbadge'>📌 #{pin_by_pid[p['pid']]}</span>" if is_pinned else "")
+        unpin = (f"<form class='inline' method='post' action='/admin/pin/delete' "
+                 f"onsubmit=\"return confirm('পিন তুলে দেবে? — অ্যাপ থেকেও উঠে যাবে')\">"
+                 f"<input type='hidden' name='pid' value='{html.escape(p['pid'], quote=True)}'>"
+                 f"<button type='submit' class='delbtn' title='পিন তুলো'>✕</button></form>"
+                 if is_pinned else "")
+        pincell = (f"<td style='white-space:nowrap'>"
+                   f"<div style='display:flex;align-items:center;gap:4px'>"
+                   f"<button class='mini pinbtn' data-pid='{html.escape(p['pid'], quote=True)}' "
+                   f"data-title='{html.escape(title, quote=True)}' onclick='return pinAsk(this)'>📌 পিন</button>"
+                   f"{badge}{unpin}</div></td>")
+
         vcls = "num hot" if tot >= 100 else ("num mid" if tot >= 20 else "num")
         groups.append(
             f"<tbody class='mgrp' data-v='{tot}' data-d='{pub}'>"
@@ -773,6 +903,7 @@ def _movies_html(vnorm) -> str:
             f"<td>{qcell}</td>"
             f"<td>{cat}</td>"
             f"<td class='{vcls}'>{tot}</td>"
+            f"{pincell}"
             f"</tr></tbody>"
         )
 
@@ -782,6 +913,7 @@ def _movies_html(vnorm) -> str:
         f"<div class='sub'>মোট <b>{len(_blog_state['posts'])}</b>টি পোস্ট · নতুনগুলো সবার উপরে · "
         f"ভিউ = মুভির <b style='color:#00E5A0'>পেজ/ডিটেইল খুললেই অটোমেটিক</b> গোনা হয় (গত ৩০ দিন)"
         f"{stale_note} · "
+        f"📌 বাটনে চাপলে নাম্বার জিজ্ঞেস করবে — ১–১০ দিলেই অ্যাপে পিন · "
         f"<a href='/admin?refresh=1'>🔄 ফ্রেশ করো</a></div>"
         f"<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px'>"
         f"<input class='search' id='mvSearch' type='search' placeholder='🔍 Search movie…' "
@@ -791,9 +923,39 @@ def _movies_html(vnorm) -> str:
         f"</div>"
         f"<div class='scroll'><table id='mvTable'><thead><tr>"
         f"<th>টাইটেল</th><th>কোয়ালিটি</th><th>ক্যাটাগরি</th><th>ভিউ (৩০ দিন)</th>"
+        f"<th style='width:96px'>📌 পিন</th>"
         f"</tr></thead>{''.join(groups)}</table></div>"
     )
     return head
+
+
+# ──────────────── 📌 v5.4 — পিন-ম্যানেজার বক্স (মুভি টেবিলের উপরে) ────────────────
+def _pinned_html(pins: list) -> str:
+    """প্যানেলের 'এখন সবাই দেখছে' পিন-ম্যানেজার — নাম্বার বদলানো + পিন তোলা এখান থেকেই"""
+    if not pins:
+        return ("<div class='box'>📌 এখনো কোনো মুভি পিন করা নেই। নিচের মুভি টেবিলে যে মুভিটা "
+                "অ্যাপের হোমে দেখাতে চান তার ডানের <b style='color:#FFD666'>📌 পিন</b> বাটনে চাপ দিন — "
+                "১–১০ নাম্বার লিখে দিলেই অ্যাপের হোমে সেই নাম্বারে বসে যাবে।</div>")
+    rows = []
+    for it in pins:
+        pid_e = html.escape(str(it.get("pid", "")), quote=True)
+        title_e = html.escape(str(it.get("title", "")))
+        pos = str(it.get("pos", "?"))
+        rows.append(
+            f"<div class='prow'>"
+            f"<span class='pidx'>#{pos}</span>"
+            f"<form method='post' action='/admin/pin/pos' class='pform'>"
+            f"<input type='hidden' name='pid' value='{pid_e}'>"
+            f"<input type='number' name='pos' value='{pos}' min='1' max='10' class='pnum' title='নতুন নাম্বার'>"
+            f"<button type='submit' class='mini' title='নাম্বার সেভ করো'>💾</button></form>"
+            f"<div class='ptitle'>{title_e}</div>"
+            f"<form method='post' action='/admin/pin/delete' "
+            f"onsubmit=\"return confirm('পিন তুলে দেবে? — অ্যাপ থেকেও উঠে যাবে')\">"
+            f"<input type='hidden' name='pid' value='{pid_e}'>"
+            f"<button type='submit' class='delbtn' title='পিন তুলো'>✕</button></form>"
+            f"</div>"
+        )
+    return "".join(rows)
 
 
 @stats_routes.get("/admin")
@@ -983,9 +1145,14 @@ async def admin_home(request):
     """
     )
 
-    # ── 🎬 ব্লগের সব আপলোড ──────────────────────────────────────────
+    # ── 🎬 ব্লগের সব আপলোড + 📌 পিন করা মুভি (v5.4) ──────────────────
     _ensure_blog_fresh(force=request.query.get("refresh") == "1")
-    movies_html = _movies_html(vnorm)
+    pins = _pin_norm(await _pin_load())
+    movies_html = _movies_html(vnorm, pins)
+    pin_html = _pinned_html(pins)
+    pinmsg = str(request.query.get("pinmsg", "") or "").strip()
+    pin_note = (f"<div class='cur' style='border-color:#6B571F;background:#241B0B;color:#FFD666'>"
+                f"⚠️ {html.escape(pinmsg[:160])}</div>" if pinmsg else "")
 
     def rows(counter):
         top = counter.most_common()   # 🎬 ক্যাপ নাই — ৩০ দিনের সবগুলো দেখাবে
@@ -1047,6 +1214,13 @@ async def admin_home(request):
       <div id="liveUsers"></div>
     </div>
     <div class="sub">🔴 লাইভ সংখ্যা আর "👀 কে কী দেখছে" লিস্ট প্রতি ১ মিনিটে নিজে নিজে আপডেট হয় · পেজ রিফ্রেশ দিলেই সাথে সাথে হার্টবিট থেকে টাটকা রেজাল্ট।</div>
+
+    <h2 id="pins">📌 পিন করা মুভি — অ্যাপ হোমে "এখন সবাই দেখছে" রো (সর্বোচ্চ ১০টা)</h2>
+    {pin_note}
+    <div class="sub">নাম্বার বদলে 💾 চাপলেই ওই নাম্বারে বসে যাবে (পরেরগুলো এক ঘর করে সরবে) · ✕ চাপলে পিন উঠে যাবে ·
+    রানিং অ্যাপের হোমে পরের লোডেই বসে যাবে — <b style="color:#00E5A0">নতুন APK লাগবে না</b>।
+    নতুন পিন বসাতে নিচের মুভি টেবিলের ডানে 📌 বাটন।</div>
+    {pin_html}
 
     <h2>🎬 আপলোড হওয়া মুভি/সিরিজ — ব্লগের সবগুলো</h2>
     {movies_html}
@@ -1246,3 +1420,64 @@ async def admin_ads_delete(request):
     except Exception:
         pass
     return web.HTTPFound("/admin")
+
+
+# ──────────────────── 📌 v5.4 পিন রুট — প্যানেল থেকেই অ্যাপের হোম-রো কন্ট্রোল ────────────────────
+
+@stats_routes.post("/admin/pin/add")
+async def admin_pin_add(request):
+    """📌 পিন বসানো / নাম্বার বদলানো — pid + title + pos(১–১০)। insert-shift:
+    N নাম্বারে বসালে পরেরগুলো এক ঘর করে সরে; ১০-এর জায়গা হলে শেষটা উঠে যায়।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        pid = str(form.get("pid", "")).strip()[:24]
+        title = str(form.get("title", "")).strip()[:160]
+        if pid and title:
+            out, dropped = await _pin_insert(pid, title, str(form.get("pos", "1")))
+            if dropped:
+                from urllib.parse import quote
+                return web.HTTPFound("/admin?pinmsg=" + quote(
+                    f"১০ ঘর ভরা ছিল — '{dropped}' শেষ ঘর থেকে উঠে গেছে") + "#pins")
+    except Exception:
+        pass
+    return web.HTTPFound("/admin#pins")
+
+
+@stats_routes.post("/admin/pin/pos")
+async def admin_pin_pos(request):
+    """💾 পিন করা মুভির নাম্বার বদলানো — pid-এর টাইটেল ডক থেকে নিয়ে insert-shift।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        pid = str(form.get("pid", "")).strip()[:24]
+        title = ""
+        for it in await _pin_load():
+            if str(it.get("pid", "")) == pid:
+                title = str(it.get("title", ""))
+                break
+        if pid and title:
+            await _pin_insert(pid, title, str(form.get("pos", "1")))
+    except Exception:
+        pass
+    return web.HTTPFound("/admin#pins")
+
+
+@stats_routes.post("/admin/pin/delete")
+async def admin_pin_delete(request):
+    """✕ পিন তোলা — অ্যাপের হোম থেকেও উঠে যাবে (পরের হোম-লোডে)।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        pid = str(form.get("pid", "")).strip()[:24]
+        if pid:
+            items = [it for it in await _pin_load() if str(it.get("pid", "")) != pid]
+            await appcfg.update_one({"_id": "pinned"},
+                                    {"$set": {"items": _pin_norm(items), "ts": time.time()}},
+                                    upsert=True)
+    except Exception:
+        pass
+    return web.HTTPFound("/admin#pins")
