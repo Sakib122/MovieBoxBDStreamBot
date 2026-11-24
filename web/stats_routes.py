@@ -21,6 +21,13 @@
 #   (না দিলে ডিফল্ট "moviebox@2026" — দ্রুত বদলাবে!)
 # ব্লগ: Koyeb-এ BLOG_URL ভ্যারিয়েবলে তোমার ব্লগের লিঙ্ক দাও
 #   (যেমন https://movieboxbd.blogspot.com) — টেবিল ওখান থেকেই লোড হয়
+#
+# 💰 v5.1.1 অ্যাড-প্যানেল (মালিকের নির্দেশ):
+#   • অ্যাপ v5.1-এ যে ৫ নরমাল + ৫ ১৮+ Direct Link বিল্ট-ইন আছে — প্যানেল প্রথমবার
+#     খুললেই ওগুলো অটো-বসে যায় (🔧 অটো-বসানো ব্যাজ) — মালিক ঢুকেই সব দেখতে পাবেন
+#   • প্রতিটা লিংকের পাশে ✕ মুছে-ফেলা + "➕ নতুন যোগ করুন" — আনলিমিটেড লিংক, রোটেশনে চলে
+#   • চালু/বন্ধ, সেকেন্ড, কুলডাউন, পোস্টার-অ্যাড — সব সেভ করলেই রানিং অ্যাপে সাথে সাথে বসে
+#   • GET /api/app/ads-config → অ্যাপ এখান থেকেই লিভ-কনফিগ টানে (নতুন APK লাগে না)
 # ══════════════════════════════════════════════════════════════════
 
 import os
@@ -40,7 +47,52 @@ stats_routes = web.RouteTableDef()
 
 installs = mydb["mbx_installs"]     # {_id: installId, first, last, model, ver}
 events = mydb["mbx_events"]         # {id, event, label, ver, ts}
-appcfg = mydb["mbx_app_config"]     # {_id: "update", code, name, url, msg}
+appcfg = mydb["mbx_app_config"]     # {_id: "update"|"ads", ...}
+
+# ──────────────────── 💰 v5.1.1 অ্যাপের বিল্ট-ইন ডিফল্ট লিংক (Config.kt v5.1 হুবহু) ────────────────────
+# প্যানেলে অ্যাড-ডক না থাকলে এই ৫+৫ লিংক অটো-বসিয়ে দেওয়া হয় — মালিক প্যানেলে ঢুকেই
+# কোনগুলো অটোমেটিক বসানো আছে দেখবেন (🔧 ব্যাজ), চাইলে বদলাবেন/মুছবেন/নতুন যোগ করবেন।
+DEFAULT_NORMAL_LINKS = [
+    "https://asiafilm.org/4/1952b9f3548cd57e994e610fde24e41f",   # Normal Direct Link 1
+    "https://asiafilm.org/4/7ef304669bcfc15f3404e1a5e5dcf1ba",   # Normal Direct Link 2
+    "https://asiafilm.org/4/dd496e8de5fdbe10f2ccf3defc93c342",   # Normal Direct Link 3
+    "https://uplcm.com/4/10918781",                              # Normal Direct Link 4
+    "https://uplcm.com/4/12080503",                              # Normal Direct Link 5
+]
+DEFAULT_ADULT_LINKS = [
+    "https://auctionr.org/4/1b6df569ebc094e3e8e592d2fd017b4f",   # Adult Direct Link 1
+    "https://auctionr.org/4/ae2d07d4c0488d06e6aec709d40d437f",   # Adult Direct Link 2
+    "https://auctionr.org/4/ef5b10414fe8fdd3f602e74bcdd4225c",   # Adult Direct Link 3
+    "https://auctionr.org/4/9a420739bd309e36f6535c4bcad2d3c9",   # Adult Direct Link 4
+    "https://auctionr.org/4/b51d4b4d19155b12b384cdd6f2b31daa",   # Adult Direct Link 5
+]
+
+
+async def _ensure_ads_seeded() -> bool:
+    """💰 v5.1.1: অ্যাড-ডক না থাকলে বিল্ট-ইন ৫ নরমাল + ৫ ১৮+ লিংক অটো-বসিয়ে দেয়।
+    seeded_normal/seeded_adult লিস্ট = কোনগুলো অটো-বসানো — প্যানেলে ব্যাজে দেখায়।
+    মালিক পরে যা খুশি বদলাতে পারেন — এটা শুধু প্রথম-সেটআপ, কেউ বাধ্য নয়।
+    রিটার্ন: True = এখনই সিড হলো, False = আগেই ছিল / DB এরর।"""
+    try:
+        if await appcfg.find_one({"_id": "ads"}):
+            return False
+        await appcfg.insert_one({
+            "_id": "ads",
+            "gate_enabled": True,
+            "gate_seconds": 10,
+            "cooldown_seconds": 120,
+            "poster_ad_enabled": False,
+            "poster_ad_every_n": 5,
+            "normal_links": list(DEFAULT_NORMAL_LINKS),
+            "adult_links": list(DEFAULT_ADULT_LINKS),
+            "seeded_normal": list(DEFAULT_NORMAL_LINKS),   # 🔧 কোনগুলো অটো-বসানো
+            "seeded_adult": list(DEFAULT_ADULT_LINKS),
+            "ts": time.time(),
+        })
+        return True
+    except Exception:
+        # একসাথে দুটো কল গেলে _id-ইউনিক কনফ্লিক্ট আসতে পারে — শান্তভাবে পাস
+        return False
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "moviebox@2026")
 COOKIE = "mbx_admin"
@@ -383,6 +435,60 @@ async def api_latest(request):
         return web.json_response({"code": 0})
 
 
+@stats_routes.get("/api/app/ads-config")
+async def api_ads_config(request):
+    """💰 অ্যাপের রিমোট অ্যাড-কনফিগ — প্যানেলে বদলালেই রানিং অ্যাপে সাথে সাথে বসে যায়।
+    v5.1.1: প্যানেলে অ্যাড-ডক না থাকলে আগে বিল্ট-ইন ৫+৫ লিংক অটো-সিড হয় —
+    তাই অ্যাপ প্রথম কলেই প্যানেল-কন্ট্রোলড লিংক পায়। কিছুতেই আটকায় না —
+    DB এরর হলে অ্যাপ তার বিল্ট-ইন ডিফল্ট (Config.kt) নিয়েই চলে।"""
+    try:
+        await _ensure_ads_seeded()
+        doc = await appcfg.find_one({"_id": "ads"})
+        if not doc:
+            return web.json_response({"ok": True, "gate_enabled": True, "gate_seconds": 10,
+                                      "cooldown_seconds": 120, "normal_links": [],
+                                      "adult_links": [],
+                                      "poster_ad_enabled": False, "poster_ad_every_n": 5,
+                                      "ts": 0})
+
+        def _links(v) -> list:
+            # v5.1: মালিকের নির্দেশ — আনলিমিটেড লিংক (যতগুলো চাও, ততগুলো; স্যানিটি-ক্যাপ ২০০)
+            out = []
+            for u in (v or []):
+                u = str(u or "").strip()
+                if u[:8] == "https://" or u[:7] == "http://":
+                    if u not in out:
+                        out.append(u[:300])
+            return out[:200]
+
+        try:
+            gsec = max(5, min(60, int(doc.get("gate_seconds", 10) or 10)))
+        except Exception:
+            gsec = 10
+        try:
+            csec = max(30, min(3600, int(doc.get("cooldown_seconds", 120) or 120)))
+        except Exception:
+            csec = 120
+        try:
+            psec_n = max(2, min(50, int(doc.get("poster_ad_every_n", 5) or 5)))
+        except Exception:
+            psec_n = 5
+        return web.json_response({
+            "ok": True,
+            "gate_enabled": bool(doc.get("gate_enabled", True)),
+            "gate_seconds": gsec,
+            "cooldown_seconds": csec,
+            "normal_links": _links(doc.get("normal_links")),
+            "adult_links": _links(doc.get("adult_links")),
+            # v5.1: পোস্টার-ক্লিক অ্যাড (ডিফল্ট বন্ধ) — প্রতি N-তম পোস্টার-ক্লিকে একটা লিংক
+            "poster_ad_enabled": bool(doc.get("poster_ad_enabled", False)),
+            "poster_ad_every_n": psec_n,
+            "ts": float(doc.get("ts", 0)),
+        })
+    except Exception:
+        return web.json_response({"ok": False})
+
+
 # ────────────────────────── 🆕 আপডেট গাইড-পেজ (পুরনো-ভার্সন ইউজারদের জন্য) ──────────────────────────
 
 _GUIDE_CSS = """
@@ -492,7 +598,8 @@ td.num.mid{color:#FFC24B}
 .bar{color:#00E5A0;letter-spacing:1px}
 form{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:16px;max-width:640px}
 form.inline{background:none;padding:0;max-width:none;display:inline;margin:0;border:none}
-input,textarea{width:100%;background:#0B0F1F;border:1px solid #2A2F4F;color:#E9EEFF;border-radius:9px;padding:10px 12px;font-size:14px;margin:4px 0 12px;transition:border-color .2s,box-shadow .2s}
+input,textarea,select{width:100%;background:#0B0F1F;border:1px solid #2A2F4F;color:#E9EEFF;border-radius:9px;padding:10px 12px;font-size:14px;margin:4px 0 12px;transition:border-color .2s,box-shadow .2s}
+select option{background:#0B0F1F;color:#E9EEFF}
 input:focus,textarea:focus{outline:none;border-color:#7C6CFF;box-shadow:0 0 0 3px rgba(124,108,255,.18)}
 input.search{width:auto;max-width:300px;display:inline-block;margin:0;vertical-align:middle}
 button{background:linear-gradient(135deg,#7C6CFF,#5A3FE0);color:#fff;border:0;border-radius:9px;padding:10px 18px;font-size:14px;cursor:pointer;font-family:inherit;transition:transform .2s ease,box-shadow .2s ease}
@@ -742,6 +849,140 @@ async def admin_home(request):
     except Exception:
         pass
 
+    # ── 💰 অ্যাপের অ্যাড-কনফিগ + আজকের গেট-হিসাব ──────────────────────
+    await _ensure_ads_seeded()   # 💰 v5.1.1: প্রথমবার খুললেই ৫+৫ ডিফল্ট অটো-বসে (মালিক দেখবেন)
+    ads = {}
+    try:
+        ads = await appcfg.find_one({"_id": "ads"}) or {}
+    except Exception:
+        ads = {}
+    seeded_n = set(ads.get("seeded_normal") or [])
+    seeded_a = set(ads.get("seeded_adult") or [])
+    gate_on = bool(ads.get("gate_enabled", True))
+    gate_sec = ads.get("gate_seconds", 10)
+    cool_sec = ads.get("cooldown_seconds", 120)
+    poster_on = bool(ads.get("poster_ad_enabled", False))
+    try:
+        poster_n = int(ads.get("poster_ad_every_n", 5) or 5)
+    except Exception:
+        poster_n = 5
+    n_links = ads.get("normal_links", []) or []
+    a_links = ads.get("adult_links", []) or []
+    ads_ts = float(ads.get("ts", 0))
+    ads_updated = time.strftime("%Y-%m-%d %H:%M", time.gmtime(ads_ts + TZ)) if ads_ts else "—"
+    try:
+        g_pass = await events.count_documents({"event": "gate_pass", "ts": {"$gte": midnight}})
+        g_fail = await events.count_documents({"event": "gate_fail", "ts": {"$gte": midnight}})
+        g_cancel = await events.count_documents({"event": "gate_cancel", "ts": {"$gte": midnight}})
+        p_open = await events.count_documents({"event": "poster_ad", "ts": {"$gte": midnight}})
+    except Exception:
+        g_pass = g_fail = g_cancel = p_open = 0
+
+    # ── 💰 v5.1 লিংক-ম্যানেজার: প্রতি লিংকের পাশে ✕ মুছে-ফেলা + "নতুন যোগ করুন" বাক্স (আনলিমিটেড) ──
+    ADS_CSS = """
+    <style>
+    .lwrap{max-height:260px;overflow-y:auto;border:1px solid #232B4A;border-radius:10px;background:#0B0F1F;margin:6px 0 10px}
+    .lrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #1A2138;font-size:13px}
+    .lrow:last-child{border-bottom:0}
+    .lidx{color:#8B94B8;min-width:22px;font-weight:700}
+    .lrow a{color:#E9EEFF;text-decoration:none;word-break:break-all;flex:1}
+    .lrow a:hover{color:#B7AFFF}
+    .lrow form{margin:0}
+    .delbtn{padding:4px 10px;font-size:12px;background:linear-gradient(135deg,#FF5D7A,#C23652)}
+    .addform{display:flex;gap:8px;align-items:flex-end}
+    .addform input{margin:0;flex:1}
+    .addform button{white-space:nowrap}
+    .lkbox{background:#11162A;border:1px solid #232B4A;border-radius:12px;padding:14px;margin:10px 0}
+    </style>
+    """
+
+    def _link_rows(links, cat, seeded):
+        if not links:
+            return ("<div class='lrow' style='color:#8B94B8'>এই পুল এখন খালি — "
+                    "নিচের বাক্স থেকে লিংক যোগ করো (খালি থাকলে অ্যাপের বিল্ট-ইন ডিফল্ট চলে)</div>")
+        rows = []
+        for i, u in enumerate(links):
+            # 💰 v5.1.1: অটো-বসানো বনাম প্যানেলে যোগ করা — ব্যাজে আলাদা করে দেখায়
+            if u in seeded:
+                badge = ("<span style='font-size:10.5px;background:#0E352B;color:#00E5A0;"
+                         "border:1px solid #1D5B4B;border-radius:999px;padding:2px 8px;white-space:nowrap'>"
+                         "🔧 অটো-বসানো (v5.1 ডিফল্ট)</span>")
+            else:
+                badge = ("<span style='font-size:10.5px;background:#241B3E;color:#B7AFFF;"
+                         "border:1px solid #3B2E63;border-radius:999px;padding:2px 8px;white-space:nowrap'>"
+                         "➕ প্যানেলে যোগ করা</span>")
+            rows.append(
+                "<div class='lrow'><span class='lidx'>" + str(i + 1) + "</span>"
+                + "<a href='" + html.escape(u, quote=True) + "' target='_blank' rel='noopener'>"
+                + html.escape(u) + "</a>"
+                + badge
+                + "<form method='post' action='/admin/ads/delete' onsubmit=\"return confirm('লিংকটা মুছে ফেলবে?')\">"
+                + "<input type='hidden' name='cat' value='" + cat + "'>"
+                + "<input type='hidden' name='idx' value='" + str(i) + "'>"
+                + "<button type='submit' class='delbtn' title='মুছে ফেলো'>✕</button></form></div>"
+            )
+        return "".join(rows)
+
+    def _pool_box(title, links, cat, note, seeded):
+        return (f"<div class='lkbox'><div style='font-weight:700;margin-bottom:6px'>{title} — "
+                f"<b style='color:#00E5A0'>{len(links)}টি</b> <span style='color:#8B94B8'>(রোটেশনে চলে · আনলিমিটেড)</span></div>"
+                f"<div class='sub' style='margin:0 0 4px'>{note}</div>"
+                f"<div class='lwrap'>{_link_rows(links, cat, seeded)}</div>"
+                f"<form method='post' action='/admin/ads/add' class='addform'>"
+                f"<input type='hidden' name='cat' value='{cat}'>"
+                f"<input name='url' type='url' placeholder='নতুন Direct Link বসাও — https://…' required>"
+                f"<button type='submit'>➕ নতুন যোগ করুন</button></form></div>")
+
+    ads_html = (
+        ADS_CSS
+        + f"""
+    <h2 id="ads">💰 অ্যাপের অ্যাড কন্ট্রোল — নতুন যোগ করুন (আনলিমিটেড)</h2>
+    <div class="cur">⚙️ চালু: অ্যাড-গেট <b style="color:{'#00E5A0' if gate_on else '#FF5D7A'}">{'চালু' if gate_on else 'বন্ধ'}</b>
+      · অ্যাডে থাকতে হবে <b style="color:#E9EEFF">{gate_sec} সেকেন্ড</b>
+      · কুলডাউন <b style="color:#E9EEFF">{cool_sec} সেকেন্ড</b>
+      · পোস্টার-ক্লিক অ্যাড <b style="color:{'#00E5A0' if poster_on else '#FF5D7A'}">{'প্রতি ' + str(poster_n) + '-তম ক্লিকে' if poster_on else 'বন্ধ (সাজেস্টেড)'}</b>
+      · শেষ আপডেট: <b style="color:#8B94B8">{ads_updated}</b></div>
+    <div class="cur">📊 আজকের হিসাব: গেট পুরো দেখেছে <b style="color:#00E5A0">{g_pass}</b>
+      · আগে-ফেরত (বাইপাস চেষ্টা) <b style="color:#FFC24B">{g_fail}</b>
+      · বাতিল <b style="color:#FF5D7A">{g_cancel}</b>
+      · পোস্টার-অ্যাড ওপেন <b style="color:#FFC24B">{p_open}</b></div>
+    """
+        + _pool_box("🎬 নরমাল মুভির Direct Link", n_links, "normal",
+                    "সাধারণ মুভির গেট এখান থেকেই লিংক নেবে — <b style='color:#FFC24B'>এখানে কখনো ১৮+ নেটওয়ার্কের লিংক দেবেন না</b>",
+                    seeded_n)
+        + _pool_box("🔞 ১৮+ মুভির Direct Link", a_links, "adult",
+                    "শুধু ১৮+ মুভির গেট এখান থেকে লিংক নেবে — নরমাল মুভিতে কখনো যাবে না",
+                    seeded_a)
+        + f"""
+    <form method="post" action="/admin/setads">
+      <div class="sub" style="margin-bottom:6px">সেটিং সেভ করলেই সব রানিং অ্যাপ পরের গেট থেকেই নতুন মান নেবে (অ্যাপ চালু থাকলেও)।
+      লিংক যোগ/মুছে-ফেলা উপরের বাক্স থেকেই হয় — ওখানে দিলেই সাথে সাথে সেভ হয়।
+      <b style="color:#FFC24B">নরমাল আর ১৮+ লিংক কখনো মেশাবেন না</b> — CPM আর পলিসি দুটোতেই বাজে খাবে।</div>
+      <label>অ্যাড-গেট</label>
+      <select name="gate_enabled">
+        <option value="1" {'selected' if gate_on else ''}>চালু — প্লে/ডাউনলোডের আগে অ্যাড (সাজেস্টেড)</option>
+        <option value="0" {'' if gate_on else 'selected'}>বন্ধ — কোনো গেট নয়</option>
+      </select>
+      <label>অ্যাডে কত সেকেন্ড থাকতে হবে (৫–৬০ · সাজেস্টেড: ১০)</label>
+      <input name="gate_seconds" type="number" min="5" max="60" value="{gate_sec}">
+      <label>কুলডাউন — এই সেকেন্ডের ভেতরে আবার অ্যাড আসবে না (৩০–৩৬০০ · সাজেস্টেড: ১২০ = ২ মিনিট)</label>
+      <input name="cooldown_seconds" type="number" min="30" max="3600" value="{cool_sec}">
+      <label>🎬 পোস্টার-ক্লিক অ্যাড (v5.1 — ডিফল্ট বন্ধ)</label>
+      <select name="poster_ad_enabled">
+        <option value="0" {'' if poster_on else 'selected'}>বন্ধ — পোস্টার-ক্লিক অ্যাড-ফ্রি (সাজেস্টেড: প্রতিটা ইমপ্রেশন ভেরিফায়েড গেট-ভিউ হলে CPM সবচেয়ে ভালো হয়)</option>
+        <option value="1" {'selected' if poster_on else ''}>চালু — প্রতি N-তম পোস্টার-ক্লিকে একটা Direct Link</option>
+      </select>
+      <label>পোস্টার-ক্লিক অ্যাড কত-তম ক্লিকে আসবে (২–৫০ · চালু করলে সাজেস্টেড: ৫)</label>
+      <input name="poster_ad_every_n" type="number" min="2" max="50" value="{poster_n}">
+      <label>📦 একসাথে অনেক লিংক বসাতে চাইলে (ঐচ্ছিক) — নরমাল লিংক, প্রতি লাইনে একটা; খালি রাখলে লিস্ট অপরিবর্তিত থাকবে</label>
+      <textarea name="normal_bulk" rows="4" placeholder="https://…&#10;https://… (খালি = বদলাবে না)"></textarea>
+      <label>📦 ১৮+ লিংক একসাথে (ঐচ্ছিক) — খালি রাখলে লিস্ট অপরিবর্তিত</label>
+      <textarea name="adult_bulk" rows="4" placeholder="https://…&#10;https://… (খালি = বদলাবে না)"></textarea>
+      <button type="submit">💾 সেটিং সেভ করো — সব অ্যাপে সাথে সাথে বসবে</button>
+    </form>
+    """
+    )
+
     # ── 🎬 ব্লগের সব আপলোড ──────────────────────────────────────────
     _ensure_blog_fresh(force=request.query.get("refresh") == "1")
     movies_html = _movies_html(vnorm)
@@ -835,6 +1076,8 @@ async def admin_home(request):
       <button type="submit">🚀 আপডেট ঘোষণা করো</button>
       <button type="submit" formaction="/admin/clearupdate" class="gray">⏹ আপডেট বন্ধ করো</button>
     </form>
+
+    {ads_html}
     <script>{ADMIN_JS}</script>
     """
     return _page("অ্যাডমিন প্যানেল", body)
@@ -887,6 +1130,119 @@ async def admin_clearupdate(request):
         return web.HTTPFound("/admin")
     try:
         await appcfg.delete_one({"_id": "update"})
+    except Exception:
+        pass
+    return web.HTTPFound("/admin")
+
+
+@stats_routes.post("/admin/setads")
+async def admin_setads(request):
+    """💰 অ্যাপের অ্যাড-সেটিং সেভ — সব রানিং অ্যাপ পরের বার খুললেই নতুন মান নেবে।
+    নরমাল আর ১৮+ লিংক পুল সবসময় আলাদা রাখা হয় — অ্যাপেও কখনো মেশে না।
+    v5.1: লিংক যোগ/মুছে-ফেলা এখন /admin/ads/add আর /admin/ads/delete থেকে হয়
+    (প্যানেলের "নতুন যোগ করুন" বাটন)। এখানে বাল্ক-বক্স দিলে সেটা দিয়ে পুরো লিস্ট
+    রিপ্লেস হয়; খালি দিলে লিস্ট অপরিবর্তিত থাকে — ভুল করে লিস্ট মুছে যাওয়ার ভয় নেই।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        await _ensure_ads_seeded()   # 💰 v5.1.1: সেটিং-সেভ করলেও ৫+৫ ডিফল্ট লিংক হারাবে না
+        form = await request.post()
+
+        def _links(raw) -> list:
+            out = []
+            for u in str(raw or "").replace("\r", "").split("\n"):
+                u = u.strip()
+                if u[:8] == "https://" or u[:7] == "http://":
+                    if u not in out:
+                        out.append(u[:300])
+            return out[:200]   # v5.1: আনলিমিটেড — স্যানিটি-ক্যাপ ২০০
+
+        gate = str(form.get("gate_enabled", "1")) == "1"
+        poster = str(form.get("poster_ad_enabled", "0")) == "1"
+        try:
+            gsec = max(5, min(60, int(str(form.get("gate_seconds", "10") or 10))))
+        except Exception:
+            gsec = 10
+        try:
+            csec = max(30, min(3600, int(str(form.get("cooldown_seconds", "120") or 120))))
+        except Exception:
+            csec = 120
+        try:
+            pn = max(2, min(50, int(str(form.get("poster_ad_every_n", "5") or 5))))
+        except Exception:
+            pn = 5
+        # 📦 বাল্ক বক্সে কিছু দিলে পুরো লিস্ট রিপ্লেস — খালি দিলে আগের লিস্টই থাকে
+        n_bulk = _links(form.get("normal_bulk"))
+        a_bulk = _links(form.get("adult_bulk"))
+        upd = {
+            "gate_enabled": gate,
+            "gate_seconds": gsec,
+            "cooldown_seconds": csec,
+            "poster_ad_enabled": poster,
+            "poster_ad_every_n": pn,
+            "ts": time.time(),
+        }
+        if n_bulk:
+            upd["normal_links"] = n_bulk
+            upd["seeded_normal"] = []   # 💰 পুরো লিস্ট ম্যানুয়ালি রিপ্লেস = আর অটো-বসানো নেই
+        if a_bulk:
+            upd["adult_links"] = a_bulk
+            upd["seeded_adult"] = []
+        await appcfg.update_one({"_id": "ads"}, {"$set": upd}, upsert=True)
+    except Exception:
+        pass
+    return web.HTTPFound("/admin")
+
+
+@stats_routes.post("/admin/ads/add")
+async def admin_ads_add(request):
+    """➕ নতুন-যোগ-করুন বাটন (v5.1) — একটা একটা করে লিংক যোগ, আনলিমিটেড।
+    cat=normal|adult — দুই পুল কখনো মেশে না; ডুপ্লিকেট লিংক আবার যোগ হয় না।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        await _ensure_ads_seeded()   # 💰 v5.1.1: প্রথম লিংক যোগের আগেই ৫+৫ ডিফল্ট বসে থাকবে
+        form = await request.post()
+        cat = "adult" if str(form.get("cat", "normal")) == "adult" else "normal"
+        u = str(form.get("url", "")).strip()[:300]
+        if u[:8] == "https://" or u[:7] == "http://":
+            key = "adult_links" if cat == "adult" else "normal_links"
+            doc = await appcfg.find_one({"_id": "ads"}) or {}
+            lst = list(doc.get(key) or [])
+            if u not in lst:
+                lst.append(u)
+            await appcfg.update_one(
+                {"_id": "ads"},
+                {"$set": {key: lst[:200], "ts": time.time()}},
+                upsert=True,
+            )
+    except Exception:
+        pass
+    return web.HTTPFound("/admin")
+
+
+@stats_routes.post("/admin/ads/delete")
+async def admin_ads_delete(request):
+    """✕ লিংক মুছে-ফেলা (v5.1) — cat + idx দিয়ে একটা লিংক বাদ।"""
+    if request.cookies.get(COOKIE) != TOKEN:
+        return web.HTTPFound("/admin")
+    try:
+        form = await request.post()
+        cat = "adult" if str(form.get("cat", "normal")) == "adult" else "normal"
+        key = "adult_links" if cat == "adult" else "normal_links"
+        idx = int(str(form.get("idx", "-1") or -1))
+        doc = await appcfg.find_one({"_id": "ads"}) or {}
+        lst = list(doc.get(key) or [])
+        if 0 <= idx < len(lst):
+            removed = lst.pop(idx)
+            # 💰 v5.1.1: মুছে-ফেলা লিংক যদি অটো-বসানো তালিকায় থাকে — সেখান থেকেও বাদ দাও,
+            # নাহলে পরে একই লিংক ম্যানুয়ালি যোগ করলে "অটো-বসানো" ব্যাজ ভুল দেখাবে
+            seed_key = "seeded_adult" if cat == "adult" else "seeded_normal"
+            await appcfg.update_one(
+                {"_id": "ads"},
+                {"$set": {key: lst, "ts": time.time()}, "$pull": {seed_key: removed}},
+                upsert=True,
+            )
     except Exception:
         pass
     return web.HTTPFound("/admin")
