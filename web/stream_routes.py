@@ -266,6 +266,19 @@ thumb_cache: dict = {}          # msg_id -> (jpeg_bytes, ts)
 THUMB_CACHE_MAX = 800
 
 
+def purge_stale_thumbs(max_age: float = 1800) -> int:
+    """🧹 SELF-HEAL: RAM-এ জমে থাকা পুরনো থাম্বনেইল ক্যাশ মুছে দেয়।
+    ⚠️ থাম্বনেইল ফিচার অক্ষত থাকে — কেউ পরে চাইলে টেলিগ্রাম থেকে
+    আবার এক ঝলকে নেমে আসে (Android Clear Cache-এর মতোই)।"""
+    now_ts = time.time()
+    stale = [k for k, (_, ts) in thumb_cache.items() if now_ts - ts > max_age]
+    for k in stale:
+        thumb_cache.pop(k, None)
+    if stale:
+        logging.info(f"🧹 [SELF-HEAL] RAM thumb-cache purged: {len(stale)}টি পুরনো এন্ট্রি খালি")
+    return len(stale)
+
+
 @routes.get(r"/thumb/{path:.+}", allow_head=True)
 async def thumb_handler(request: web.Request):
     try:
