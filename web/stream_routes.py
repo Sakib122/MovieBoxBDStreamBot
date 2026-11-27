@@ -1,3 +1,4 @@
+import os
 import time
 import asyncio
 from aiohttp import web
@@ -36,11 +37,22 @@ PREMIUM_SIZE_LIMIT = 2 * 1024 * 1024 * 1024  # 2GB
 # সমাধান: pyrogram-কে cancel করার চেষ্টা না করে প্রতিটি chunk-কে টাইমারের
 # সাথে RACE করানো হয়। টাইমার জিতলে স্ট্রিম ছেড়ে দেওয়া হয় (504), player
 # নিজে থেকেই আবার চেষ্টা করে, আর দোষী ক্লায়েন্ট কিছুক্ষণের জন্য বাদ পড়ে।
-STREAM_FIRST_CHUNK_TIMEOUT = 20   # প্রথম বাইট এত সেকেন্ডে আসতেই হবে
-STREAM_IDLE_TIMEOUT = 25          # মাঝপথে দুই chunk-এর মাঝে সর্বোচ্চ চুপ
-MAX_FLOODWAIT = 30                # এর চেয়ে বড় FloodWait হলে অপেক্ষা নয়, ছেড়ে দাও
-CLIENT_COOLDOWN = 120             # বারবার আটকানো ক্লায়েন্ট এত সেকেন্ড বাদ থাকবে
-FAILS_TO_COOLDOWN = 2             # টানা এতগুলো ব্যর্থতায় বেঞ্চ হবে
+def _env_int(name, default):
+    """⚙️ .env / Koyeb dashboard থেকে কোড না ছুঁয়েই সব লিমিট টিউন করার দরজা"""
+    try:
+        return max(1, int(str(os.getenv(name, str(default))).strip()))
+    except (TypeError, ValueError):
+        return default
+
+# ⚡ সব লিমিট এখন এনভায়রনমেন্ট ভেরিয়েবল দিয়ে বদলানো যায় (ডিফল্ট = ফ্রি
+# ইনস্ট্যান্সের জন্য প্রমাণিত নিরাপদ মান; বড় ইনস্ট্যান্সে এনভায় বাড়িয়ে নেওয়া যাবে)
+STREAM_FIRST_CHUNK_TIMEOUT = _env_int("STREAM_FIRST_CHUNK_TIMEOUT", 12)  # প্রথম বাইট এত সেকেন্ডে আসতেই হবে
+STREAM_IDLE_TIMEOUT = _env_int("STREAM_IDLE_TIMEOUT", 25)          # মাঝপথে দুই chunk-এর মাঝে সর্বোচ্চ চুপ
+MAX_FLOODWAIT = _env_int("MAX_FLOODWAIT", 30)                # এর চেয়ে বড় FloodWait হলে অপেক্ষা নয়, ছেড়ে দাও
+CLIENT_COOLDOWN = _env_int("CLIENT_COOLDOWN", 60)             # বারবার আটকানো ক্লায়েন্ট এত সেকেন্ড বাদ থাকবে
+FAILS_TO_COOLDOWN = _env_int("FAILS_TO_COOLDOWN", 4)             # টানা এতগুলো ব্যর্থতায় বেঞ্চ হবে
+FIRST_CHUNK_RETRIES = _env_int("FIRST_CHUNK_RETRIES", 1)         # প্রথম chunk ফেল করলে অন্য কত ক্লায়েন্টে চুপচাপ রিট্রাই
+FAIL_DEBOUNCE_SECS = 2.0                                         # একই ঝাপটার ব্যর্থতা এই সময়ের ভেতরে একবারই গোনা হবে
 
 
 class UpstreamTimeout(Exception):
@@ -58,11 +70,22 @@ def _cooling(index, now=None):
     return bool(h and (now or time.time()) < h["cooldown_until"])
 
 
+_last_fail_ts: dict = {}   # client index -> শেষ গণনা-করা ব্যর্থতার সময়
+
+
 def mark_client_failure(index):
+    # ⚡ ডিবাউন্স: সিপিইউ চাপা পড়লে এক ক্লায়েন্টের ৫-৬টা স্ট্রিম একই সেকেন্ডে
+    # একসাথে মরে — আগে প্রতিটাই আলাদা ব্যর্থতা গোনা হতো, ফলে ২ সেকেন্ডেই
+    # সব ক্লায়েন্ট একসাথে বেঞ্চ হয়ে পুরো লোড প্রিমিয়ামের উপর চাপা পড়ত
+    # (লাইভ লগের ১৪:২৩–১৪:২৬ ঘটনা)। এখন একই ঝাপটার ব্যর্থতা ১টাই গোনা হবে।
+    now = time.time()
+    if now - _last_fail_ts.get(index, 0) < FAIL_DEBOUNCE_SECS:
+        return
+    _last_fail_ts[index] = now
     h = client_health.setdefault(index, {"fails": 0, "cooldown_until": 0.0})
     h["fails"] += 1
     if h["fails"] >= FAILS_TO_COOLDOWN:
-        h["cooldown_until"] = time.time() + CLIENT_COOLDOWN
+        h["cooldown_until"] = now + CLIENT_COOLDOWN
         h["fails"] = 0
         logging.warning(f"Client {index} benched for {CLIENT_COOLDOWN}s after repeated stalls")
 
@@ -85,10 +108,20 @@ def mark_client_success(index):
 # তাই প্রতি ক্লায়েন্টের সামনে গেট — সর্বোচ্চ ৮টি লাইভ স্ট্রিম।
 # ---------------------------------------------------------------
 client_gates: dict = {}   # client index -> BoundedSemaphore
-STREAM_GATE_LIMIT = 8     # সাধারণ বট ক্লায়েন্টে একসাথে সর্বোচ্চ লাইভ স্ট্রিম
-PREMIUM_GATE_LIMIT = 5    # প্রিমিয়ামে কম — লাইভ টেস্টে ৮টিতেও সংযোগ ভেঙেছিল
-STREAM_GATE_WAIT = 12     # গেট ফাঁকা হওয়ার অপেক্ষা (সেকেন্ড), এর পরে 504
-OVERFLOW_GATE_WAIT = 1    # ওভারফ্লোতে প্রতি অন্য ক্লায়েন্টে এত সেকেন্ড অপেক্ষা
+STREAM_GATE_LIMIT = _env_int("STREAM_GATE_LIMIT", 6)     # সাধারণ বট ক্লায়েন্টে একসাথে সর্বোচ্চ লাইভ স্ট্রিম
+PREMIUM_GATE_LIMIT = _env_int("PREMIUM_GATE_LIMIT", 5)    # প্রিমিয়ামে কম — লাইভ টেস্টে ৮টিতেও সংযোগ ভেঙেছিল
+STREAM_GATE_WAIT = _env_int("STREAM_GATE_WAIT", 12)      # গেট ফাঁকা হওয়ার অপেক্ষা (সেকেন্ড), এর পরে 504
+OVERFLOW_GATE_WAIT = _env_int("OVERFLOW_GATE_WAIT", 1)    # ওভারফ্লোতে প্রতি অন্য ক্লায়েন্টে এত সেকেন্ড অপেক্ষা
+
+# ⚡⚡ সার্বিক ভর্তি-নিয়ন্ত্রণ (সিপিইউ মৃত্যু-চক্রের স্থায়ী সমাধান):
+# ফ্রি ইনস্ট্যান্স (০.১ vCPU) একসাথে ~২০-২৫টা স্ট্রিমের MTProto এনক্রিপশন
+# টানতে পারে — তার বেশি ঢুকলেই সব ক্লায়েন্ট একসাথে টাইমআউট হয়ে
+# মৃত্যু-চক্র শুরু হয় (লাইভ লগ ১৪:২৩–১৪:২৭)। এখন মোট লাইভ স্ট্রিম এই
+# সংখ্যায় সীমিত থাকবে; বাড়তি রিকোয়েস্ট ৩-৬ সেকেন্ডের Retry-After পাবে —
+# player নিজেই রিট্রাই করবে, ইউজার এক সেকেন্ডের লোডিং ছাড়া কিছু টের পাবে না।
+TOTAL_STREAM_CAPACITY = _env_int("TOTAL_STREAM_CAPACITY", 24)  # 0 দিলে সীমা বন্ধ
+GLOBAL_GATE_WAIT = _env_int("GLOBAL_GATE_WAIT", 4)             # ক্যাপাসিটি ফাঁকা হওয়ার সর্বোচ্চ অপেক্ষা (সেকেন্ড)
+global_gate = asyncio.BoundedSemaphore(TOTAL_STREAM_CAPACITY) if TOTAL_STREAM_CAPACITY > 0 else None
 
 
 def premium_index():
@@ -123,14 +156,56 @@ def release_load(index):
         pass
 
 
-def pick_client_index(exclude_premium=True):
+def _make_load_releaser(index):
+    """ওই ক্লায়েন্টের লোড কাউন্টার + গেট ছাড়ানোর কলব্যাক"""
+    def _release():
+        release_load(index)
+    return _release
+
+
+async def acquire_global_gate(timeout):
+    """সার্বিক ক্যাপাসিটিতে জায়গা মিললে True"""
+    if global_gate is None:
+        return True
+    try:
+        await asyncio.wait_for(global_gate.acquire(), timeout=timeout)
+        return True
+    except asyncio.TimeoutError:
+        return False
+
+
+def _release_global_gate():
+    # দুইবার ডাকাও নিরাপদ রাখতে ValueError চুপচাপ গিলে নেওয়া হয়
+    try:
+        if global_gate is not None:
+            global_gate.release()
+    except ValueError:
+        pass
+
+
+def _run_releasers(releasers):
+    """ধরা জায়গাগুলো এক জায়গা থেকে ছাড়ানো — যতবারই ডাকা হোক, প্রতিটি
+    জায়গা ঠিক একবারই ছাড়া হয় (লিস্ট খালি হয়ে যায়)।"""
+    while releasers:
+        fn = releasers.pop()
+        try:
+            fn()
+        except Exception:
+            pass
+
+
+def pick_client_index(exclude_premium=True, exclude=frozenset()):
     """সুস্থ বটদের মধ্যে সবচেয়ে কম লোডের ক্লায়েন্ট।
     ⚡ ছোট ফাইল সাধারণত প্রিমিয়ামে যায় না; তবে সব বট বেঞ্চড হলে
-    প্রিমিয়াম শেষ ভরসা — তখন ও ধরা পড়বে (ইউজার ফাঁকা থাকবে না)।"""
+    প্রিমিয়াম শেষ ভরসা — তখন ও ধরা পড়বে (ইউজার ফাঁকা থাকবে না)।
+    ⚡ exclude — এই রিকোয়েস্টে যেসব ক্লায়েন্ট ইতিমধ্যে ফেল করেছে, ওদের
+    আবার বেছে নেওয়া হবে না (ট্রান্সপারেন্ট রিট্রাইয়ের জন্য)।"""
     now = time.time()
     all_keys = list(work_loads.keys())
     pm = premium_index()
     bots = [i for i in all_keys if i != pm] if (exclude_premium and pm not in (None, 0)) else all_keys
+    if exclude:
+        bots = [i for i in bots if i not in exclude] or bots
     healthy = [i for i in bots if not _cooling(i, now)]
     if healthy:
         pool = healthy
@@ -404,24 +479,21 @@ def streamer_for(client):
     return class_cache[client]
 
 
-async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
+async def guarded_stream(src_it, first_chunk, index, releasers=None, idle_timeout=None):
     """⚡ প্রথম chunk পাওয়ার পর প্রতিটি chunk-কে টাইমারের সাথে race করানো হয়।
     Telegram চুপ হলে অনন্ত অপেক্ষা নয় — স্ট্রিম ছেড়ে দেওয়া হয়, ফলে
     connection + load counter সাথে সাথে খালি হয়ে যায় এবং player নিজে
     শেষ buffered পয়েন্ট থেকে আবার চেষ্টা করে।
     গুরুত্বপূর্ণ: এখানে কখনোই pyrogram task-কে সাথে সাথে cancel করার
-    ঝুঁকি নেওয়া হয় না — শুধু নিজের দিক থেকে হাল ছাড়া হয়।"""
+    ঝুঁকি নেওয়া হয় না — শুধু নিজের দিক থেকে হাল ছাড়া হয়।
+    ⚡ releasers: ধরা জায়গাগুলো (ক্লায়েন্ট লোড + সার্বিক গেট) স্ট্রিম শেষে
+    এখান থেকেই ছাড়া হয় — মাঝপথে মরা স্ট্রিমেও জায়গা আটকে থাকবে না।"""
     if idle_timeout is None:
         idle_timeout = STREAM_IDLE_TIMEOUT
+    if releasers is None:
+        releasers = [_make_load_releaser(index)]
     it = src_it
-    released = False
     task = None
-
-    def release():
-        nonlocal released
-        if not released:
-            released = True
-            release_load(index)
 
     try:
         yield first_chunk
@@ -453,7 +525,7 @@ async def guarded_stream(src_it, first_chunk, index, idle_timeout=None):
             mark_client_success(index)
             yield chunk
     finally:
-        release()
+        _run_releasers(releasers)
         if task is not None and not task.done():
             task.cancel()
         try:
@@ -525,203 +597,244 @@ async def media_streamer_head(request: web.Request, id: int, secure_hash: str):
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
-    # ⚡ STEP 1: ডিফল্ট ক্লায়েন্ট দিয়ে আগে ফাইলের তথ্য (সাইজ জানার জন্য)
-    base_client = multi_clients.get(0) or next(iter(multi_clients.values()))
-    base_streamer = streamer_for(base_client)
-
-    file_id = await get_props_safe(base_streamer, id)
-    file_size = file_id.file_size
-
-    # ⚡ STEP 2: স্মার্ট ক্লায়েন্ট নির্বাচন (সুস্থ + কম লোড প্রাধান্য)
-    if file_size > PREMIUM_SIZE_LIMIT and len(multi_clients) > 1:
-        premium_idx = max(multi_clients.keys())
-        if premium_idx != 0 and not _cooling(premium_idx):
-            index = premium_idx
-            logging.info(f"Big file ({file_size / 1024 / 1024 / 1024:.2f} GB) -> Premium Client {index}")
-        else:
-            index = pick_client_index()
-    else:
-        index = pick_client_index()
-
-    # ⚡ STEP 3: যে ক্লায়েন্ট স্ট্রিম দেবে, তার নিজের streamer + নিজের fresh file reference
-    # ⚡ অপটিমাইজেশন: নির্বাচিত ক্লায়েন্ট যদি base ক্লায়েন্টই হয়, STEP 1-এ পাওয়া
-    # props-ই ব্যবহার হবে — দ্বিতীয় লুকআপ (Telegram getMessages) একদম বাদ।
-    # আগে প্রতি স্ট্রিমে একই ক্লায়েন্টের streamer-এ আবার জিজ্ঞেস করা হতো।
-    base_index = 0 if 0 in multi_clients else next(iter(multi_clients))
-    if index == base_index:
-        tg_connect = base_streamer
-    else:
-        tg_connect = streamer_for(multi_clients[index])
-        try:
-            file_id = await get_props_safe(tg_connect, id)
-            file_size = file_id.file_size
-        except Exception as e:
-            # এই ক্লায়েন্ট ফাইলের তথ্যই দিতে পারল না — বেঞ্চ করে অন্য ক্লায়েন্ট দিয়ে একবার চেষ্টা
-            mark_client_failure(index)
-            logging.warning(f"Client {index} props failed ({e}) — trying another client")
-            index = pick_client_index()
-            tg_connect = streamer_for(multi_clients[index])
-            file_id = await get_props_safe(tg_connect, id)
-            file_size = file_id.file_size
-
-    if MULTI_CLIENT:
-        logging.info(f"Client {index} is now serving {request.remote}")
-
-    # ⚡ হ্যাশ চেক
-    if file_id.unique_id[:6] != secure_hash:
-        logging.debug(f"Invalid hash for message with ID {id}")
-        raise InvalidHash
-
-    # 🔧 FIX (ডিউরেশন ০০:০০ + সিকে জিরো থেকে প্লে + বড় সিকে ফ্রিজ):
-    # ব্রাউজার মুভির ইনডেক্স/ডিউরেশন পড়তে "bytes=-N" (ফাইলের শেষের N বাইট)
-    # রিকোয়েস্ট পাঠায়। আগের কোড এতে int('') দিয়ে ক্র্যাশ করত → HTTP 500 →
-    # ব্রাউজার ইনডেক্স পায় না → ডিউরেশন ০, সিক দিলে ০ থেকে রিস্টার্ট।
-    if range_header:
-        rm = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", str(range_header).strip())
-        if rm and (rm.group(1) or rm.group(2)):
-            if rm.group(1) == "":
-                # suffix: "bytes=-N" = শেষের N বাইট
-                n = min(int(rm.group(2)), file_size)
-                from_bytes = file_size - n
-                until_bytes = file_size - 1
-            else:
-                from_bytes = int(rm.group(1))
-                until_bytes = int(rm.group(2)) if rm.group(2) else file_size - 1
-        else:
-            from_bytes, until_bytes = 0, file_size - 1
-    else:
-        from_bytes = request.http_range.start or 0
-        until_bytes = (request.http_range.stop or file_size) - 1
-
-    if from_bytes < 0 or from_bytes >= file_size:
-        return web.Response(
-            status=416,
-            body="416: Range not satisfiable",
-            headers={"Content-Range": f"bytes */{file_size}"},
+    # ⚡ STEP 0: সার্বিক ভর্তি-নিয়ন্ত্রণ (সিপিইউ মৃত্যু-চক্রের স্থায়ী সমাধান)।
+    # কোনো Telegram কলের আগেই — একেবারে সস্তা জায়গায় — বাড়তি চাপ ফেরত
+    # যায়। সার্ভার মরে গিয়ে সবার স্ট্রিম ভাঙার চেয়ে কয়েকজনকে ৩-৬ সেকেন্ডের
+    # Retry-After দেওয়া ভালো: player নিজেই রিট্রাই করে, ইউজার এক সেকেন্ডের
+    # লোডিং ছাড়া কিছু টের পায় না, সার্ভারও সিপিইউ-স্বাস্থ্য ঠিক রাখে।
+    if not await acquire_global_gate(GLOBAL_GATE_WAIT):
+        logging.warning(
+            f"Server capacity full ({TOTAL_STREAM_CAPACITY} live streams) — fast shed (msg {id})"
         )
+        return _busy_504()
 
-    chunk_size = 1024 * 1024
-    until_bytes = min(until_bytes, file_size - 1)
+    # ⚡ জায়গা-ম্যানেজমেন্ট: load_releasers — প্রতি চেষ্টায় ধরা ক্লায়েন্ট-লোড।
+    # সার্বিক গেট একবারই নেওয়া হয় এবং শেষ পর্যন্ত ধরে রাখা হয়: সফল হলে
+    # guarded_stream স্ট্রিম শেষে ছাড়বে, ব্যর্থ হলে নিচের এক্সিট পথগুলোতেই।
+    # (_release_global_gate দুইবার ডাকা নিরাপদ — ValueError গিলে নেয়।)
+    load_releasers = []
+    try:
+        # ⚡ STEP 1: ডিফল্ট ক্লায়েন্ট দিয়ে আগে ফাইলের তথ্য (সাইজ জানার জন্য)
+        base_client = multi_clients.get(0) or next(iter(multi_clients.values()))
+        base_streamer = streamer_for(base_client)
 
-    offset = from_bytes - (from_bytes % chunk_size)
-    first_part_cut = from_bytes - offset
-    last_part_cut = until_bytes % chunk_size + 1
+        file_id = await get_props_safe(base_streamer, id)
+        file_size = file_id.file_size
 
-    req_length = until_bytes - from_bytes + 1
-    part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+        # ⚡ হ্যাশ চেক — সব ক্লায়েন্টের props-এ unique_id একই, একবারই যথেষ্ট
+        if file_id.unique_id[:6] != secure_hash:
+            logging.debug(f"Invalid hash for message with ID {id}")
+            raise InvalidHash
 
-    # ⚡ STEP 2.5: GATE — নির্বাচিত ক্লায়েন্টে একসাথে ৮টির বেশি লাইভ স্ট্রিম
-    # ঢুকলে session ভেঙে যায়। তাই আগে গেটে জায়গা নিতে হবে; না পেলে
-    # অন্য সুস্থ ক্লায়েন্টগুলোতে ওভারফ্লো, সব ভরা হলে ছোট্ট 504 —
-    # player নিজে থেকেই আবার চেষ্টা করবে। গেট হারানো = মৃত্যু-চক্র।
-    if not await acquire_gate(index, STREAM_GATE_WAIT):
-        _now = time.time()
-        _pm = premium_index()
-        _others = [i for i in work_loads.keys() if i != index and not _cooling(i, _now)]
-        # ছোট ফাইল: আগে অন্য বটরা, সবাই ফুল হলে শেষে প্রিমিয়াম হেল্প করবে
-        # বড় ফাইল: index নিজেই প্রিমিয়াম, তাই তালিকায় বটরা-ই থাকে
-        if file_size > PREMIUM_SIZE_LIMIT or _pm is None:
-            alts = sorted(_others, key=lambda i: work_loads.get(i, 0))
+        # 🔧 FIX (ডিউরেশন ০০:০০ + সিকে জিরো থেকে প্লে + বড় সিকে ফ্রিজ):
+        # ব্রাউজার মুভির ইনডেক্স/ডিউরেশন পড়তে "bytes=-N" (ফাইলের শেষের N বাইট)
+        # রিকোয়েস্ট পাঠায়। আগের কোড এতে int('') দিয়ে ক্র্যাশ করত → HTTP 500 →
+        # ব্রাউজার ইনডেক্স পায় না → ডিউরেশন ০, সিক দিলে ০ থেকে রিস্টার্ট।
+        # (রেঞ্জ এখন লুপের বাইরে একবারই হিসাব হয় — প্রতিটি ক্লায়েন্টে একই ফাইল।)
+        if range_header:
+            rm = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", str(range_header).strip())
+            if rm and (rm.group(1) or rm.group(2)):
+                if rm.group(1) == "":
+                    # suffix: "bytes=-N" = শেষের N বাইট
+                    n = min(int(rm.group(2)), file_size)
+                    from_bytes = file_size - n
+                    until_bytes = file_size - 1
+                else:
+                    from_bytes = int(rm.group(1))
+                    until_bytes = int(rm.group(2)) if rm.group(2) else file_size - 1
+            else:
+                from_bytes, until_bytes = 0, file_size - 1
         else:
-            _bots = sorted((i for i in _others if i != _pm), key=lambda i: work_loads.get(i, 0))
-            alts = _bots + ([_pm] if _pm in _others else [])
-        moved = False
-        for alt in alts:
-            if await acquire_gate(alt, OVERFLOW_GATE_WAIT):
-                index = alt
-                moved = True
-                break
-        if moved:
-            tg_connect = streamer_for(multi_clients[index])
-            file_id = await get_props_safe(tg_connect, id)
-            file_size = file_id.file_size
-            logging.info(f"Gate full — overflow -> Client {index}")
+            from_bytes = request.http_range.start or 0
+            until_bytes = (request.http_range.stop or file_size) - 1
+
+        if from_bytes < 0 or from_bytes >= file_size:
+            _release_global_gate()
+            return web.Response(
+                status=416,
+                body="416: Range not satisfiable",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+
+        chunk_size = 1024 * 1024
+        until_bytes = min(until_bytes, file_size - 1)
+
+        offset = from_bytes - (from_bytes % chunk_size)
+        first_part_cut = from_bytes - offset
+        last_part_cut = until_bytes % chunk_size + 1
+
+        req_length = until_bytes - from_bytes + 1
+        part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+
+        # ⚡⚡ ট্রান্সপারেন্ট রিট্রাই: প্রথম chunk যেই ক্লায়েন্টে ফেল করল, ইউজারকে
+        # সাথে সাথে 504 না দিয়ে চুপচাপ অন্য সুস্থ ক্লায়েন্টে আরেকবার চেষ্টা হয়।
+        # ইউজার শুধু ১ সেকেন্ডের বাড়তি লোডিং দেখে — ভাঙা ক্লায়েন্ট টেরই পায় না।
+        tried = set()
+        for attempt in range(1, FIRST_CHUNK_RETRIES + 2):
+            # ⚡ STEP 2: স্মার্ট ক্লায়েন্ট নির্বাচন (সুস্থ + কম লোড প্রাধান্য)
+            if file_size > PREMIUM_SIZE_LIMIT and len(multi_clients) > 1:
+                premium_idx = max(multi_clients.keys())
+                if premium_idx != 0 and premium_idx not in tried and not _cooling(premium_idx):
+                    index = premium_idx
+                    if attempt == 1:
+                        logging.info(f"Big file ({file_size / 1024 / 1024 / 1024:.2f} GB) -> Premium Client {index}")
+                else:
+                    index = pick_client_index(exclude=tried)
+            else:
+                index = pick_client_index(exclude=tried)
+
+            # ⚡ STEP 2.5: GATE — এক ক্লায়েন্টে বেশি লাইভ স্ট্রিম ঢুকলে session
+            # ভেঙে যায়। না পেলে অন্য সুস্থ ক্লায়েন্টে ওভারফ্লো, সব ভরা হলে
+            # ছোট্ট 504 — player নিজে থেকেই আবার চেষ্টা করবে।
+            if not await acquire_gate(index, STREAM_GATE_WAIT):
+                _now = time.time()
+                _pm = premium_index()
+                _others = [i for i in work_loads.keys() if i != index and not _cooling(i, _now) and i not in tried]
+                # ছোট ফাইল: আগে অন্য বটরা, সবাই ফুল হলে শেষে প্রিমিয়াম হেল্প করবে
+                # বড় ফাইল: index নিজেই প্রিমিয়াম, তাই তালিকায় বটরা-ই থাকে
+                if file_size > PREMIUM_SIZE_LIMIT or _pm is None:
+                    alts = sorted(_others, key=lambda i: work_loads.get(i, 0))
+                else:
+                    _bots = sorted((i for i in _others if i != _pm), key=lambda i: work_loads.get(i, 0))
+                    alts = _bots + ([_pm] if _pm in _others else [])
+                moved = False
+                for alt in alts:
+                    if await acquire_gate(alt, OVERFLOW_GATE_WAIT):
+                        index = alt
+                        moved = True
+                        break
+                if moved:
+                    logging.info(f"Gate full — overflow -> Client {index}")
+                else:
+                    logging.warning(f"All gates full — shedding load (msg {id})")
+                    _release_global_gate()
+                    return _busy_504()
+
+            # ⚡ STEP 3: যে ক্লায়েন্ট স্ট্রিম দেবে, তার নিজের streamer + নিজের fresh
+            # file reference। base ক্লায়েন্ট হলে STEP 1-এর props-ই চলে — দ্বিতীয়
+            # লুকআপ (Telegram getMessages) একদম বাদ।
+            if index == base_client:
+                tg_connect = base_streamer
+            else:
+                tg_connect = streamer_for(multi_clients[index])
+                try:
+                    file_id = await get_props_safe(tg_connect, id)
+                    file_size = file_id.file_size
+                except Exception as e:
+                    # এই ক্লায়েন্ট ফাইলের তথ্যই দিতে পারল না — বেঞ্চ গণনা,
+                    # তারপর 504 না দিয়ে অন্য ক্লায়েন্টে চুপচাপ রিট্রাই
+                    mark_client_failure(index)
+                    tried.add(index)
+                    logging.warning(f"Client {index} props failed ({e}) — transparent retry on another client")
+                    continue
+
+            if MULTI_CLIENT:
+                logging.info(f"Client {index} is now serving {request.remote}")
+
+            # ⚡ load কাউন্টার routes নিজে সামলায় — ঝুলে-যাওয়া স্ট্রিমও কাউন্টার
+            # আটকে রাখতে পারবে না; সব জায়গা releasers দিয়ে ছাড়ানো হয়
+            work_loads[index] = work_loads.get(index, 0) + 1
+            load_releasers.append(_make_load_releaser(index))
+            raw_body = tg_connect.yield_file(
+                file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size, id
+            )
+
+            # ⚡⚡ সবচেয়ে জরুরি ধাপ: প্রথম chunk হাতে না পেয়ে headers পাঠাই না।
+            # শুরুতেই আটকালে ইউজার অনন্ত লোডিং দেখবে না — এক ক্লায়েন্ট ফেল
+            # করলে অন্য ক্লায়েন্টে চুপচাপ রিট্রাই, সব না হলে ছোট্ট 504।
+            it = raw_body.__aiter__()
+            task = asyncio.ensure_future(it.__anext__())
+            done, _ = await asyncio.wait({task}, timeout=STREAM_FIRST_CHUNK_TIMEOUT)
+            if not done:
+                _run_releasers(load_releasers)
+                mark_client_failure(index)
+                asyncio.create_task(_late_cancel(task))
+                tried.add(index)
+                logging.error(f"First chunk timeout ({STREAM_FIRST_CHUNK_TIMEOUT}s) on client {index} — transparent retry")
+                continue
+            try:
+                first_chunk = task.result()
+            except StopAsyncIteration:
+                first_chunk = b""
+            except FloodWait as e:
+                _run_releasers(load_releasers)
+                mark_client_failure(index)
+                tried.add(index)
+                logging.warning(f"FloodWait {e.value}s at stream start on client {index} — transparent retry")
+                continue
+            except Exception as e:
+                _run_releasers(load_releasers)
+                mark_client_failure(index)
+                tried.add(index)
+                logging.error(f"Stream start failed on client {index}: {type(e).__name__}: {e} — transparent retry")
+                continue
+
+            if not first_chunk:
+                _run_releasers(load_releasers)
+                mark_client_failure(index)
+                tried.add(index)
+                logging.error(f"Empty stream start on client {index} (msg {id}) — transparent retry")
+                continue
+
+            mark_client_success(index)
+            break
         else:
-            logging.warning(f"All gates full — shedding load (msg {id})")
+            # সব চেষ্টা শেষ — এবার সত্যিই 504 (প্লেয়ার নিজে আবার চেষ্টা করবে)
+            logging.error(f"All {FIRST_CHUNK_RETRIES + 1} stream attempts failed for msg {id} — 504, player will retry")
+            _run_releasers(load_releasers)
+            _release_global_gate()
             return _busy_504()
 
-    # ⚡ load কাউন্টার এখন routes নিজে সামলায় (yield_file থেকে সরানো হয়েছে) —
-    # ঝুলে-যাওয়া স্ট্রিমও কাউন্টার আটকে রাখতে পারবে না
-    work_loads[index] = work_loads.get(index, 0) + 1
-    raw_body = tg_connect.yield_file(
-        file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size, id
-    )
+        # ⚡ সফল স্ট্রিম: সার্বিক গেটের মালিকানা guarded_stream-এর কাছে যাচ্ছে —
+        # স্ট্রিম শেষ (বা মাঝপথে মরলেও) সেখান থেকেই ছাড়া হবে।
+        load_releasers.append(_release_global_gate)
 
-    # ⚡⚡ সবচেয়ে জরুরি ধাপ: প্রথম chunk হাতে না পেয়ে headers পাঠাই না।
-    # তাই স্ট্রিম শুরুতেই আটকালে ইউজার অনন্ত লোডিং দেখবে না — ৩ সেকেন্ডের
-    # 504 পাবে, player নিজে থেকেই আবার চেষ্টা করবে (সাধারণত অন্য ক্লায়েন্টে)।
-    it = raw_body.__aiter__()
-    task = asyncio.ensure_future(it.__anext__())
-    done, _ = await asyncio.wait({task}, timeout=STREAM_FIRST_CHUNK_TIMEOUT)
-    if not done:
-        release_load(index)
-        mark_client_failure(index)
-        asyncio.create_task(_late_cancel(task))
-        logging.error(f"First chunk timeout ({STREAM_FIRST_CHUNK_TIMEOUT}s) on client {index} — 504, player will retry")
-        return _busy_504()
-    try:
-        first_chunk = task.result()
-    except StopAsyncIteration:
-        first_chunk = b""
-    except FloodWait as e:
-        release_load(index)
-        mark_client_failure(index)
-        logging.warning(f"FloodWait {e.value}s at stream start on client {index} — 504, player will retry")
-        return _busy_504()
+        mime_type = file_id.mime_type
+        file_name = file_id.file_name
+        disposition = "attachment"
+
+        # mimetypes.guess_type() tuple রিটার্ন করে — শুধু টাইপটা নেওয়া হচ্ছে
+        if not mime_type:
+            mime_type = mimetypes.guess_type(file_name or "")[0] or "application/octet-stream"
+        if not file_name:
+            try:
+                file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+            except (IndexError, AttributeError):
+                file_name = f"{secrets.token_hex(2)}.unknown"
+
+        headers = {
+            "Content-Type": str(mime_type),
+            "Content-Length": str(req_length),
+            "Content-Disposition": f'{disposition}; filename="{file_name}"',
+            "Accept-Ranges": "bytes",
+            # CORS: অন্য ডোমেইন থেকে (যেমন মেইন সাইট) ভিডিও চলবে এবং
+            # প্রথম সিনের পোস্টারও আঁকা যাবে
+            "Access-Control-Allow-Origin": "*",
+            # 🔧 CRITICAL FIX (স্ট্রিম ঝুলে-যাওয়া / সিকে জিরো / লোডিং আটকে থাকা):
+            # Koyeb-এর সামনের Cloudflare এজ ভিডিও রেসপন্স ক্যাশে রাখার সময় পুরো
+            # বডি বাফার করে — তখন লাইভ ইউজার মিনিটের পর মিনিট ০ বাইট পেয়ে ঝুলে
+            # থাকে (লাইভ টেস্টে প্রমাণিত: MISS = ১০০ সেকেন্ডে ০ বাইট, HIT = সাথে সাথে)।
+            # no-store দিলে এজ ক্যাশ ছাড়াই সরাসরি পাস-থ্রু করে → স্ট্রিম লাইভ চলে।
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            "Pragma": "no-cache",
+            "CDN-Cache-Control": "no-store",
+            "Cloudflare-CDN-Cache-Control": "no-store",
+        }
+        # Content-Range শুধু Range request এ পাঠানো ঠিক
+        if range_header:
+            headers["Content-Range"] = f"bytes {from_bytes}-{until_bytes}/{file_size}"
+
+        body = guarded_stream(it, first_chunk, index, releasers=load_releasers)
+        return web.Response(
+            status=206 if range_header else 200,
+            body=body,
+            headers=headers,
+        )
     except Exception:
-        release_load(index)
-        mark_client_failure(index)
-        logging.exception(f"Stream start failed on client {index}")
-        return _busy_504()
-
-    if not first_chunk:
-        release_load(index)
-        mark_client_failure(index)
-        logging.error(f"Empty stream start on client {index} (msg {id}) — 504, player will retry")
-        return _busy_504()
-    mark_client_success(index)
-
-    mime_type = file_id.mime_type
-    file_name = file_id.file_name
-    disposition = "attachment"
-
-    # mimetypes.guess_type() tuple রিটার্ন করে — শুধু টাইপটা নেওয়া হচ্ছে
-    if not mime_type:
-        mime_type = mimetypes.guess_type(file_name or "")[0] or "application/octet-stream"
-    if not file_name:
-        try:
-            file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
-        except (IndexError, AttributeError):
-            file_name = f"{secrets.token_hex(2)}.unknown"
-
-    headers = {
-        "Content-Type": str(mime_type),
-        "Content-Length": str(req_length),
-        "Content-Disposition": f'{disposition}; filename="{file_name}"',
-        "Accept-Ranges": "bytes",
-        # CORS: অন্য ডোমেইন থেকে (যেমন মেইন সাইট) ভিডিও চলবে এবং
-        # প্রথম সিনের পোস্টারও আঁকা যাবে
-        "Access-Control-Allow-Origin": "*",
-        # 🔧 CRITICAL FIX (স্ট্রিম ঝুলে-যাওয়া / সিকে জিরো / লোডিং আটকে থাকা):
-        # Koyeb-এর সামনের Cloudflare এজ ভিডিও রেসপন্স ক্যাশে রাখার সময় পুরো
-        # বডি বাফার করে — তখন লাইভ ইউজার মিনিটের পর মিনিট ০ বাইট পেয়ে ঝুলে
-        # থাকে (লাইভ টেস্টে প্রমাণিত: MISS = ১০০ সেকেন্ডে ০ বাইট, HIT = সাথে সাথে)।
-        # no-store দিলে এজ ক্যাশ ছাড়াই সরাসরি পাস-থ্রু করে → স্ট্রিম লাইভ চলে।
-        "Cache-Control": "no-store, no-cache, must-revalidate, private",
-        "Pragma": "no-cache",
-        "CDN-Cache-Control": "no-store",
-        "Cloudflare-CDN-Cache-Control": "no-store",
-    }
-    # Content-Range শুধু Range request এ পাঠানো ঠিক
-    if range_header:
-        headers["Content-Range"] = f"bytes {from_bytes}-{until_bytes}/{file_size}"
-
-    body = guarded_stream(it, first_chunk, index)
-    return web.Response(
-        status=206 if range_header else 200,
-        body=body,
-        headers=headers,
-    )
+        # যেন কোনো পথেই ধরা জায়গা ফাঁকা না থেকে যায় (দ্বিগুণ ছাড়াও নিরাপদ)
+        _run_releasers(load_releasers)
+        _release_global_gate()
+        raise
 
 
 # ---------------------------------------------------------------
