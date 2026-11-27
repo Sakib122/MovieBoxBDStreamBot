@@ -101,6 +101,27 @@ AUTO_DELETE_TIME = int(environ.get("AUTO_DELETE_TIME", "60")) # ১০ মিন
 # 🔄 KEEP ALIVE / UPTIME SETTINGS
 AUTO_KEEP_ALIVE = is_enabled(environ.get("AUTO_KEEP_ALIVE", "True"), True)
 
+# 🛡️ SELF-HEAL SETTINGS (অটো-সেলফ-হিলিং সিস্টেম)
+# SELFHEAL_MEM_LIMIT: RAM এত % ছুঁলেই সাথে সাথে অটো-রিলোড (fresh মেমোরি)।
+#   ⚠️ রিলোডের একমাত্র ট্রিগার মেমোরি — CPU 100% হলেও কিছু হবে না।
+# SELFHEAL_CACHE_INTERVAL: কত সেকেন্ড পর পর অটো ক্যাশ-ক্লিন হবে
+#   (ডিফল্ট 1800 = ৩০ মিনিট)। ক্লিনের সময় বট বন্ধ হয় না।
+SELFHEAL_ENABLED = is_enabled(environ.get("SELFHEAL_ENABLED", "True"), True)
+SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "95"))
+SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "1800"))
+SELFHEAL_CHECK_INTERVAL = int(environ.get("SELFHEAL_CHECK_INTERVAL", "5"))
+
+# 🚀 KOYEB AUTO-REDEPLOY (RAM 95% হলে নিজে নিজে Redeploy)
+# পূর্ণ অটো-রিডিপ্লয় চালু করতে:
+#   1. Koyeb → Account Settings → API → Create API token
+#   2. Koyeb-এ এই env ভ্যারিয়েবলগুলো যোগ করো:
+#      KOYEB_API_TOKEN = <তোমার টোকেন>
+#      KOYEB_SERVICE_NAME = <ড্যাশবোর্ডে সার্ভিসের নাম, যেমন: FlixBoxsStreamBot>
+# টোকেন না দিলেও সিস্টেম কাজ করবে — তখন RAM 95%-এ fresh restart হবে
+# (মেমোরি জিরো হবে), কিন্তু পূর্ণ "Redeploy" হবে না।
+KOYEB_API_TOKEN = environ.get('KOYEB_API_TOKEN', '')
+KOYEB_SERVICE_NAME = environ.get('KOYEB_SERVICE_NAME', 'FlixBoxsStreamBot')
+
 # =========================================================
 # 🖼️ MEDIA & CAPTIONS
 # =========================================================

@@ -1,0 +1,555 @@
+# ============================================================
+# 🛡️ SELF-HEAL SYSTEM — MovieBoxBDStreamBot (অটো-সেলফ-হিলিং)
+# ============================================================
+# এই ফাইলটা সার্ভারকে সম্পূর্ণ স্বয়ংক্রিয় (fully automatic) করে দেয়:
+#
+# ১) 🧠 MEMORY WATCHDOG (প্রধান প্রাধান্য):
+#    - প্রতি ৫ সেকেন্ডে RAM চেক করে (Koyeb/Render/Docker কনটেইনার লিমিট সহ)
+#    - RAM 95% (SELFHEAL_MEM_LIMIT) ছুঁলে → সাথে সাথে নিজে নিজে REDEPLOY:
+#      Koyeb API (POST /v1/services/{id}/redeploy) দিয়ে ড্যাশবোর্ডের
+#      Redeploy বাটন চাপার মতোই নতুন deployment ট্রিগার হয়। Koyeb নতুন
+#      instance বিল্ড করে healthy হলে অটোমেটিক swap করে — নতুন instance-এ
+#      মেমোরি ০ (জিরো) থেকে শুরু, স্ট্রিম ইউজারদের সমস্যা হয় না।
+#      (KOYEB_API_TOKEN সেট থাকলেই এটা কাজ করবে।)
+#    - টোকেন না থাকলে/API ফেল হলে → fresh restart fallback (exec):
+#      প্রসেস নিজেকে বদলে নেয়, মেমোরি জিরো হয় — সার্ভার কখনো মরে না।
+#    - ⚠️ CPU কখনোই ট্রিগার নয় — CPU 100% হলেও কিছু হবে না।
+#      ট্রিগারের একমাত্র কারণ = মেমোরি।
+#
+# ২) 🧹 AUTO CACHE CLEANER (প্রতি ৩০ মিনিটে):
+#    - অ্যান্ড্রয়েডের "Clear Cache"-এর মতোই কাজ করে:
+#      অপ্রয়োজনীয় জাঙ্ক/টেম্প ফাইল মুছে যায়, বাকি সব অক্ষত থাকে।
+#    - শুধুমাত্র নির্দিষ্ট জাঙ্ক প্যাটার্ন (*.tmp, *.part, __pycache__ ইত্যাদি)
+#      মোছা হয় — হোয়াইটলিস্ট ছাড়া কিছুই মোছা হয় না।
+#    - কখনোই স্পর্শ হয় না: ফাইল ডাটাবেস, থাম্বনেইল, .session, .env,
+#      কনফিগ, সোর্স কোড — কিছুই ডিলিট হবে না, থাম্বনেইল দেখা যাবে।
+#    - ক্লিন হওয়ার সময় বট এক মুহূর্তের জন্যও বন্ধ হয় না।
+#
+# ৩) ♻️ RAM টিডি-আপ: পুরনো in-memory থাম্বনেইল ক্যাশ + Python garbage
+#    প্রতি সাইকেলে পরিষ্কার হয় → দুই রিলোডের মাঝে RAM কম থাকে।
+#
+# ৪) 🔁 BOOT-LOOP PROTECTION: টানা রিলোড হলে ব্যাক-অফ কুলডাউন —
+#    সার্ভার ২৪/৭ চালু থাকে, কখনো আটকে যায় না।
+#
+# সব সেটিং info.py / environment ভ্যারিয়েবলে বদলানো যায়।
+# ============================================================
+
+import os
+import sys
+import time
+import fnmatch
+import gc
+import shutil
+import logging
+import threading
+import traceback
+
+logger = logging.getLogger("selfheal")
+
+_START_TIME = time.time()
+_started = False
+
+# ------------------------------------------------------------
+# কনফিগ (info.py থেকে আসে — না থাকলে এই ডিফল্ট)
+# ------------------------------------------------------------
+try:
+    from info import (
+        SELFHEAL_ENABLED,
+        SELFHEAL_MEM_LIMIT,
+        SELFHEAL_CACHE_INTERVAL,
+        SELFHEAL_CHECK_INTERVAL,
+        KOYEB_API_TOKEN,
+        KOYEB_SERVICE_NAME,
+    )
+except Exception:
+    SELFHEAL_ENABLED = True
+    SELFHEAL_MEM_LIMIT = 95
+    SELFHEAL_CACHE_INTERVAL = 1800
+    SELFHEAL_CHECK_INTERVAL = 5
+    KOYEB_API_TOKEN = ""
+    KOYEB_SERVICE_NAME = "FlixBoxsStreamBot"
+
+BOOT_GRACE = 90          # প্রসেস চালু হওয়ার পর প্রথম ৯০ সেকেন্ড রিলোড বন্ধ (বুট স্থিতি)
+RELOAD_CONFIRM = 2       # টানা কত বার 95%+ দেখলে রিলোড (false spike এড়াতে)
+RELOAD_LOG_FILE = "/tmp/selfheal_reloads.log"
+RELOAD_COOLDOWN_WINDOW = 1800   # ৩০ মিনিটে ৩+ রিলোড হলে কুলডাউন
+RELOAD_COOLDOWN_MAX = 3
+RELOAD_COOLDOWN_SLEEP = 600     # কুলডাউনে ১০ মিনিট অপেক্ষা (সার্ভার চালুই থাকে)
+
+MIN_JUNK_AGE = 900       # ১৫ মিনিটের পুরনো জাঙ্ক ফাইলই মুছবে (চলমান ফাইল রক্ষা)
+
+# ------------------------------------------------------------
+# 📊 মেমোরি রিডার — কনটেইনার-অ্যাওয়ার (Koyeb/Render/Docker/VPS সবখানে কাজ করে)
+# ------------------------------------------------------------
+def _read_file_int(path):
+    try:
+        with open(path, "r") as f:
+            v = f.read().strip()
+        return int(v) if v and v != "max" else None
+    except Exception:
+        return None
+
+
+def _cgroup_memory():
+    """Docker/Koyeb কনটেইনারের আসল মেমোরি লিমিট পড়ে (v2 আগে, তারপর v1)।"""
+    # cgroup v2
+    usage = _read_file_int("/sys/fs/cgroup/memory.current")
+    limit = _read_file_int("/sys/fs/cgroup/memory.max")
+    if usage is not None and limit and limit > 0:
+        return usage, limit
+    # cgroup v1
+    usage = _read_file_int("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+    limit = _read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if usage is not None and limit and 0 < limit < (1 << 60):
+        return usage, limit
+    return None
+
+
+def memory_snapshot():
+    """
+    রিটার্ন করে: (percent, used_mb, total_mb)
+    - কনটেইনার লিমিট থাকলে সেটার হিসাব (Koyeb ড্যাশবোর্ডে যা দেখা যায় সেটাই)
+    - না থাকলে পুরো সিস্টেম RAM
+    """
+    cg = _cgroup_memory()
+    if cg:
+        used, limit = cg
+        pct = (used / limit) * 100.0
+        return min(pct, 100.0), used / (1024 * 1024), limit / (1024 * 1024)
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        return vm.percent, vm.used / (1024 * 1024), vm.total / (1024 * 1024)
+    except Exception:
+        return 0.0, 0.0, 0.0
+
+
+# ------------------------------------------------------------
+# 🧹 জাঙ্ক-ফাইল ক্লিনার — হোয়াইটলিস্ট-অনলি (Android "Clear Cache"-এর মতো)
+# ------------------------------------------------------------
+# নিয়ম: শুধু নিচের প্যাটার্নের ফাইলই মোছা হবে। বাকি সবকিছু
+# (ফাইল ডাটাবেস, থাম্বনেইল, সেশন, কনফিগ, কোড) সম্পূর্ণ অক্ষত থাকবে।
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+JUNK_FILE_PATTERNS = [
+    "*.tmp", "*.part", "*.partial", "*.downloading", "*.download",
+    "*.pyc", "*.pyo", "*.swp", "*.bak_tmp",
+    ".DS_Store", "Thumbs.db",
+]
+
+JUNK_DIR_NAMES = {"__pycache__", ".pytest_cache"}
+
+# এই ফাইলগুলো প্লাগিন দিয়ে তৈরি হয় আর কাজ শেষে রয়ে যায় — জাঙ্ক
+SPECIAL_JUNK_FILES = {"User_File_Stats.txt"}
+
+# কখনোই স্পর্শ করা হবে না (সেফটি নেট — হোয়াইটলিস্টের পাশাপাশি ডাবল-লক)
+NEVER_TOUCH_EXT = (
+    ".session", ".session-journal", ".env", ".db", ".sqlite",
+    ".yaml", ".yml", ".json", ".conf", ".ini", ".md", ".txt",
+    ".py", ".sh", ".lock", ".jpg", ".jpeg", ".png", ".webp", ".gif",
+    ".mp4", ".mkv", ".avi", ".webm", ".mp3", ".m4a", ".pdf", ".zip", ".apk",
+)
+NEVER_TOUCH_NAMES = {
+    "Dockerfile", "Procfile", "LICENSE", "README.md", "requirements.txt",
+    "runtime.txt", "app.json", "koyeb.yaml", "render.yaml", ".env",
+    "logging.conf", "selfheal.py", "bot.py", "info.py", "utils.py",
+}
+NEVER_TOUCH_DIRS = {".git", "node_modules", ".cache"}
+
+
+def clean_junk_files():
+    """জাঙ্ক ফাইল মুছে ফ্রি হওয়া বাইট রিটার্ন করে। শুধু প্রজেক্ট ফোল্ডারের ভেতরে কাজ করে।"""
+    freed = 0
+    removed = 0
+
+    for dirpath, dirnames, filenames in os.walk(PROJECT_ROOT):
+        # .git ইত্যাদি ফোল্ডারে ঢুকবেই না
+        dirnames[:] = [d for d in dirnames if d not in NEVER_TOUCH_DIRS]
+
+        # পুরো __pycache__ ফোল্ডার মুছে দাও
+        for d in list(dirnames):
+            if d in JUNK_DIR_NAMES:
+                full = os.path.join(dirpath, d)
+                try:
+                    size = sum(
+                        os.path.getsize(os.path.join(r, f))
+                        for r, _, fs in os.walk(full)
+                        for f in fs
+                        if not os.path.islink(os.path.join(r, f))
+                    )
+                    shutil.rmtree(full, ignore_errors=True)
+                    freed += size
+                    removed += 1
+                    dirnames.remove(d)
+                except Exception:
+                    pass
+
+        for fname in filenames:
+            fpath = os.path.join(dirpath, fname)
+            try:
+                if os.path.islink(fpath):
+                    continue
+                base = fname.lower()
+                _, ext = os.path.splitext(fname)
+                ext = ext.lower()
+
+                # স্পেশাল জাঙ্ক আগে চেক (এগুলো .txt হলেও জাঙ্ক — প্লাগিনের বাকি থাকা ফাইল)
+                is_special = fname in SPECIAL_JUNK_FILES
+                if is_special:
+                    # এক ঘণ্টার পুরনো হলেই মুছবে
+                    if time.time() - os.path.getmtime(fpath) < 3600:
+                        continue
+                else:
+                    # ডাবল-লক: সোর্স কোড/ডাটা/কনফিগ কখনো না
+                    if ext in NEVER_TOUCH_EXT:
+                        continue
+                    if fname in NEVER_TOUCH_NAMES:
+                        continue
+
+                is_junk = any(fnmatch.fnmatch(fname, pat) for pat in JUNK_FILE_PATTERNS)
+
+                if not is_junk and not is_special:
+                    continue
+
+                # এই মুহূর্তে লেখা হচ্ছে এমন ফাইল স্পর্শ করবে না (১৫ মিনিট পুরনো হতে হবে)
+                if time.time() - os.path.getmtime(fpath) < MIN_JUNK_AGE:
+                    continue
+
+                size = os.path.getsize(fpath)
+                os.remove(fpath)
+                freed += size
+                removed += 1
+            except Exception:
+                continue
+
+    return freed, removed
+
+
+# ------------------------------------------------------------
+# 🧽 RAM টিডি-আপ — পুরনো in-memory থাম্বনেইল ক্যাশ + garbage collect
+# ------------------------------------------------------------
+def purge_ram_caches():
+    """
+    web/stream_routes.py-এর thumb_cache-এ পুরনো এন্ট্রি মুছে দেয়।
+    ⚠️ থাম্বনেইল কখনো হারাবে না — পরে কেউ চাইলে টেলিগ্রাম থেকে আবার
+    এক ঝলকে নেমে আসে (ফিচার অক্ষত, শুধু র‍্যাম খালি হয়)।
+    """
+    purged = 0
+    try:
+        from web import stream_routes
+        if hasattr(stream_routes, "purge_stale_thumbs"):
+            purged = stream_routes.purge_stale_thumbs(
+                max_age=SELFHEAL_CACHE_INTERVAL
+            )
+    except Exception:
+        pass
+    gc.collect()
+    return purged
+
+
+def run_clean_cycle():
+    """একবার পূর্ণ ক্লিন সাইকেল — বট চালু থাকা অবস্থায়ই হয়।"""
+    freed, files = clean_junk_files()
+    purged = purge_ram_caches()
+    pct, used_mb, total_mb = memory_snapshot()
+    return freed, files, purged, pct, used_mb, total_mb
+
+
+# ------------------------------------------------------------
+# 🔁 রিলোড কাউন্টার (বুট-লুপ প্রোটেকশন)
+# ------------------------------------------------------------
+def _record_reload():
+    try:
+        now = time.time()
+        stamps = _recent_reloads()
+        stamps.append(now)
+        stamps = [s for s in stamps if now - s < RELOAD_COOLDOWN_WINDOW]
+        with open(RELOAD_LOG_FILE, "w") as f:
+            f.write("\n".join(str(s) for s in stamps))
+        return len(stamps)
+    except Exception:
+        return 0
+
+
+def _recent_reloads():
+    try:
+        with open(RELOAD_LOG_FILE, "r") as f:
+            now = time.time()
+            return [float(x) for x in f.read().split() if x and now - float(x) < RELOAD_COOLDOWN_WINDOW]
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------
+# 📢 টেলিগ্রাম নোটিফায়ার (best-effort — ফেল করলেও রিলোড চলবেই)
+# ------------------------------------------------------------
+def make_telegram_notifier(client, chat_id, loop):
+    """bot.py থেকে কল হয় — LOG_CHANNEL-এ সেলফ-হিল মেসেজ পাঠানোর ফাংশন বানায়।"""
+    def notify(text):
+        try:
+            import asyncio
+
+            async def _send():
+                await client.send_message(chat_id=chat_id, text=text)
+
+            fut = asyncio.run_coroutine_threadsafe(_send(), loop)
+            fut.result(timeout=8)
+        except Exception:
+            pass
+    return notify
+
+
+_notify = None  # গ্লোবাল নোটিফায়ার
+
+
+def _safe_notify(text):
+    if _notify:
+        try:
+            _notify(text)
+        except Exception:
+            pass
+
+
+# ------------------------------------------------------------
+# 🚀 KOYEB AUTO-REDEPLOY — ড্যাশবোর্ডের Redeploy বাটনের অটোমেটিক সংস্করণ
+# ------------------------------------------------------------
+# RAM 95% ছুঁলে Koyeb API দিয়ে নিজে নিজে redeploy ট্রিগার হয় —
+# ঠিক যেমন GitHub-এ আপডেট দিলে বা ড্যাশবোর্ডে বাটন চাপলে হয়।
+# Koyeb নতুন instance বিল্ড করে healthy হলে অটোমেটিক swap করে —
+# তাই স্ট্রিম চলাকালীন ইউজারদের সমস্যা হয় না।
+KOYEB_API_BASE = "https://app.koyeb.com/v1"
+
+
+def koyeb_redeploy():
+    """Koyeb API দিয়ে সার্ভিস redeploy ট্রিগার করে। সফল হলে True।
+    টোকেন না থাকলে/ফেল হলে False — তখন watchdog fallback restart নেয়।"""
+    if not KOYEB_API_TOKEN:
+        return False
+    try:
+        import requests
+        headers = {"Authorization": f"Bearer {KOYEB_API_TOKEN}"}
+
+        # ১) সার্ভিস লিস্ট থেকে আমাদের সার্ভিস খুঁজে বের করা
+        r = requests.get(f"{KOYEB_API_BASE}/services", headers=headers, timeout=20)
+        if r.status_code != 200:
+            logger.error(f"🚀 [REDEPLOY] সার্ভিস লিস্ট ফেল: HTTP {r.status_code}")
+            return False
+        services = (r.json() or {}).get("services") or []
+        if not services:
+            logger.error("🚀 [REDEPLOY] এই একাউন্টে কোনো সার্ভিস পাওয়া যায়নি")
+            return False
+
+        want = KOYEB_SERVICE_NAME or "FlixBoxsStreamBot"
+        svc = None
+        for s in services:
+            if (s.get("name") or "") == want:
+                svc = s
+                break
+        if svc is None:
+            if len(services) == 1:
+                svc = services[0]
+                logger.info(
+                    f"🚀 [REDEPLOY] '{want}' নামে সার্ভিস নেই — একমাত্র সার্ভিস "
+                    f"'{svc.get('name')}' ব্যবহার হচ্ছে"
+                )
+            else:
+                names = [s.get("name") for s in services]
+                logger.error(
+                    f"🚀 [REDEPLOY] '{want}' খুঁজে পাওয়া যায়নি। সার্ভিসগুলো: {names} — "
+                    f"Koyeb-এ KOYEB_SERVICE_NAME env ঠিক করো"
+                )
+                return False
+
+        # ২) Redeploy ট্রিগার (ড্যাশবোর্ড বাটনের সমান)
+        sid = svc.get("id")
+        logger.info(f"🚀 [REDEPLOY] সার্ভিস '{svc.get('name')}' নিজে নিজে redeploy হচ্ছে...")
+        r = requests.post(
+            f"{KOYEB_API_BASE}/services/{sid}/redeploy",
+            headers=headers,
+            timeout=30,
+        )
+        if r.status_code in (200, 201, 202):
+            return True
+        logger.error(f"🚀 [REDEPLOY] ফেল: HTTP {r.status_code} {r.text[:200]}")
+        return False
+    except Exception:
+        logger.error(f"🚀 [REDEPLOY] error: {traceback.format_exc()}")
+        return False
+
+
+# ------------------------------------------------------------
+# 🔄 মেমোরি-ট্রিগার: আগে পূর্ণ AUTO-REDEPLOY, সম্ভব না হলে fresh restart
+# ------------------------------------------------------------
+def _trigger_redeploy(reason):
+    pct, used_mb, total_mb = memory_snapshot()
+    _record_reload()
+
+    logger.warning(
+        f"🛡️ [SELF-HEAL] RAM {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) >= "
+        f"{SELFHEAL_MEM_LIMIT}% — কারণ: {reason} | AUTO-REDEPLOY শুরু..."
+    )
+
+    if KOYEB_API_TOKEN:
+        # বিল্ড চলার সময় পুরনো instance-এ RAM হেডরুম বাড়াতে এখনই ক্যাশ খালি
+        try:
+            purge_ram_caches()
+        except Exception:
+            pass
+
+        if koyeb_redeploy():
+            logger.warning(
+                "🚀 [SELF-HEAL] AUTO-REDEPLOY ট্রিগার হয়েছে ✅ — Koyeb নতুন instance "
+                "বিল্ড করে healthy হলে অটোমেটিক swap করবে (মেমোরি জিরো থেকে শুরু)"
+            )
+            _safe_notify(
+                f"🚀 <b>AUTO-REDEPLOY Started</b>\n\n"
+                f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB / {total_mb:.0f}MB)\n\n"
+                f"♻️ মেমোরি ৯৫% ছুঁয়েছে — সার্ভার <b>নিজে নিজে Redeploy</b> নিয়েছে "
+                f"(ড্যাশবোর্ডের Redeploy বাটন চাপার মতোই, হাত দিতে হবে না)।\n"
+                f"🏗️ Koyeb নতুন instance বিল্ড করে অটোমেটিক swap করবে — চলমান স্ট্রিমে আঘাত লাগবে না।\n"
+                f"✅ ফাইল/থাম্বনেইল/ডাটা সব অক্ষত থাকবে।"
+            )
+            # ডিপ্লয় ইন-ফ্লাইট আছে — এর মধ্যে আবার ট্রিগার এড়াতে চুপ করে অপেক্ষা
+            time.sleep(RELOAD_COOLDOWN_SLEEP)
+            return
+
+        logger.error("🚀 [SELF-HEAL] Koyeb API redeploy ফেল — fallback: fresh restart নিচ্ছি")
+        _safe_notify(
+            f"⚠️ <b>Auto-Redeploy API Fail → Fresh Restart</b>\n"
+            f"🧠 RAM: {pct:.1f}%\n\n"
+            f"KOYEB_API_TOKEN চেক করো (ভুল বা মেয়াদ শেষ?)। তবুও সার্ভার বাঁচাতে "
+            f"এখন fresh restart নিচ্ছি — মেমোরি জিরো থেকে শুরু হবে।"
+        )
+    else:
+        logger.warning(
+            "🛡️ [SELF-HEAL] KOYEB_API_TOKEN নেই — পূর্ণ Redeploy সম্ভব না, "
+            "fallback: fresh restart নিচ্ছি (মেমোরি জিরো হবে)"
+        )
+        _safe_notify(
+            f"🛡️ <b>Auto Fresh Restart</b>\n"
+            f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB/{total_mb:.0f}MB) — ৯৫% ছুঁয়েছে।\n\n"
+            f"ℹ️ পূর্ণ <b>Redeploy</b> চাইলে Koyeb-এ <code>KOYEB_API_TOKEN</code> env যোগ করো "
+            f"(SELFHEAL_GUIDE_BANGLA.md দেখো)। এখন fresh restart নিচ্ছি — "
+            f"মেমোরি জিরো থেকে শুরু হবে।"
+        )
+
+    # Fallback: প্রসেস নিজেকে fresh করে নেয় — /restart কমান্ডের প্রমাণিত পদ্ধতি
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        logging.shutdown()
+    except Exception:
+        pass
+    time.sleep(1.5)
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
+
+# ------------------------------------------------------------
+# 🧠 WATCHDOG THREAD — প্রতি ৫ সেকেন্ডে RAM চেক (CPU চেক করেই না!)
+# ------------------------------------------------------------
+def _watchdog_loop():
+    consecutive = 0
+    grace_logged = False
+    logger.info(
+        f"🛡️ [SELF-HEAL] Memory Watchdog চালু — থ্রেশহোল্ড: {SELFHEAL_MEM_LIMIT}% "
+        f"(CPU কখনো ট্রিগার নয়) | চেক প্রতি {SELFHEAL_CHECK_INTERVAL} সেকেন্ডে"
+    )
+    while True:
+        try:
+            time.sleep(SELFHEAL_CHECK_INTERVAL)
+            pct, used_mb, total_mb = memory_snapshot()
+            uptime = time.time() - _START_TIME
+
+            if uptime < BOOT_GRACE:
+                if not grace_logged:
+                    logger.info("🛡️ [SELF-HEAL] বুট গ্রেস পিরিয়ড (৯০ সেকেন্ড) — এর মধ্যে redeploy হবে না")
+                    grace_logged = True
+                continue
+
+            if pct >= SELFHEAL_MEM_LIMIT:
+                consecutive += 1
+                logger.warning(
+                    f"🛡️ [SELF-HEAL] RAM HIGH: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) "
+                    f"— থ্রেশহোল্ড {SELFHEAL_MEM_LIMIT}% | confirm {consecutive}/{RELOAD_CONFIRM}"
+                )
+                if consecutive >= RELOAD_CONFIRM:
+                    # বুট-লুপ প্রোটেকশন: ৩০ মিনিটে ৩+ বার ট্রিগার হলে কুলডাউন
+                    recent = _recent_reloads()
+                    if len(recent) >= RELOAD_COOLDOWN_MAX:
+                        logger.warning(
+                            f"🛡️ [SELF-HEAL] {RELOAD_COOLDOWN_WINDOW // 60} মিনিটে {len(recent)} বার ট্রিগার — "
+                            f"সার্ভার বাঁচাতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট কুলডাউন (বট চালুই থাকছে)"
+                        )
+                        _safe_notify(
+                            f"⚠️ <b>Self-Heal Cooldown</b>\nমেমোরি বারবার {SELFHEAL_MEM_LIMIT}%+ হচ্ছে "
+                            f"({len(recent)} বার)। সার্ভার চালু রাখতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট পর পর redeploy/restart হবে।"
+                        )
+                        time.sleep(RELOAD_COOLDOWN_SLEEP)
+                        # কুলডাউন শেষে RAM স্বাভাবিক এসে গেলে ট্রিগারের দরকারই নেই
+                        pct2, _, _ = memory_snapshot()
+                        if pct2 < SELFHEAL_MEM_LIMIT:
+                            logger.info(f"🛡️ [SELF-HEAL] কুলডাউন শেষে RAM স্বাভাবিক: {pct2:.1f}% — redeploy বাতিল")
+                            consecutive = 0
+                            continue
+                    _trigger_redeploy(f"Memory {pct:.1f}% >= {SELFHEAL_MEM_LIMIT}%")
+                    # redeploy সফল হলে এখানে ফিরে আসে (old instance তখনও চালু);
+                    # fallback exec হলে ফেরে না। দুই ক্ষেত্রেই নতুন সাইকেল শুরু।
+                    consecutive = 0
+            else:
+                if consecutive:
+                    logger.info(f"🛡️ [SELF-HEAL] RAM স্বাভাবিক ফিরেছে: {pct:.1f}% — redeploy বাতিল")
+                consecutive = 0
+        except Exception:
+            logger.error(f"🛡️ [SELF-HEAL] watchdog error: {traceback.format_exc()}")
+            time.sleep(SELFHEAL_CHECK_INTERVAL)
+
+
+# ------------------------------------------------------------
+# 🧹 CLEANER THREAD — প্রতি ৩০ মিনিটে অটো-ক্লিন (বট বন্ধ হয় না)
+# ------------------------------------------------------------
+def _cleaner_loop():
+    time.sleep(60)  # বুটের এক মিনিট পর প্রথম ক্লিন
+    while True:
+        try:
+            freed, files, purged, pct, used_mb, total_mb = run_clean_cycle()
+            mb_freed = freed / (1024 * 1024)
+            logger.info(
+                f"🧹 [AUTO-CLEAN] জাঙ্ক ফাইল: {files}টি ({mb_freed:.1f} MB ফ্রি) | "
+                f"পুরনো RAM থাম্ব-ক্যাশ: {purged}টি | RAM: {pct:.1f}% | বট চালুই আছে ✅"
+            )
+            # কিছু উল্লেখযোগ্য ক্লিন হলে LOG_CHANNEL-এ প্রমাণ যাবে
+            if files > 0 or purged > 0:
+                _safe_notify(
+                    f"🧹 <b>Auto Cache Clean (বট চালু অবস্থায়)</b>\n\n"
+                    f"📁 জাঙ্ক ফাইল মুছেছে: <b>{files}টি</b> ({mb_freed:.1f} MB খালি)\n"
+                    f"🖼️ পুরনো RAM থাম্ব-ক্যাশ মুছেছে: <b>{purged}টি</b>\n"
+                    f"🧠 RAM এখন: <b>{pct:.1f}%</b>\n\n"
+                    f"✅ বট/ফাইল/থাম্বনেইল সব অক্ষত — কিছুই বন্ধ হয়নি।"
+                )
+        except Exception:
+            logger.error(f"🧹 [AUTO-CLEAN] error: {traceback.format_exc()}")
+        time.sleep(max(SELFHEAL_CACHE_INTERVAL, 300))
+
+
+# ------------------------------------------------------------
+# 🚀 START — bot.py থেকে ডাকা হয়
+# ------------------------------------------------------------
+def start(notify=None):
+    """সেলফ-হিল সিস্টেম চালু করে (দুটো ব্যাকগ্রাউন্ড থ্রেড)।"""
+    global _started, _notify
+    if not SELFHEAL_ENABLED:
+        logger.info("🛡️ [SELF-HEAL] বন্ধ আছে (SELFHEAL_ENABLED=False)")
+        return
+    if _started:
+        return
+    _started = True
+    _notify = notify
+
+    pct, used_mb, total_mb = memory_snapshot()
+    logger.info(
+        f"🛡️ [SELF-HEAL] সিস্টেম চালু ✅ | RAM: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) | "
+        f"রিলোড থ্রেশহোল্ড: {SELFHEAL_MEM_LIMIT}% | অটো-ক্লিন: প্রতি {SELFHEAL_CACHE_INTERVAL // 60} মিনিটে"
+    )
+
+    threading.Thread(target=_watchdog_loop, name="selfheal-watchdog", daemon=True).start()
+    threading.Thread(target=_cleaner_loop, name="selfheal-cleaner", daemon=True).start()

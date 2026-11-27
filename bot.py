@@ -185,6 +185,19 @@ async def Webav_start():
         await web.TCPSite(app, bind_address, PORT).start()
         logging.info(f"Web Server Started on Port {PORT}")
 
+        # 11. 🛡️ SELF-HEAL SYSTEM (অটো-সেলফ-হিলিং)
+        #     - RAM 95% ছুঁলে সাথে সাথে অটো-রিডিপ্লয় (Koyeb API দিয়ে ড্যাশবোর্ডের
+        #       Redeploy বাটনের মতো) — টোকেন না থাকলে fresh restart fallback।
+        #       ⚠️ CPU 100% হলেও কিছু হবে না — একমাত্র ট্রিগার মেমোরি।
+        #     - প্রতি ৩০ মিনিটে অটো ক্যাশ-ক্লিন (ফাইল/থাম্বনেইল অক্ষত, বট বন্ধ হয় না)
+        try:
+            import selfheal
+            selfheal.start(
+                notify=selfheal.make_telegram_notifier(WebavBot, LOG_CHANNEL, MAIN_LOOP),
+            )
+        except Exception:
+            logger.error("SELF-HEAL INIT FAILED", exc_info=True)
+
         # 10. Idle
         await idle()
 
