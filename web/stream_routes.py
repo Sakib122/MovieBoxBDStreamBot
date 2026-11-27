@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+from collections import deque
 from aiohttp import web
 import re
 import math
@@ -87,6 +88,7 @@ def mark_client_failure(index):
     if h["fails"] >= FAILS_TO_COOLDOWN:
         h["cooldown_until"] = now + CLIENT_COOLDOWN
         h["fails"] = 0
+        bench_events.append(now)   # ⚡ ওভারলোড গার্ডের জন্য রেকর্ড
         logging.warning(f"Client {index} benched for {CLIENT_COOLDOWN}s after repeated stalls")
 
 
@@ -120,8 +122,34 @@ OVERFLOW_GATE_WAIT = _env_int("OVERFLOW_GATE_WAIT", 1)    # ওভারফ্�
 # সংখ্যায় সীমিত থাকবে; বাড়তি রিকোয়েস্ট ৩-৬ সেকেন্ডের Retry-After পাবে —
 # player নিজেই রিট্রাই করবে, ইউজার এক সেকেন্ডের লোডিং ছাড়া কিছু টের পাবে না।
 TOTAL_STREAM_CAPACITY = _env_int("TOTAL_STREAM_CAPACITY", 24)  # 0 দিলে সীমা বন্ধ
-GLOBAL_GATE_WAIT = _env_int("GLOBAL_GATE_WAIT", 4)             # ক্যাপাসিটি ফাঁকা হওয়ার সর্বোচ্চ অপেক্ষা (সেকেন্ড)
+GLOBAL_GATE_WAIT = _env_int("GLOBAL_GATE_WAIT", 4)             # নতুন স্ট্রিম: ক্যাপাসিটি ফাঁকা হওয়ার সর্বোচ্চ অপেক্ষা (সেকেন্ড)
 global_gate = asyncio.BoundedSemaphore(TOTAL_STREAM_CAPACITY) if TOTAL_STREAM_CAPACITY > 0 else None
+
+# ⚡⚡ চালিয়ে-যাওয়া (continuation) রিকোয়েস্টের আলাদা অপেক্ষার বাজেট।
+# প্লেয়ারের বাফারে সাধারণত ১০-৩০ সেকেন্ডের ভিডিও জমা থাকে — তাই ভিড়ের
+# সময় চলমান ভিডিওর পরের অংশ ৯ সেকেন্ড পর্যন্ত লাইনে দাঁড়িয়ে থাকলেও
+# ইউজার একদম কিছু টের পায় না (ভিডিও বাফার থেকে চলতে থাকে)। নতুন
+# স্ট্রিম কিন্তু ৪ সেকেন্ডেই সিদ্ধান্ত নেয় — শুরুতে অপেক্ষা বাড়ালে
+# "লোডিং আটকে থাকা" অনুভূতি হতো।
+CONT_GATE_WAIT = _env_int("CONT_GATE_WAIT", 9)
+GLOBAL_MAX_WAITERS = _env_int("GLOBAL_MAX_WAITERS", 48)  # অপেক্ষার লাইনে সর্বোচ্চ এত রিকোয়েস্ট (মেমোরি সুরক্ষা)
+
+# ⚡⚡ ওভারলোড গার্ড (CPU মৃত্যু-চক্র ভালভ) — OVERLOAD_GUARD=0 দিলে বন্ধ।
+# আগের মহাবিপর্যয়ের ধরন (লাইভ লগ ১৪:২৩–১৪:২৭): CPU ১০০% → একাধিক
+# ক্লায়েন্ট একসাথে বেঞ্চ হয় → পুরো লোড প্রিমিয়ামের উপর চাপা পড়ে →
+# প্রিমিয়ামও ভাঙে। এখন অল্প সময়ে একাধিক বেঞ্চ দেখা গেলে সার্ভার নিজেই
+# "সতর্ক মোডে" যায়: নতুন স্ট্রিম ভর্তি ক্যাপাসিটির ৭০%-এ সীমিত — চলমান
+# স্ট্রিমে কেউ ছোঁ মারে না, তাই দেখছে ইউজাররা কিছুই টের পায় না।
+OVERLOAD_GUARD = bool(_env_int("OVERLOAD_GUARD", 1))
+OVERLOAD_BENCH_COUNT = _env_int("OVERLOAD_BENCH_COUNT", 2)  # এতগুলো বেঞ্চ...
+OVERLOAD_WINDOW = _env_int("OVERLOAD_WINDOW", 60)           # ...এত সেকেন্ডে হলে সতর্ক মোড
+OVERLOAD_HOLD = _env_int("OVERLOAD_HOLD", 90)               # শেষ বেঞ্চের পর এত সেকেন্ড সতর্ক মোড থাকে
+
+# ⚡ লগ থ্রটল: ভিড়ের সময় আগে প্রতি সেকেন্ডে ২টা করে WARNING জমত —
+# Koyeb লগ দেখা অসম্ভব হয়ে যেত আর লগ-IO-ও CPU খেত। এখন এই মাস্কে
+# সর্বোচ্চ ১টি লগ + চাপা পড়া সংখ্যা সাথে করে দেখায়।
+SHED_LOG_INTERVAL = _env_int("SHED_LOG_INTERVAL", 5)
+STATUS_LOG_INTERVAL = _env_int("STATUS_LOG_INTERVAL", 120)
 
 
 def premium_index():
@@ -163,24 +191,121 @@ def _make_load_releaser(index):
     return _release
 
 
-async def acquire_global_gate(timeout):
-    """সার্বিক ক্যাপাসিটিতে জায়গা মিললে True"""
+# ⚡⚡ অ্যাডমিশন স্টেট — ভিড়ের মধ্যে কাকে অপেক্ষা করাতে হবে আর কাকে না,
+# তা বুদ্ধিমানভাবে ঠিক করে (ইউজার-অদৃশ্য স্মুথ প্লেব্যাক + সিপিইউ সুরক্ষা)
+_global_active = 0        # এই মুহূর্তে চলমান স্ট্রিম সংখ্যা (সার্বিক গেটের ভেতরে)
+_global_waiters = 0       # এই মুহূর্তে জায়গার অপেক্ষায় বসে থাকা রিকোয়েস্ট
+_overload_until = 0.0     # এই সময়ের আগে পর্যন্ত সতর্ক মোড চালু থাকবে
+_last_status_log = 0.0
+_last_shed_log = 0.0
+_suppressed_sheds = 0
+bench_events: deque = deque(maxlen=32)   # বেঞ্চ হওয়ার সময়গুলো (মৃত্যু-চক্র শনাক্তে)
+_guard_task = None        # ব্যাকগ্রাউন্ড গার্ড লুপ (প্রথম রিকোয়েস্টেই চালু হয়)
+
+
+def _overload_active(now=None):
+    return (now or time.time()) < _overload_until
+
+
+def _soft_cap():
+    """সতর্ক মোডে নতুন স্ট্রিম ক্যাপাসিটির ৭০%-এ সীমিত (সর্বনিম্ন ৮)।
+    চলমান স্ট্রিম কাটা হয় না — শুধু নতুন ভর্তি থামে, ফলে CPU দ্রুত
+    নিঃশ্বাস নেয় এবং বেঞ্চ হওয়া ক্লায়েন্টরা শান্তিতে সেরে ওঠে।"""
+    return max(int(TOTAL_STREAM_CAPACITY * 0.7), min(8, TOTAL_STREAM_CAPACITY))
+
+
+async def acquire_global_gate(timeout, continuation=False):
+    """সার্বিক ক্যাপাসিটিতে জায়গা মিললে True।
+    ⚡ continuation=True (দেখা চালিয়ে যাওয়ার রিকোয়েস্ট) হলে বেশি অপেক্ষা —
+    প্লেয়ারের বাফার অপেক্ষাটা চুপিই গিলে নেয়, ইউজার ভাঙে না।
+    ⚡ সতর্ক মোডে নতুন স্ট্রিম soft cap ছাড়ালে সাথে সাথে ফেরত যায় —
+    কোনো Telegram কল ছাড়াই, মানে CPU খরচ প্রায় শূন্য।"""
+    global _global_active, _global_waiters
     if global_gate is None:
         return True
-    try:
-        await asyncio.wait_for(global_gate.acquire(), timeout=timeout)
-        return True
-    except asyncio.TimeoutError:
+    now = time.time()
+    if (not continuation) and _overload_active(now) and _global_active >= _soft_cap():
         return False
+    if _global_waiters >= GLOBAL_MAX_WAITERS:
+        return False
+    _global_waiters += 1
+    try:
+        try:
+            await asyncio.wait_for(global_gate.acquire(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return False
+        _global_active += 1
+        return True
+    finally:
+        _global_waiters -= 1
 
 
 def _release_global_gate():
     # দুইবার ডাকাও নিরাপদ রাখতে ValueError চুপচাপ গিলে নেওয়া হয়
+    global _global_active
     try:
         if global_gate is not None:
             global_gate.release()
+            if _global_active > 0:
+                _global_active -= 1
     except ValueError:
         pass
+
+
+def _shed_log(message):
+    """একই ধরনের শেড-ওয়ার্নিং ৫ সেকেন্ডে সর্বোচ্চ ১ বার লগ হয় —
+    বাকিগুলো গুনে রাখা হয়, পরের লগে '+N suppressed' দেখায়।"""
+    global _last_shed_log, _suppressed_sheds
+    now = time.time()
+    if now - _last_shed_log >= SHED_LOG_INTERVAL:
+        suffix = f" (+{_suppressed_sheds} suppressed)" if _suppressed_sheds else ""
+        _suppressed_sheds = 0
+        _last_shed_log = now
+        logging.warning(f"{message}{suffix}")
+    else:
+        _suppressed_sheds += 1
+
+
+async def admission_guard_loop():
+    """⚡⚡ CPU মৃত্যু-চক্র ভালভ (ব্যাকগ্রাউন্ড, প্রতি ১৫ সেকেন্ডে একবার —
+    খরচ কার্যত শূন্য)। অল্প সময়ে একাধিক ক্লায়েন্ট বেঞ্চ হলে সেটা
+    মেল্ডাউনের শুরু — সেখানেই নতুন ভর্তি কমিয়ে দেয়, যাতে আগের মতো
+    পুরো লোড প্রিমিয়ামের উপর চাপা না পড়ে। ৯০ সেকেন্ড শান্তি পেলে
+    নিজে থেকেই স্বাভাবিক হয়ে যায়।"""
+    global _overload_until, _last_status_log
+    await asyncio.sleep(15)   # সার্ভার পুরোপুরি চালু হোক
+    while True:
+        try:
+            now = time.time()
+            if OVERLOAD_GUARD:
+                recent = [t for t in bench_events if now - t <= OVERLOAD_WINDOW]
+                if len(recent) >= OVERLOAD_BENCH_COUNT:
+                    if not _overload_active(now):
+                        logging.warning(
+                            f"Overload guard ON — new streams limited to {_soft_cap()}, "
+                            f"running streams untouched ({len(recent)} benches in {OVERLOAD_WINDOW}s)"
+                        )
+                    _overload_until = now + OVERLOAD_HOLD
+            if now - _last_status_log >= STATUS_LOG_INTERVAL:
+                _last_status_log = now
+                logging.info(
+                    f"Admission status: {_global_active}/{TOTAL_STREAM_CAPACITY} live, "
+                    f"{_global_waiters} waiting, overload-guard "
+                    f"{'ON' if _overload_active(now) else 'off'}"
+                )
+        except Exception:
+            pass
+        await asyncio.sleep(15)
+
+
+def _ensure_admission_guard():
+    """প্রথম স্ট্রিম রিকোয়েস্টেই গার্ড লুপ চালু (তখনই ইভেন্ট-লুপ নিশ্চিত)"""
+    global _guard_task
+    if _guard_task is None:
+        try:
+            _guard_task = asyncio.create_task(admission_guard_loop())
+        except RuntimeError:
+            pass
 
 
 def _run_releasers(releasers):
@@ -598,13 +723,26 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
     # ⚡ STEP 0: সার্বিক ভর্তি-নিয়ন্ত্রণ (সিপিইউ মৃত্যু-চক্রের স্থায়ী সমাধান)।
-    # কোনো Telegram কলের আগেই — একেবারে সস্তা জায়গায় — বাড়তি চাপ ফেরত
-    # যায়। সার্ভার মরে গিয়ে সবার স্ট্রিম ভাঙার চেয়ে কয়েকজনকে ৩-৬ সেকেন্ডের
-    # Retry-After দেওয়া ভালো: player নিজেই রিট্রাই করে, ইউজার এক সেকেন্ডের
-    # লোডিং ছাড়া কিছু টের পায় না, সার্ভারও সিপিইউ-স্বাস্থ্য ঠিক রাখে।
-    if not await acquire_global_gate(GLOBAL_GATE_WAIT):
-        logging.warning(
-            f"Server capacity full ({TOTAL_STREAM_CAPACITY} live streams) — fast shed (msg {id})"
+    # কোনো Telegram কলের আগেই — একেবারে সস্তা জায়গায় — বাড়তি চাপ সামলানো হয়।
+    # ⚡⚡ স্মার্ট লাইন: "bytes=N-" (N>0) মানে ইউজার এই মুহূর্তে ভিডিওটা দেখছে,
+    # শুধু পরের অংশ চাইছে — এদের ৯ সেকেন্ড পর্যন্ত অপেক্ষা করানো হয় কারণ
+    # প্লেয়ারের বাফার অপেক্ষাটা গিলে নেয় (ইউজার কিছু টের পায় না)। নতুন
+    # স্ট্রিম/শুরুর রিকোয়েস্ট ৪ সেকেন্ডেই সিদ্ধান্ত পায়। সতর্ক মোডে শুধু
+    # নতুন স্ট্রিম সাথে সাথে ফেরত যায় — চলমান কারও ক্ষতি হয় না।
+    _ensure_admission_guard()
+    _cont = False
+    if isinstance(range_header, str) and range_header:
+        _rm0 = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", range_header.strip())
+        if _rm0 and _rm0.group(1) and int(_rm0.group(1)) > 0:
+            _cont = True
+    if not await acquire_global_gate(
+        CONT_GATE_WAIT if _cont else GLOBAL_GATE_WAIT, continuation=_cont
+    ):
+        _shed_log(
+            f"Server capacity full ({_global_active}/{TOTAL_STREAM_CAPACITY} live, "
+            f"{_global_waiters} waiting)"
+            + (" — overload guard" if _overload_active() else "")
+            + f" — shed (msg {id})"
         )
         return _busy_504()
 
@@ -706,7 +844,9 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
                 if moved:
                     logging.info(f"Gate full — overflow -> Client {index}")
                 else:
-                    logging.warning(f"All gates full — shedding load (msg {id})")
+                    _shed_log(
+                        f"All client gates full ({_global_active}/{TOTAL_STREAM_CAPACITY} live) — shed (msg {id})"
+                    )
                     _release_global_gate()
                     return _busy_504()
 
