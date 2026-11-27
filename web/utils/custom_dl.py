@@ -1,5 +1,4 @@
 import asyncio
-import os
 import time
 import logging
 from info import *
@@ -13,17 +12,6 @@ from pyrogram.file_id import FileId, FileType, ThumbnailSource
 
 MAX_INLINE_FLOODWAIT = 30
 
-def _env_int(name, default):
-    """⚙️ এনভায়রনমেন্ট ভেরিয়েবল দিয়ে কোড না ছুঁয়েই টিউনিং"""
-    try:
-        return max(1, int(str(os.getenv(name, str(default))).strip()))
-    except (TypeError, ValueError):
-        return default
-
-# ⚡ GetFile-এর নিজস্ব টাইমআউট (প্যারোফর্ক ডিফল্ট ১৫ সেকেন্ড)। মৃত/চাপা-পড়া
-# কানেকশন ৮ সেকেন্ডেই ধরা পড়বে — routes-এর ট্রান্সপারেন্ট রিট্রাই দ্রুত
-# অন্য সুস্থ ক্লায়েন্টে চলে যাবে, ইউজার লম্বা লোডিং দেখবে না।
-GETFILE_WAIT_TIMEOUT = _env_int("GETFILE_WAIT_TIMEOUT", 8)
 
 async def _send_getfile(media_session, location, offset, chunk_size):
     """⚡ GetFile রিকোয়েস্টে ছোট FloodWait (≤30s) এলে স্ট্রিমের ভেতরেই
@@ -35,7 +23,6 @@ async def _send_getfile(media_session, location, offset, chunk_size):
                 raw.functions.upload.GetFile(
                     location=location, offset=offset, limit=chunk_size
                 ),
-                timeout=GETFILE_WAIT_TIMEOUT,
             )
         except FloodWait as e:
             if e.value > MAX_INLINE_FLOODWAIT:
