@@ -108,7 +108,7 @@ AUTO_KEEP_ALIVE = is_enabled(environ.get("AUTO_KEEP_ALIVE", "True"), True)
 #   (ডিফল্ট 1800 = ৩০ মিনিট)। ক্লিনের সময় বট বন্ধ হয় না।
 SELFHEAL_ENABLED = is_enabled(environ.get("SELFHEAL_ENABLED", "True"), True)
 SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "90"))
-SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "1800"))
+SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "900"))
 SELFHEAL_CHECK_INTERVAL = int(environ.get("SELFHEAL_CHECK_INTERVAL", "5"))
 
 # 🚀 KOYEB AUTO-REDEPLOY (RAM 95% হলে নিজে নিজে Redeploy)
