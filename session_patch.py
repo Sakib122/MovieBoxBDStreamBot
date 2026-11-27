@@ -21,6 +21,7 @@
 
 import asyncio
 import logging
+import random
 
 from pyrogram.session import Session
 
@@ -69,8 +70,11 @@ async def _patched_stop(self):
     if not started:
         self._start_fails = getattr(self, "_start_fails", 0) + 1
         delay = min(0.5 * (2 ** min(self._start_fails, 4)), 8.0)
+        # ⚡ জিটার: সব সেশন একসাথে মরলে সবাই ঠিক একই মুহূর্তে রিকানেক্ট করতে
+        # গিয়ে আবার ভিড় জমায় (thundering herd) — জিটার সেটা ভাঙে দেয়
+        delay *= random.uniform(0.8, 1.6)
         _log.warning(
-            f"Session start retry #{self._start_fails} failed — waiting {delay}s before next attempt"
+            f"Session start retry #{self._start_fails} failed — waiting {delay:.1f}s before next attempt"
         )
         await asyncio.sleep(delay)
     else:
