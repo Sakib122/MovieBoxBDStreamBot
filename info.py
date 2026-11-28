@@ -107,8 +107,8 @@ AUTO_KEEP_ALIVE = is_enabled(environ.get("AUTO_KEEP_ALIVE", "True"), True)
 # SELFHEAL_CACHE_INTERVAL: কত সেকেন্ড পর পর অটো ক্যাশ-ক্লিন হবে
 #   (ডিফল্ট 1800 = ৩০ মিনিট)। ক্লিনের সময় বট বন্ধ হয় না।
 SELFHEAL_ENABLED = is_enabled(environ.get("SELFHEAL_ENABLED", "True"), True)
-SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "90"))
-SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "900"))
+SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "95"))
+SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "1800"))
 SELFHEAL_CHECK_INTERVAL = int(environ.get("SELFHEAL_CHECK_INTERVAL", "5"))
 
 # 🚀 KOYEB AUTO-REDEPLOY (RAM 95% হলে নিজে নিজে Redeploy)
@@ -121,6 +121,21 @@ SELFHEAL_CHECK_INTERVAL = int(environ.get("SELFHEAL_CHECK_INTERVAL", "5"))
 # (মেমোরি জিরো হবে), কিন্তু পূর্ণ "Redeploy" হবে না।
 KOYEB_API_TOKEN = environ.get('KOYEB_API_TOKEN', '')
 KOYEB_SERVICE_NAME = environ.get('KOYEB_SERVICE_NAME', 'FlixBoxsStreamBot')
+# 🚀 KOYEB_SERVICE_ID (ঐচ্ছিক): সার্ভিসের id সরাসরি জানা থাকলে বসাও —
+# না দিলেও সমস্যা নেই, সিস্টেম নাম/বানান-মিল/ডোমেইন দিয়ে নিজে খুঁজে নেবে।
+KOYEB_SERVICE_ID = environ.get('KOYEB_SERVICE_ID', '')
+
+# 🧹 LOG CHANNEL AUTO-CLEAN (লগ চ্যানেল সবসময় পরিষ্কার রাখা)
+# SELFHEAL_LOG_CLEAN_INTERVAL: কত সেকেন্ড পরপর লগ চ্যানেলের মেসেজ
+#   অটো-ডিলিট হবে (ডিফল্ট 300 = ৫ মিনিট)।
+# ⚠️ সেফটি: BIN_CHANNEL আর LOG_CHANNEL একই চ্যানেল হলে সিস্টেম শুধু
+#   টেক্সট/স্ট্যাটাস মেসেজ মুছবে — ভিডিও/ফাইল মেসেজ স্পর্শ করবে না
+#   (ওগুলোই স্ট্রিম লিঙ্কের উৎস; মুছলে পুরনো লিঙ্ক মরে যায়)।
+#   ফাইলও অটো-মুছতে চাইলে BIN_CHANNEL আলাদা প্রাইভেট চ্যানেল করে দাও।
+# SELFHEAL_LOG_CLEAN_KEEP_PINNED: পিন করা মেসেজ বাঁচবে কি না (ডিফল্ট বাঁচবে)।
+SELFHEAL_LOG_CLEAN_ENABLED = is_enabled(environ.get("SELFHEAL_LOG_CLEAN_ENABLED", "True"), True)
+SELFHEAL_LOG_CLEAN_INTERVAL = int(environ.get("SELFHEAL_LOG_CLEAN_INTERVAL", "300"))
+SELFHEAL_LOG_CLEAN_KEEP_PINNED = is_enabled(environ.get("SELFHEAL_LOG_CLEAN_KEEP_PINNED", "True"), True)
 
 # =========================================================
 # 🖼️ MEDIA & CAPTIONS

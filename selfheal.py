@@ -69,6 +69,25 @@ except Exception:
     KOYEB_API_TOKEN = ""
     KOYEB_SERVICE_NAME = "FlixBoxsStreamBot"
 
+# ঐচ্ছিক কনফিগ — আলাদা try-ব্লকে, যাতে info.py-এর পুরনো কপিতেও না ভাঙে
+try:
+    from info import KOYEB_SERVICE_ID, BIN_CHANNEL, URL
+except Exception:
+    KOYEB_SERVICE_ID = ""
+    BIN_CHANNEL = 0
+    URL = ""
+
+try:
+    from info import (
+        SELFHEAL_LOG_CLEAN_ENABLED,
+        SELFHEAL_LOG_CLEAN_INTERVAL,
+        SELFHEAL_LOG_CLEAN_KEEP_PINNED,
+    )
+except Exception:
+    SELFHEAL_LOG_CLEAN_ENABLED = True
+    SELFHEAL_LOG_CLEAN_INTERVAL = 300   # ৩০০ সেকেন্ড = ৫ মিনিট
+    SELFHEAL_LOG_CLEAN_KEEP_PINNED = True
+
 BOOT_GRACE = 90          # প্রসেস চালু হওয়ার পর প্রথম ৯০ সেকেন্ড রিলোড বন্ধ (বুট স্থিতি)
 RELOAD_CONFIRM = 2       # টানা কত বার 95%+ দেখলে রিলোড (false spike এড়াতে)
 RELOAD_LOG_FILE = "/tmp/selfheal_reloads.log"
@@ -154,7 +173,11 @@ NEVER_TOUCH_NAMES = {
     "runtime.txt", "app.json", "koyeb.yaml", "render.yaml", ".env",
     "logging.conf", "selfheal.py", "bot.py", "info.py", "utils.py",
 }
-NEVER_TOUCH_DIRS = {".git", "node_modules", ".cache"}
+NEVER_TOUCH_DIRS = {
+    ".git", "node_modules", ".cache",
+    ".heroku",   # Koyeb-এর Python runtime + site-packages (লাইব্রেরি কখনো স্পর্শ নয়)
+    ".venv", "venv",  # VPS-এর ভার্চুয়াল এনভায়রনমেন্ট (কখনো স্পর্শ নয়)
+}
 
 
 def clean_junk_files():
@@ -313,68 +336,139 @@ def _safe_notify(text):
 # ------------------------------------------------------------
 # 🚀 KOYEB AUTO-REDEPLOY — ড্যাশবোর্ডের Redeploy বাটনের অটোমেটিক সংস্করণ
 # ------------------------------------------------------------
-# RAM 95% ছুঁলে Koyeb API দিয়ে নিজে নিজে redeploy ট্রিগার হয় —
-# ঠিক যেমন GitHub-এ আপডেট দিলে বা ড্যাশবোর্ডে বাটন চাপলে হয়।
-# Koyeb নতুন instance বিল্ড করে healthy হলে অটোমেটিক swap করে —
-# তাই স্ট্রিম চলাকালীন ইউজারদের সমস্যা হয় না।
+# RAM থ্রেশহোল্ড ছুঁলে Koyeb API (POST /v1/services/{id}/redeploy —
+# Koyeb-এর অফিসিয়াল API) দিয়ে নিজে নিজে redeploy ট্রিগার হয়।
+#
+# সার্ভিস খোঁজার ৪ স্তর — যেকোনো একটাতে মিললেই চলবে:
+#   ১) KOYEB_SERVICE_ID (সরাসরি id)
+#   ২) নাম হুবহু মিল (KOYEB_SERVICE_NAME)
+#   ৩) নাম প্রায়-মিল — কেস/বানান একটু ভুল থাকলেও ধরা পড়বে
+#   ৪) বটের নিজের ডোমেইন (URL env) দিয়ে চিহ্নিত — সবচেয়ে নির্ভরযোগ্য,
+#      নাম সম্পূর্ণ ভুল থাকলেও ডোমেইন দিয়ে সঠিক সার্ভিস বের করা হয়
+# শেষ ভরসা: একাউন্টে একমাত্র সার্ভিস থাকলে সেটাই।
+# ফেল হলে টেলিগ্রামে সাথে সাথে আসল HTTP error দেখানো হয় (401/403/404 ইত্যাদি)
+# — কেন ফেল হলো সেটা অনুমান করতে হবে না।
 KOYEB_API_BASE = "https://app.koyeb.com/v1"
 
 
+def _koyeb_token():
+    # কপি-পেস্টে স্পেস/কোটেশন ঢুকে গেলেও টোকেন বাঁচে
+    return (KOYEB_API_TOKEN or "").strip().strip('"').strip("'")
+
+
+def _norm_name(s):
+    return "".join(ch for ch in str(s or "").lower() if ch.isalnum())
+
+
+def _koyeb_find_service(sess):
+    """রিটার্ন করে (service_dict, কীভাবে_পাওয়া_গেল) — না পেলে (None, কারণ)।"""
+    # ১) সরাসরি service id দেওয়া থাকলে
+    if KOYEB_SERVICE_ID:
+        try:
+            r = sess.get(f"{KOYEB_API_BASE}/services/{KOYEB_SERVICE_ID}", timeout=25)
+            if r.status_code == 200 and (r.json() or {}).get("service"):
+                return ((r.json())["service"], "KOYEB_SERVICE_ID")
+        except Exception:
+            pass
+    # ২) সব সার্ভিস নামাও (পেজিনেশন সহ — বড় একাউন্টেও সব আসবে)
+    services, offset = [], 0
+    while True:
+        r = sess.get(f"{KOYEB_API_BASE}/services",
+                     params={"limit": 100, "offset": offset}, timeout=25)
+        if r.status_code != 200:
+            return (None, f"services list HTTP {r.status_code}: {r.text[:150]}")
+        batch = (r.json() or {}).get("services") or []
+        services.extend(batch)
+        if len(batch) < 100 or offset > 400:
+            break
+        offset += 100
+    if not services:
+        return (None, "এই টোকেনের একাউন্টে কোনো সার্ভিস পাওয়া যায়নি")
+    want = KOYEB_SERVICE_NAME or ""
+    # ৩) হুবহু নাম → কেস-ইনসেনসিটিভ → বানান-নিরপেক্ষ (normalized) মিল
+    for s in services:
+        if want and (s.get("name") or "") == want:
+            return (s, f"নাম হুবহু মিলেছে ('{s.get('name')}')")
+    if want:
+        for s in services:
+            if (s.get("name") or "").lower() == want.lower():
+                return (s, f"নাম কেস-ভিন্নতা সহ মিলেছে ('{s.get('name')}')")
+    nw = _norm_name(want)
+    if nw:
+        for s in services:
+            if _norm_name(s.get("name")) == nw:
+                return (s, f"নাম প্রায়-মিল ('{s.get('name')}')")
+    # ৪) বটের নিজের ডোমেইন দিয়ে চিহ্নিত
+    host = ""
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(URL or "").netloc.split(":")[0].lower()
+    except Exception:
+        pass
+    if host:
+        try:
+            r = sess.get(f"{KOYEB_API_BASE}/domains", params={"limit": 100}, timeout=25)
+            if r.status_code == 200:
+                for d in (r.json() or {}).get("domains") or []:
+                    if (d.get("name") or "").lower().split(":")[0] == host:
+                        app_id = d.get("app_id")
+                        if app_id:
+                            r2 = sess.get(f"{KOYEB_API_BASE}/services",
+                                          params={"app_id": app_id, "limit": 100}, timeout=25)
+                            svcs = (r2.json() or {}).get("services") or []
+                            if svcs:
+                                return (svcs[0], f"ডোমেইন '{host}' থেকে চিহ্নিত")
+        except Exception:
+            pass
+    # ৫) একাউন্টে একটাই সার্ভিস থাকলে সেটাই
+    if len(services) == 1:
+        return (services[0], f"একমাত্র সার্ভিস ('{services[0].get('name')}')")
+    names = [s.get("name") for s in services]
+    return (None, f"'{want}' খুঁজে পাওয়া যায়নি। একাউন্টের সার্ভিসগুলো: {names}")
+
+
 def koyeb_redeploy():
-    """Koyeb API দিয়ে সার্ভিস redeploy ট্রিগার করে। সফল হলে True।
-    টোকেন না থাকলে/ফেল হলে False — তখন watchdog fallback restart নেয়।"""
-    if not KOYEB_API_TOKEN:
-        return False
+    """Koyeb API দিয়ে সার্ভিস redeploy ট্রিগার করে (ড্যাশবোর্ড বাটনের সমান)।
+    রিটার্ন: (সফল?, বিস্তারিত-বার্তা) — বার্তাটা টেলিগ্রামে দেখানো হয়।"""
+    token = _koyeb_token()
+    if not token:
+        return (False, "KOYEB_API_TOKEN সেট নেই")
     try:
         import requests
-        headers = {"Authorization": f"Bearer {KOYEB_API_TOKEN}"}
+        sess = requests.Session()
+        sess.headers.update({"Authorization": f"Bearer {token}"})
 
-        # ১) সার্ভিস লিস্ট থেকে আমাদের সার্ভিস খুঁজে বের করা
-        r = requests.get(f"{KOYEB_API_BASE}/services", headers=headers, timeout=20)
-        if r.status_code != 200:
-            logger.error(f"🚀 [REDEPLOY] সার্ভিস লিস্ট ফেল: HTTP {r.status_code}")
-            return False
-        services = (r.json() or {}).get("services") or []
-        if not services:
-            logger.error("🚀 [REDEPLOY] এই একাউন্টে কোনো সার্ভিস পাওয়া যায়নি")
-            return False
-
-        want = KOYEB_SERVICE_NAME or "FlixBoxsStreamBot"
-        svc = None
-        for s in services:
-            if (s.get("name") or "") == want:
-                svc = s
-                break
+        svc, how = _koyeb_find_service(sess)
         if svc is None:
-            if len(services) == 1:
-                svc = services[0]
-                logger.info(
-                    f"🚀 [REDEPLOY] '{want}' নামে সার্ভিস নেই — একমাত্র সার্ভিস "
-                    f"'{svc.get('name')}' ব্যবহার হচ্ছে"
-                )
-            else:
-                names = [s.get("name") for s in services]
-                logger.error(
-                    f"🚀 [REDEPLOY] '{want}' খুঁজে পাওয়া যায়নি। সার্ভিসগুলো: {names} — "
-                    f"Koyeb-এ KOYEB_SERVICE_NAME env ঠিক করো"
-                )
-                return False
-
-        # ২) Redeploy ট্রিগার (ড্যাশবোর্ড বাটনের সমান)
+            return (False, how)
         sid = svc.get("id")
-        logger.info(f"🚀 [REDEPLOY] সার্ভিস '{svc.get('name')}' নিজে নিজে redeploy হচ্ছে...")
-        r = requests.post(
-            f"{KOYEB_API_BASE}/services/{sid}/redeploy",
-            headers=headers,
-            timeout=30,
-        )
-        if r.status_code in (200, 201, 202):
-            return True
-        logger.error(f"🚀 [REDEPLOY] ফেল: HTTP {r.status_code} {r.text[:200]}")
-        return False
+        logger.info(f"🚀 [REDEPLOY] সার্ভিস '{svc.get('name')}' ({how}) নিজে নিজে redeploy হচ্ছে...")
+
+        # ট্রানজিয়েন্ট ফেল (নেটওয়ার্ক/5xx) হলে ১ বার আবার চেষ্টা
+        last = "unknown error"
+        for attempt in (1, 2):
+            try:
+                r = sess.post(f"{KOYEB_API_BASE}/services/{sid}/redeploy", json={}, timeout=30)
+            except Exception as e:
+                last = f"network error: {e}"
+                time.sleep(3)
+                continue
+            if 200 <= r.status_code < 300:
+                return (True, f"সার্ভিস '{svc.get('name')}' ({how}) — HTTP {r.status_code}")
+            last = f"HTTP {r.status_code}: {(r.text or '')[:200]}"
+            if r.status_code < 500:
+                break  # 401/403/404 — আবার চেষ্টা করেও লাভ নেই
+            time.sleep(3)
+        hint = ""
+        if last.startswith("HTTP 401"):
+            hint = " → টোকেন ভুল বা মেয়াদ শেষ — Koyeb → Account Settings → API থেকে নতুন টোকেন নিয়ে KOYEB_API_TOKEN env আপডেট করো"
+        elif last.startswith("HTTP 403"):
+            hint = " → এই টোকেনে সার্ভিসে পারমিশন নেই — আবার নতুন টোকেন বানাও (একই অ্যাকাউন্টে)"
+        elif last.startswith("HTTP 404"):
+            hint = " → KOYEB_SERVICE_ID ভুল — ভুল হলে env থেকে মুছে দাও, অটো-ডিটেকশন নিজে খুঁজে নেবে"
+        return (False, f"{last}{hint}")
     except Exception:
-        logger.error(f"🚀 [REDEPLOY] error: {traceback.format_exc()}")
-        return False
+        return (False, f"exception: {traceback.format_exc(limit=2)[:200]}")
 
 
 # ------------------------------------------------------------
@@ -396,7 +490,8 @@ def _trigger_redeploy(reason):
         except Exception:
             pass
 
-        if koyeb_redeploy():
+        ok, detail = koyeb_redeploy()
+        if ok:
             logger.warning(
                 "🚀 [SELF-HEAL] AUTO-REDEPLOY ট্রিগার হয়েছে ✅ — Koyeb নতুন instance "
                 "বিল্ড করে healthy হলে অটোমেটিক swap করবে (মেমোরি জিরো থেকে শুরু)"
@@ -404,8 +499,9 @@ def _trigger_redeploy(reason):
             _safe_notify(
                 f"🚀 <b>AUTO-REDEPLOY Started</b>\n\n"
                 f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB / {total_mb:.0f}MB)\n\n"
-                f"♻️ মেমোরি ৯৫% ছুঁয়েছে — সার্ভার <b>নিজে নিজে Redeploy</b> নিয়েছে "
+                f"♻️ মেমোরি {SELFHEAL_MEM_LIMIT}% ছুঁয়েছে — সার্ভার <b>নিজে নিজে Redeploy</b> নিয়েছে "
                 f"(ড্যাশবোর্ডের Redeploy বাটন চাপার মতোই, হাত দিতে হবে না)।\n"
+                f"✅ {detail}\n"
                 f"🏗️ Koyeb নতুন instance বিল্ড করে অটোমেটিক swap করবে — চলমান স্ট্রিমে আঘাত লাগবে না।\n"
                 f"✅ ফাইল/থাম্বনেইল/ডাটা সব অক্ষত থাকবে।"
             )
@@ -413,12 +509,13 @@ def _trigger_redeploy(reason):
             time.sleep(RELOAD_COOLDOWN_SLEEP)
             return
 
-        logger.error("🚀 [SELF-HEAL] Koyeb API redeploy ফেল — fallback: fresh restart নিচ্ছি")
+        logger.error(f"🚀 [SELF-HEAL] Koyeb API redeploy ফেল — fallback: fresh restart নিচ্ছি | {detail}")
         _safe_notify(
             f"⚠️ <b>Auto-Redeploy API Fail → Fresh Restart</b>\n"
             f"🧠 RAM: {pct:.1f}%\n\n"
-            f"KOYEB_API_TOKEN চেক করো (ভুল বা মেয়াদ শেষ?)। তবুও সার্ভার বাঁচাতে "
-            f"এখন fresh restart নিচ্ছি — মেমোরি জিরো থেকে শুরু হবে।"
+            f"❌ <b>Koyeb API বলছে:</b> <code>{detail}</code>\n\n"
+            f"উপরের কারণ দেখে env ঠিক করো। তবুও সার্ভার বাঁচাতে এখন fresh restart নিচ্ছি — "
+            f"মেমোরি জিরো থেকে শুরু হবে, সব ডাটা অক্ষত।"
         )
     else:
         logger.warning(
@@ -427,7 +524,7 @@ def _trigger_redeploy(reason):
         )
         _safe_notify(
             f"🛡️ <b>Auto Fresh Restart</b>\n"
-            f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB/{total_mb:.0f}MB) — ৯৫% ছুঁয়েছে।\n\n"
+            f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB/{total_mb:.0f}MB) — {SELFHEAL_MEM_LIMIT}% ছুঁয়েছে।\n\n"
             f"ℹ️ পূর্ণ <b>Redeploy</b> চাইলে Koyeb-এ <code>KOYEB_API_TOKEN</code> env যোগ করো "
             f"(SELFHEAL_GUIDE_BANGLA.md দেখো)। এখন fresh restart নিচ্ছি — "
             f"মেমোরি জিরো থেকে শুরু হবে।"
@@ -532,11 +629,157 @@ def _cleaner_loop():
 
 
 # ------------------------------------------------------------
+# 🧹 LOG-CHANNEL AUTO-CLEAN — প্রতি ৫ মিনিটে লগ চ্যানেল পরিষ্কার থাকবে
+# ------------------------------------------------------------
+# কী করে: লগ চ্যানেলে আসা স্ট্যাটাস/নোটিফিকেশন মেসেজ (RAM রিপোর্ট,
+# redeploy নোটিশ, রিস্টার্ট নোটিশ, ইউজার-জয়েন, অটো-ক্লিন রিপোর্ট ইত্যাদি)
+# প্রতি ৫ মিনিটে নিজে নিজে মুছে দেয় — চ্যানেল সবসময় পরিষ্কার দেখায়।
+#
+# ⚠️ সেফটি নিয়ম (সবচেয়ে গুরুত্বপূর্ণ):
+#   স্ট্রিম লিঙ্কগুলো BIN_CHANNEL-এর ফাইল-মেসেজের উপর দাঁড়িয়ে আছে
+#   (web/stream_routes.py: get_messages(BIN_CHANNEL, id)) — ওই মেসেজ
+#   মুছলে আগে দেওয়া লিঙ্ক মরে যায়! তাই:
+#   - BIN_CHANNEL আর LOG_CHANNEL **একই চ্যানেল হলে** → শুধু টেক্সট/
+#     স্ট্যাটাস মেসেজ মুছবে, ভিডিও/ফাইল মেসেজ স্পর্শ করবে না (লিঙ্ক বাঁচবে)
+#   - BIN_CHANNEL **আলাদা** হলে → লগ চ্যানেল ১০০% খালি করবে (ফাইলসহ)
+# পিন করা মেসেজ ডিফল্টে বাঁচে (SELFHEAL_LOG_CLEAN_KEEP_PINNED=False
+# দিলে সেটাও মুছবে)।
+
+_lc_client = None
+_lc_loop = None
+_lc_chat = 0
+_lc_flags = {"intro": False, "perm": False}
+
+
+def _is_media_message(m):
+    """ফাইল/ভিডিও মেসেজ কি না — এগুলো স্ট্রিম লিঙ্কের উৎস, স্পর্শ-বহির্ভূত।"""
+    return any(getattr(m, a, None) for a in (
+        "video", "document", "audio", "photo", "animation",
+        "voice", "video_note", "sticker",
+    ))
+
+
+def _purge_log_channel():
+    """লগ চ্যানেলের মেসেজ মুছে দেয়। রিটার্ন: (মুছেছে, স্ক্যান করেছে)।"""
+    import asyncio
+
+    if not _lc_client or not _lc_loop or not _lc_chat:
+        return (0, 0)
+
+    try:
+        same_channel = int(BIN_CHANNEL or 0) == int(_lc_chat)
+    except Exception:
+        same_channel = False
+    # BIN_CHANNEL অজানা হলেও সেফটির খাতিরে মিডিয়া রক্ষা করো
+    protect_media = same_channel or not (BIN_CHANNEL or 0)
+
+    async def _wipe():
+        from pyrogram.errors import FloodWait
+
+        deleted, scanned = 0, 0
+        keep = set()
+        if SELFHEAL_LOG_CLEAN_KEEP_PINNED:
+            try:
+                chat = await _lc_client.get_chat(_lc_chat)
+                pm = getattr(chat, "pinned_message", None)
+                if pm is not None:
+                    keep.add(pm.id)
+            except Exception:
+                pass
+
+        ids = []
+        async for m in _lc_client.get_chat_history(_lc_chat, limit=800):
+            scanned += 1
+            if m.id in keep:
+                continue
+            if protect_media and _is_media_message(m):
+                continue
+            ids.append(m.id)
+            if len(ids) >= 100:
+                try:
+                    await _lc_client.delete_messages(_lc_chat, ids)
+                    deleted += len(ids)
+                except FloodWait as e:
+                    await asyncio.sleep(min(e.value, 60) + 1)
+                    try:
+                        await _lc_client.delete_messages(_lc_chat, ids)
+                        deleted += len(ids)
+                    except Exception:
+                        break
+                ids = []
+        if ids:
+            try:
+                await _lc_client.delete_messages(_lc_chat, ids)
+                deleted += len(ids)
+            except Exception:
+                pass
+        return deleted, scanned
+
+    fut = asyncio.run_coroutine_threadsafe(_wipe(), _lc_loop)
+    return fut.result(timeout=900)
+
+
+def _log_cleaner_loop():
+    time.sleep(90)  # বুট গ্রেস শেষ হলে প্রথম পরিষ্কার শুরু
+    while True:
+        try:
+            try:
+                same = int(BIN_CHANNEL or 0) == int(_lc_chat)
+            except Exception:
+                same = False
+            protect = same or not (BIN_CHANNEL or 0)
+            deleted, scanned = _purge_log_channel()
+            logger.info(
+                f"🧹 [LOG-CLEAN] লগ চ্যানেল পরিষ্কার: {deleted} মেসেজ মুছেছে "
+                f"(স্ক্যান {scanned}) | প্রতি {max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে | "
+                f"{'ফাইল রক্ষা মোড (BIN=LOG)' if protect else 'সম্পূর্ণ পরিষ্কার'} | বট চালুই আছে ✅"
+            )
+            if not _lc_flags["intro"]:
+                _lc_flags["intro"] = True
+                if protect:
+                    _safe_notify(
+                        "🧹 <b>Log Auto-Clean চালু</b>\n\n"
+                        f"এখন থেকে প্রতি <b>{max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে</b> লগ চ্যানেলের "
+                        "স্ট্যাটাস/টেক্সট মেসেজ নিজে নিজে মুছে যাবে।\n\n"
+                        "⚠️ <b>কিন্তু তোমার BIN_CHANNEL আর LOG_CHANNEL একই চ্যানেল!</b>\n"
+                        "পুরনো স্ট্রিম লিঙ্ক বাঁচাতে <b>ভিডিও/ফাইল মেসেজ এখনো মুছছি না</b> — "
+                        "ওগুলোই লিঙ্কের উৎস, মুছলে সব লিঙ্ক মরে যাবে।\n\n"
+                        "✅ <b>ফাইলও অটো-ডিলিট করাতে চাইলে (২ মিনিটের কাজ):</b>\n"
+                        "১. Telegram-এ একটা <b>নতুন প্রাইভেট চ্যানেল</b> বানাও (যেমন: Movie Box Files)\n"
+                        "২. বটকে ওই চ্যানেলে <b>Admin</b> বানাও (সব পারমিশন)\n"
+                        "৩. চ্যানেলের ID নাও — চ্যানেলে একটা মেসেজ ফরওয়ার্ড করো @userinfobot-এ, "
+                        "বা @RawDataBot চ্যানেলে ঢুকিয়ে ID দেখো (-100... দিয়ে শুরু)\n"
+                        "৪. Koyeb → Settings → Environment Variables → <code>BIN_CHANNEL</code> = "
+                        "ওই নতুন ID বসাও → রিডিপ্লয় হবে\n"
+                        "৫. তারপর থেকে লগ চ্যানেল <b>১০০% খালি</b> থাকবে — ফাইল যাবে নতুন ফাইল-চ্যানেলে, "
+                        "লিঙ্ক কখনো ভাঙবে না।"
+                    )
+                else:
+                    _safe_notify(
+                        "🧹 <b>Log Auto-Clean চালু</b>\n\n"
+                        f"এখন থেকে প্রতি <b>{max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে</b> লগ চ্যানেল "
+                        "সম্পূর্ণ পরিষ্কার হবে — স্ট্যাটাস, নোটিফিকেশন, সব।\n"
+                        "✅ স্ট্রিম লিঙ্ক অক্ষত — ফাইল আলাদা BIN চ্যানেলে নিরাপদে থাকছে।"
+                    )
+        except Exception:
+            logger.error(f"🧹 [LOG-CLEAN] error: {traceback.format_exc()}")
+            if not _lc_flags["perm"]:
+                _lc_flags["perm"] = True
+                _safe_notify(
+                    "⚠️ <b>Log Auto-Clean কাজ করছে না</b>\n\n"
+                    "বটের লগ চ্যানেলে মেসেজ ডিলিট করার পারমিশন নেই।\n"
+                    "সমাধান: চ্যানেলে বটকে <b>Admin</b> বানাও → <b>Delete Messages</b> "
+                    "পারমিশন চালু করো।"
+                )
+        time.sleep(max(SELFHEAL_LOG_CLEAN_INTERVAL, 60))
+
+
+# ------------------------------------------------------------
 # 🚀 START — bot.py থেকে ডাকা হয়
 # ------------------------------------------------------------
-def start(notify=None):
-    """সেলফ-হিল সিস্টেম চালু করে (দুটো ব্যাকগ্রাউন্ড থ্রেড)।"""
-    global _started, _notify
+def start(notify=None, client=None, loop=None, log_chat=0):
+    """সেলফ-হিল সিস্টেম চালু করে (ব্যাকগ্রাউন্ড থ্রেড)।"""
+    global _started, _notify, _lc_client, _lc_loop, _lc_chat
     if not SELFHEAL_ENABLED:
         logger.info("🛡️ [SELF-HEAL] বন্ধ আছে (SELFHEAL_ENABLED=False)")
         return
@@ -544,12 +787,30 @@ def start(notify=None):
         return
     _started = True
     _notify = notify
+    _lc_client = client
+    _lc_loop = loop
+    try:
+        _lc_chat = int(log_chat or 0)
+    except Exception:
+        _lc_chat = 0
 
     pct, used_mb, total_mb = memory_snapshot()
     logger.info(
         f"🛡️ [SELF-HEAL] সিস্টেম চালু ✅ | RAM: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) | "
         f"রিলোড থ্রেশহোল্ড: {SELFHEAL_MEM_LIMIT}% | অটো-ক্লিন: প্রতি {SELFHEAL_CACHE_INTERVAL // 60} মিনিটে"
     )
+    logger.info(
+        f"🚀 [REDEPLOY] Koyeb API মোড: {'টোকেন আছে ✅' if _koyeb_token() else 'টোকেন নেই (fallback restart চলবে)'}"
+    )
 
     threading.Thread(target=_watchdog_loop, name="selfheal-watchdog", daemon=True).start()
     threading.Thread(target=_cleaner_loop, name="selfheal-cleaner", daemon=True).start()
+    if _lc_client and _lc_loop and _lc_chat:
+        if SELFHEAL_LOG_CLEAN_ENABLED:
+            threading.Thread(target=_log_cleaner_loop, name="selfheal-logclean", daemon=True).start()
+            logger.info(
+                f"🧹 [SELF-HEAL] লগ চ্যানেল অটো-ক্লিন চালু — প্রতি {max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে "
+                f"(BIN=LOG হলে ফাইল-মেসেজ স্বয়ংক্রিয়ভাবে রক্ষা পাবে)"
+            )
+    else:
+        logger.info("🧹 [SELF-HEAL] লগ অটো-ক্লিন বন্ধ — bot.py থেকে client/loop/log_chat পাওয়া যায়নি")

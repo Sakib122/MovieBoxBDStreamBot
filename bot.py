@@ -194,6 +194,9 @@ async def Webav_start():
             import selfheal
             selfheal.start(
                 notify=selfheal.make_telegram_notifier(WebavBot, LOG_CHANNEL, MAIN_LOOP),
+                client=WebavBot,          # লগ চ্যানেল অটো-ক্লিনের জন্য
+                loop=MAIN_LOOP,
+                log_chat=LOG_CHANNEL,
             )
         except Exception:
             logger.error("SELF-HEAL INIT FAILED", exc_info=True)
