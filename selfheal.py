@@ -3,14 +3,18 @@
 # ============================================================
 # এই ফাইলটা সার্ভারকে সম্পূর্ণ স্বয়ংক্রিয় (fully automatic) করে দেয়:
 #
-# ১) 🧠 MEMORY WATCHDOG (প্রধান প্রাধান্য):
+# ১) 🧠 MEMORY WATCHDOG + ESCALATION (প্রধান প্রাধান্য):
 #    - প্রতি ৫ সেকেন্ডে RAM চেক করে (Koyeb/Render/Docker কনটেইনার লিমিট সহ)
-#    - RAM 95% (SELFHEAL_MEM_LIMIT) ছুঁলে → সাথে সাথে নিজে নিজে REDEPLOY:
-#      Koyeb API (POST /v1/services/{id}/redeploy) দিয়ে ড্যাশবোর্ডের
-#      Redeploy বাটন চাপার মতোই নতুন deployment ট্রিগার হয়। Koyeb নতুন
-#      instance বিল্ড করে healthy হলে অটোমেটিক swap করে — নতুন instance-এ
-#      মেমোরি ০ (জিরো) থেকে শুরু, স্ট্রিম ইউজারদের সমস্যা হয় না।
-#      (KOYEB_API_TOKEN সেট থাকলেই এটা কাজ করবে।)
+#    - RAM টার্গেট (SELFHEAL_MEM_LIMIT, ডিফল্ট ৯০%) ছুঁলে = ১টি "ক্রসিং":
+#      ১ম-৫ম ক্রসিং → পূর্ণ মেমোরি ক্লিন + রিসেট (Android Clear Cache-এর মতো) —
+#        RAM নিচে নেমে আসে, মেমোরি টার্গেট আবার শূন্য থেকে শুরু হয়।
+#        প্রতি প্রচেষ্টার খবর লগ চ্যানেলে যায় (RAM কত % হয়েছে, ক্লিন হচ্ছে)।
+#      ৬ষ্ঠ ক্রসিং → ক্লিনেও ধরেনি — তখনই নিজে নিজে REDEPLOY:
+#        Koyeb API (POST /v1/services/{id}/redeploy) দিয়ে ড্যাশবোর্ডের
+#        Redeploy বাটন চাপার মতোই নতুন deployment ট্রিগার হয়। Koyeb নতুন
+#        instance বিল্ড করে healthy হলে অটোমেটিক swap করে — নতুন instance-এ
+#        মেমোরি ০ (জিরো) থেকে শুরু, ফাইল/ডাটা/থাম্বনেইল সব অক্ষত থাকে।
+#    - RAM টানা ১৫ মিনিট স্বাভাবিক থাকলে ক্লিন-গণনা আবার ০ থেকে শুরু হয়।
 #    - টোকেন না থাকলে/API ফেল হলে → fresh restart fallback (exec):
 #      প্রসেস নিজেকে বদলে নেয়, মেমোরি জিরো হয় — সার্ভার কখনো মরে না।
 #    - ⚠️ CPU কখনোই ট্রিগার নয় — CPU 100% হলেও কিছু হবে না।
@@ -24,6 +28,9 @@
 #    - কখনোই স্পর্শ হয় না: ফাইল ডাটাবেস, থাম্বনেইল, .session, .env,
 #      কনফিগ, সোর্স কোড — কিছুই ডিলিট হবে না, থাম্বনেইল দেখা যাবে।
 #    - ক্লিন হওয়ার সময় বট এক মুহূর্তের জন্যও বন্ধ হয় না।
+#    - 🤫 এই রুটিন ক্লিন সম্পূর্ণ সাইলেন্ট — লগ চ্যানেলে কিছু পাঠায় না
+#      (শুধু কনসোল লগে দেখা যায়)। লগ চ্যানেলে যায় শুধু RAM-টার্গেট
+#      ক্লিন আর redeploy-এর মেসেজ — চ্যানেল পরিষ্কার থাকে।
 #
 # ৩) ♻️ RAM টিডি-আপ: পুরনো in-memory থাম্বনেইল ক্যাশ + Python garbage
 #    প্রতি সাইকেলে পরিষ্কার হয় → দুই রিলোডের মাঝে RAM কম থাকে।
@@ -88,8 +95,19 @@ except Exception:
     SELFHEAL_LOG_CLEAN_INTERVAL = 300   # ৩০০ সেকেন্ড = ৫ মিনিট
     SELFHEAL_LOG_CLEAN_KEEP_PINNED = True
 
+try:
+    from info import (
+        SELFHEAL_MAX_CLEANS,
+        SELFHEAL_REARM_SECONDS,
+        SELFHEAL_CLEAN_RESET_SECONDS,
+    )
+except Exception:
+    SELFHEAL_MAX_CLEANS = 5             # সর্বোচ্চ ৫ বার মেমোরি ক্লিন
+    SELFHEAL_REARM_SECONDS = 120        # RAM উপরে থাকলে প্রতি ২ মিনিটে পরের প্রচেষ্টা
+    SELFHEAL_CLEAN_RESET_SECONDS = 900  # RAM টানা ১৫ মিনিট স্বাভাবিক থাকলে গণনা রিসেট
+
 BOOT_GRACE = 90          # প্রসেস চালু হওয়ার পর প্রথম ৯০ সেকেন্ড রিলোড বন্ধ (বুট স্থিতি)
-RELOAD_CONFIRM = 2       # টানা কত বার 95%+ দেখলে রিলোড (false spike এড়াতে)
+RELOAD_CONFIRM = 2       # টানা কত চেকে টার্গেট+ দেখলে কনফার্ম (false spike এড়াতে)
 RELOAD_LOG_FILE = "/tmp/selfheal_reloads.log"
 RELOAD_COOLDOWN_WINDOW = 1800   # ৩০ মিনিটে ৩+ রিলোড হলে কুলডাউন
 RELOAD_COOLDOWN_MAX = 3
@@ -472,7 +490,77 @@ def koyeb_redeploy():
 
 
 # ------------------------------------------------------------
-# 🔄 মেমোরি-ট্রিগার: আগে পূর্ণ AUTO-REDEPLOY, সম্ভব না হলে fresh restart
+# 🧠 ESCALATION STATE — RAM টার্গেট ছুঁলে: ৫ বার ক্লিন → ছয়বারে REDEPLOY
+# ------------------------------------------------------------
+# নিয়ম:
+#   RAM টার্গেট (যেমন ৯০%) ছুঁলে = ১টি "ক্রসিং"।
+#   ১ম-৫ম ক্রসিং → পূর্ণ মেমোরি ক্লিন + রিসেট → লগ চ্যানেলে রিপোর্ট।
+#   ৬ষ্ঠ ক্রসিং → ক্লিনে ধরেনি — তখনই নিজে নিজে Koyeb REDEPLOY।
+#   RAM টানা SELFHEAL_CLEAN_RESET_SECONDS স্বাভাবিক থাকলে গণনা রিসেট।
+#   RAM টানা উপরে থাকলে প্রতি SELFHEAL_REARM_SECONDS পর পর পরের প্রচেষ্টা —
+#   ফলে টানা চাপে ~১০ মিনিটে ৫ ক্লিন শেষে redeploy হয়ে যায়।
+
+_esc = {
+    "consecutive": 0,       # টানা কত চেকে RAM টার্গেটের উপরে
+    "clean_count": 0,       # এই চক্রে কতবার ক্লিন হয়েছে (০-৫)
+    "last_action_ts": 0.0,  # শেষ ক্লিন/রিডেপ্লয় কবে হয়েছে
+    "below_ts": None,       # RAM কবে থেকে টানা স্বাভাবিক
+}
+
+
+def _escalation_decide(pct, now, st=None):
+    """সিদ্ধান্ত-ফাংশন (টেস্টযোগ্য)। রিটার্ন: 'none' | 'clean' | 'redeploy'।"""
+    if st is None:
+        st = _esc
+    if pct >= SELFHEAL_MEM_LIMIT:
+        st["below_ts"] = None
+        st["consecutive"] += 1
+        if st["consecutive"] < RELOAD_CONFIRM:
+            return "none"   # false-spike এড়াতে ২ চেক (১০ সেকেন্ড) কনফার্ম
+        if now - st["last_action_ts"] < SELFHEAL_REARM_SECONDS:
+            return "none"   # শেষ প্রচেষ্টার ফল দেখার সময় দাও
+        if st["clean_count"] < SELFHEAL_MAX_CLEANS:
+            return "clean"
+        return "redeploy"
+    # RAM স্বাভাবিক — গণনা-রিসেট ট্র্যাকিং
+    st["consecutive"] = 0
+    if st["clean_count"] > 0:
+        if st["below_ts"] is None:
+            st["below_ts"] = now
+        elif now - st["below_ts"] >= SELFHEAL_CLEAN_RESET_SECONDS:
+            st["clean_count"] = 0
+            st["below_ts"] = None
+            logger.info(
+                f"🛡️ [SELF-HEAL] RAM টানা {SELFHEAL_CLEAN_RESET_SECONDS // 60} মিনিট স্বাভাবিক — "
+                f"ক্লিন-গণনা আবার ০/{SELFHEAL_MAX_CLEANS} থেকে শুরু"
+            )
+    return "none"
+
+
+def _trigger_clean(pct_before, used_mb, total_mb, attempt):
+    """১টি মেমোরি-ক্লিন প্রচেষ্টা: পূর্ণ ক্লিন সাইকেল + লগ চ্যানেলে রিপোর্ট।"""
+    freed, files, purged, pct_after, u2, t2 = run_clean_cycle()
+    mb_freed = freed / (1024 * 1024)
+    logger.warning(
+        f"🛡️ [SELF-HEAL] মেমোরি ক্লিন+রিসেট প্রচেষ্টা {attempt}/{SELFHEAL_MAX_CLEANS}: "
+        f"RAM {pct_before:.1f}% → {pct_after:.1f}% | জাঙ্ক {files}টি ({mb_freed:.1f} MB) | "
+        f"থাম্ব-ক্যাশ {purged}টি | বট চালুই আছে"
+    )
+    _safe_notify(
+        f"🧠 <b>Memory Clean + Reset</b> — প্রচেষ্টা {attempt}/{SELFHEAL_MAX_CLEANS}\n\n"
+        f"⚠️ RAM <b>{pct_before:.1f}%</b> হয়ে গেছে ({used_mb:.0f}MB/{total_mb:.0f}MB) "
+        f"— টার্গেট {SELFHEAL_MEM_LIMIT}%\n"
+        f"🧹 মেমোরি ক্লিন হচ্ছে: জাঙ্ক ফাইল <b>{files}টি</b> ({mb_freed:.1f} MB খালি), "
+        f"পুরনো থাম্ব-ক্যাশ <b>{purged}টি</b>\n"
+        f"✅ ক্লিন শেষে RAM এখন: <b>{pct_after:.1f}%</b> — বট চালুই আছে, কিছুই বন্ধ হয়নি।\n\n"
+        f"📊 {SELFHEAL_MAX_CLEANS} বার ক্লিনের পরও RAM ফুল থাকলে ৬ষ্ঠ বার সার্ভার "
+        f"নিজে নিজে <b>Redeploy</b> নেবে (Koyeb — ড্যাশবোর্ড বাটনের মতো)।"
+    )
+    return pct_after
+
+
+# ------------------------------------------------------------
+# 🔄 মেমোরি-ট্রিগার: ৫ বার ক্লিনেও RAM ফুল → পূর্ণ AUTO-REDEPLOY
 # ------------------------------------------------------------
 def _trigger_redeploy(reason):
     pct, used_mb, total_mb = memory_snapshot()
@@ -499,7 +587,7 @@ def _trigger_redeploy(reason):
             _safe_notify(
                 f"🚀 <b>AUTO-REDEPLOY Started</b>\n\n"
                 f"🧠 RAM: <b>{pct:.1f}%</b> ({used_mb:.0f}MB / {total_mb:.0f}MB)\n\n"
-                f"♻️ মেমোরি {SELFHEAL_MEM_LIMIT}% ছুঁয়েছে — সার্ভার <b>নিজে নিজে Redeploy</b> নিয়েছে "
+                f"♻️ {SELFHEAL_MAX_CLEANS} বার মেমোরি ক্লিনের পরও RAM ফুল — সার্ভার <b>নিজে নিজে Redeploy</b> নিয়েছে "
                 f"(ড্যাশবোর্ডের Redeploy বাটন চাপার মতোই, হাত দিতে হবে না)।\n"
                 f"✅ {detail}\n"
                 f"🏗️ Koyeb নতুন instance বিল্ড করে অটোমেটিক swap করবে — চলমান স্ট্রিমে আঘাত লাগবে না।\n"
@@ -545,17 +633,19 @@ def _trigger_redeploy(reason):
 # 🧠 WATCHDOG THREAD — প্রতি ৫ সেকেন্ডে RAM চেক (CPU চেক করেই না!)
 # ------------------------------------------------------------
 def _watchdog_loop():
-    consecutive = 0
     grace_logged = False
+    hb_last = 0.0
     logger.info(
-        f"🛡️ [SELF-HEAL] Memory Watchdog চালু — থ্রেশহোল্ড: {SELFHEAL_MEM_LIMIT}% "
+        f"🛡️ [SELF-HEAL] Memory Watchdog চালু — RAM টার্গেট: {SELFHEAL_MEM_LIMIT}% "
+        f"| চক্র: {SELFHEAL_MAX_CLEANS} বার মেমোরি ক্লিন → ৬ষ্ঠ ক্রসিংয়ে REDEPLOY "
         f"(CPU কখনো ট্রিগার নয়) | চেক প্রতি {SELFHEAL_CHECK_INTERVAL} সেকেন্ডে"
     )
     while True:
         try:
             time.sleep(SELFHEAL_CHECK_INTERVAL)
             pct, used_mb, total_mb = memory_snapshot()
-            uptime = time.time() - _START_TIME
+            now = time.time()
+            uptime = now - _START_TIME
 
             if uptime < BOOT_GRACE:
                 if not grace_logged:
@@ -563,46 +653,59 @@ def _watchdog_loop():
                     grace_logged = True
                 continue
 
-            if pct >= SELFHEAL_MEM_LIMIT:
-                consecutive += 1
-                logger.warning(
-                    f"🛡️ [SELF-HEAL] RAM HIGH: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) "
-                    f"— থ্রেশহোল্ড {SELFHEAL_MEM_LIMIT}% | confirm {consecutive}/{RELOAD_CONFIRM}"
+            # হার্টবিট: প্রতি ৫ মিনিটে লাইভ RAM রিডিং লগে — ড্যাশবোর্ডের সাথে মিল যাচাই
+            if now - hb_last >= 300:
+                hb_last = now
+                logger.info(
+                    f"🛡️ [SELF-HEAL] RAM হার্টবিট: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) "
+                    f"| টার্গেট {SELFHEAL_MEM_LIMIT}% | ক্লিন গণনা {_esc['clean_count']}/{SELFHEAL_MAX_CLEANS}"
                 )
-                if consecutive >= RELOAD_CONFIRM:
-                    # বুট-লুপ প্রোটেকশন: ৩০ মিনিটে ৩+ বার ট্রিগার হলে কুলডাউন
-                    recent = _recent_reloads()
-                    if len(recent) >= RELOAD_COOLDOWN_MAX:
-                        logger.warning(
-                            f"🛡️ [SELF-HEAL] {RELOAD_COOLDOWN_WINDOW // 60} মিনিটে {len(recent)} বার ট্রিগার — "
-                            f"সার্ভার বাঁচাতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট কুলডাউন (বট চালুই থাকছে)"
-                        )
-                        _safe_notify(
-                            f"⚠️ <b>Self-Heal Cooldown</b>\nমেমোরি বারবার {SELFHEAL_MEM_LIMIT}%+ হচ্ছে "
-                            f"({len(recent)} বার)। সার্ভার চালু রাখতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট পর পর redeploy/restart হবে।"
-                        )
-                        time.sleep(RELOAD_COOLDOWN_SLEEP)
-                        # কুলডাউন শেষে RAM স্বাভাবিক এসে গেলে ট্রিগারের দরকারই নেই
-                        pct2, _, _ = memory_snapshot()
-                        if pct2 < SELFHEAL_MEM_LIMIT:
-                            logger.info(f"🛡️ [SELF-HEAL] কুলডাউন শেষে RAM স্বাভাবিক: {pct2:.1f}% — redeploy বাতিল")
-                            consecutive = 0
-                            continue
-                    _trigger_redeploy(f"Memory {pct:.1f}% >= {SELFHEAL_MEM_LIMIT}%")
-                    # redeploy সফল হলে এখানে ফিরে আসে (old instance তখনও চালু);
-                    # fallback exec হলে ফেরে না। দুই ক্ষেত্রেই নতুন সাইকেল শুরু।
-                    consecutive = 0
-            else:
-                if consecutive:
-                    logger.info(f"🛡️ [SELF-HEAL] RAM স্বাভাবিক ফিরেছে: {pct:.1f}% — redeploy বাতিল")
-                consecutive = 0
+
+            action = _escalation_decide(pct, now)
+
+            if action == "clean":
+                _esc["clean_count"] += 1
+                _esc["last_action_ts"] = now
+                _esc["consecutive"] = 0
+                _trigger_clean(pct, used_mb, total_mb, _esc["clean_count"])
+            elif action == "redeploy":
+                logger.warning(
+                    f"🛡️ [SELF-HEAL] RAM {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) — "
+                    f"{_esc['clean_count']}/{SELFHEAL_MAX_CLEANS} ক্লিন শেষ, এবার ৬ষ্ঠ ক্রসিং — REDEPLOY শুরু..."
+                )
+                # বুট-লুপ প্রোটেকশন: ৩০ মিনিটে ৩+ বার ট্রিগার হলে কুলডাউন
+                recent = _recent_reloads()
+                if len(recent) >= RELOAD_COOLDOWN_MAX:
+                    logger.warning(
+                        f"🛡️ [SELF-HEAL] {RELOAD_COOLDOWN_WINDOW // 60} মিনিটে {len(recent)} বার ট্রিগার — "
+                        f"সার্ভার বাঁচাতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট কুলডাউন (বট চালুই থাকছে)"
+                    )
+                    _safe_notify(
+                        f"⚠️ <b>Self-Heal Cooldown</b>\nমেমোরি বারবার {SELFHEAL_MEM_LIMIT}%+ হচ্ছে "
+                        f"({len(recent)} বার)। সার্ভার চালু রাখতে {RELOAD_COOLDOWN_SLEEP // 60} মিনিট পর পর redeploy/restart হবে।"
+                    )
+                    time.sleep(RELOAD_COOLDOWN_SLEEP)
+                    # কুলডাউন শেষে RAM স্বাভাবিক এসে গেলে ট্রিগারের দরকারই নেই
+                    pct2, _, _ = memory_snapshot()
+                    if pct2 < SELFHEAL_MEM_LIMIT:
+                        logger.info(f"🛡️ [SELF-HEAL] কুলডাউন শেষে RAM স্বাভাবিক: {pct2:.1f}% — redeploy বাতিল")
+                        _esc["consecutive"] = 0
+                        continue
+                _esc["clean_count"] = 0
+                _esc["last_action_ts"] = now
+                _esc["consecutive"] = 0
+                _trigger_redeploy(
+                    f"{SELFHEAL_MAX_CLEANS} বার মেমোরি ক্লিনের পরও RAM {pct:.1f}% >= {SELFHEAL_MEM_LIMIT}%"
+                )
+                # redeploy সফল হলে এখানে ফিরে আসে (old instance তখনও চালু);
+                # fallback exec হলে ফেরে না। দুই ক্ষেত্রেই নতুন চক্র শুরু।
         except Exception:
             logger.error(f"🛡️ [SELF-HEAL] watchdog error: {traceback.format_exc()}")
             time.sleep(SELFHEAL_CHECK_INTERVAL)
 
 
 # ------------------------------------------------------------
-# 🧹 CLEANER THREAD — প্রতি ৩০ মিনিটে অটো-ক্লিন (বট বন্ধ হয় না)
+# 🧹 CLEANER THREAD — সাইলেন্ট রুটিন ক্লিন (ডিফল্ট প্রতি ১৫ মিনিটে, বট বন্ধ হয় না)
 # ------------------------------------------------------------
 def _cleaner_loop():
     time.sleep(60)  # বুটের এক মিনিট পর প্রথম ক্লিন
@@ -614,15 +717,8 @@ def _cleaner_loop():
                 f"🧹 [AUTO-CLEAN] জাঙ্ক ফাইল: {files}টি ({mb_freed:.1f} MB ফ্রি) | "
                 f"পুরনো RAM থাম্ব-ক্যাশ: {purged}টি | RAM: {pct:.1f}% | বট চালুই আছে ✅"
             )
-            # কিছু উল্লেখযোগ্য ক্লিন হলে LOG_CHANNEL-এ প্রমাণ যাবে
-            if files > 0 or purged > 0:
-                _safe_notify(
-                    f"🧹 <b>Auto Cache Clean (বট চালু অবস্থায়)</b>\n\n"
-                    f"📁 জাঙ্ক ফাইল মুছেছে: <b>{files}টি</b> ({mb_freed:.1f} MB খালি)\n"
-                    f"🖼️ পুরনো RAM থাম্ব-ক্যাশ মুছেছে: <b>{purged}টি</b>\n"
-                    f"🧠 RAM এখন: <b>{pct:.1f}%</b>\n\n"
-                    f"✅ বট/ফাইল/থাম্বনেইল সব অক্ষত — কিছুই বন্ধ হয়নি।"
-                )
+            # 🤫 রুটিন ক্লিন সাইলেন্ট — লগ চ্যানেলে কিছু যায় না (শুধু কনসোল লগ)।
+            # লগ চ্যানেলে যায় শুধু RAM-টার্গেট ক্লিন আর redeploy-এর মেসেজ।
         except Exception:
             logger.error(f"🧹 [AUTO-CLEAN] error: {traceback.format_exc()}")
         time.sleep(max(SELFHEAL_CACHE_INTERVAL, 300))
@@ -755,11 +851,10 @@ def _log_cleaner_loop():
                         "লিঙ্ক কখনো ভাঙবে না।"
                     )
                 else:
-                    _safe_notify(
-                        "🧹 <b>Log Auto-Clean চালু</b>\n\n"
-                        f"এখন থেকে প্রতি <b>{max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে</b> লগ চ্যানেল "
-                        "সম্পূর্ণ পরিষ্কার হবে — স্ট্যাটাস, নোটিফিকেশন, সব।\n"
-                        "✅ স্ট্রিম লিঙ্ক অক্ষত — ফাইল আলাদা BIN চ্যানেলে নিরাপদে থাকছে।"
+                    # ফুল মোডে কোনো ইন্ট্রো মেসেজ নেই — লগ চ্যানেল গোঙিয়ে রাখাই না
+                    logger.info(
+                        f"🧹 [LOG-CLEAN] ফুল মোড (BIN আলাদা) — প্রতি "
+                        f"{max(SELFHEAL_LOG_CLEAN_INTERVAL // 60, 1)} মিনিটে লগ চ্যানেল সম্পূর্ণ পরিষ্কার হবে"
                     )
         except Exception:
             logger.error(f"🧹 [LOG-CLEAN] error: {traceback.format_exc()}")
@@ -795,9 +890,17 @@ def start(notify=None, client=None, loop=None, log_chat=0):
         _lc_chat = 0
 
     pct, used_mb, total_mb = memory_snapshot()
+    _src = ("env SELFHEAL_MEM_LIMIT" if os.environ.get("SELFHEAL_MEM_LIMIT")
+            else "info.py ডিফল্ট")
     logger.info(
         f"🛡️ [SELF-HEAL] সিস্টেম চালু ✅ | RAM: {pct:.1f}% ({used_mb:.0f}MB/{total_mb:.0f}MB) | "
-        f"রিলোড থ্রেশহোল্ড: {SELFHEAL_MEM_LIMIT}% | অটো-ক্লিন: প্রতি {SELFHEAL_CACHE_INTERVAL // 60} মিনিটে"
+        f"RAM টার্গেট: {SELFHEAL_MEM_LIMIT}% (উৎস: {_src}) | "
+        f"সাইলেন্ট অটো-ক্লিন: প্রতি {SELFHEAL_CACHE_INTERVAL // 60} মিনিটে"
+    )
+    logger.info(
+        f"🧠 [ESCALATION] RAM {SELFHEAL_MEM_LIMIT}% ছুঁলে: সর্বোচ্চ {SELFHEAL_MAX_CLEANS} বার "
+        f"মেমোরি ক্লিন+রিসেট (প্রতি {SELFHEAL_REARM_SECONDS}s পর পর প্রচেষ্টা) → "
+        f"তারপরও ফুল হলে নিজে নিজে REDEPLOY"
     )
     logger.info(
         f"🚀 [REDEPLOY] Koyeb API মোড: {'টোকেন আছে ✅' if _koyeb_token() else 'টোকেন নেই (fallback restart চলবে)'}"

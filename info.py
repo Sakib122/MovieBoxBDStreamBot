@@ -102,16 +102,30 @@ AUTO_DELETE_TIME = int(environ.get("AUTO_DELETE_TIME", "60")) # ১০ মিন
 AUTO_KEEP_ALIVE = is_enabled(environ.get("AUTO_KEEP_ALIVE", "True"), True)
 
 # 🛡️ SELF-HEAL SETTINGS (অটো-সেলফ-হিলিং সিস্টেম)
-# SELFHEAL_MEM_LIMIT: RAM এত % ছুঁলেই সাথে সাথে অটো-রিলোড (fresh মেমোরি)।
+# SELFHEAL_MEM_LIMIT: RAM এত % ছুঁলে সিস্টেম জেগে ওঠে (ডিফল্ট 90)।
 #   ⚠️ রিলোডের একমাত্র ট্রিগার মেমোরি — CPU 100% হলেও কিছু হবে না।
-# SELFHEAL_CACHE_INTERVAL: কত সেকেন্ড পর পর অটো ক্যাশ-ক্লিন হবে
-#   (ডিফল্ট 1800 = ৩০ মিনিট)। ক্লিনের সময় বট বন্ধ হয় না।
+#   ⚠️ গুরুত্বপূর্ণ: Koyeb-এর Settings → Environment Variables-এ যদি
+#     SELFHEAL_MEM_LIMIT থাকে, সেটাই কোডের ডিফল্টকে ওভাররাইড করে!
+# SELFHEAL_CACHE_INTERVAL: কত সেকেন্ড পর পর সাইলেন্ট ক্যাশ-ক্লিন হবে
+#   (ডিফল্ট 900 = ১৫ মিনিট)। ক্লিনের সময় বট বন্ধ হয় না, লগ চ্যানেলে
+#   কোনো মেসেজ যায় না (এটা সম্পূর্ণ সাইলেন্ট)।
 SELFHEAL_ENABLED = is_enabled(environ.get("SELFHEAL_ENABLED", "True"), True)
-SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "95"))
-SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "1800"))
+SELFHEAL_MEM_LIMIT = int(environ.get("SELFHEAL_MEM_LIMIT", "90"))
+SELFHEAL_CACHE_INTERVAL = int(environ.get("SELFHEAL_CACHE_INTERVAL", "900"))
 SELFHEAL_CHECK_INTERVAL = int(environ.get("SELFHEAL_CHECK_INTERVAL", "5"))
 
-# 🚀 KOYEB AUTO-REDEPLOY (RAM 95% হলে নিজে নিজে Redeploy)
+# 🔄 ESCALATION (৫ বার ক্লিন → ছয়বারে Redeploy):
+#   RAM টার্গেট ছুঁলে = ১টি ক্রসিং। ১ম-৫ম ক্রসিং → পূর্ণ মেমোরি ক্লিন+রিসেট
+#   (লগ চ্যানেলে রিপোর্ট যাবে)। ৬ষ্ঠ ক্রসিং → নিজে নিজে Koyeb Redeploy।
+#   SELFHEAL_REARM_SECONDS: RAM টানা উপরে থাকলে পরের প্রচেষ্টার আগে কত সেকেন্ড
+#   অপেক্ষা (ক্লিনের ফল দেখার সময়)।
+#   SELFHEAL_CLEAN_RESET_SECONDS: RAM টানা এত সেকেন্ড স্বাভাবিক থাকলে ক্লিন-গণনা
+#   আবার ০ থেকে শুরু হয় (পুরনো ঘটনা জমে ভুল redeploy হওয়া আটকায়)।
+SELFHEAL_MAX_CLEANS = int(environ.get("SELFHEAL_MAX_CLEANS", "5"))
+SELFHEAL_REARM_SECONDS = int(environ.get("SELFHEAL_REARM_SECONDS", "120"))
+SELFHEAL_CLEAN_RESET_SECONDS = int(environ.get("SELFHEAL_CLEAN_RESET_SECONDS", "900"))
+
+# 🚀 KOYEB AUTO-REDEPLOY (৫ বার ক্লিনের পরও RAM ফুল হলে নিজে নিজে Redeploy)
 # পূর্ণ অটো-রিডিপ্লয় চালু করতে:
 #   1. Koyeb → Account Settings → API → Create API token
 #   2. Koyeb-এ এই env ভ্যারিয়েবলগুলো যোগ করো:
